@@ -43,16 +43,10 @@
     mode: "0644"
   notify: reload g_ether module
 
-- name: Ensure network interfaces.d directory exists
-  file:
-    path: /etc/network/interfaces.d
-    state: directory
-    mode: "0755"
-
-- name: Configure network interface
+- name: Configure USB network interface
   template:
-    src: interfaces.j2
-    dest: /etc/network/interfaces.d/usb0
+    src: usb0.network.j2
+    dest: /etc/systemd/network/usb0.network
     mode: "0644"
   notify: restart networking
 

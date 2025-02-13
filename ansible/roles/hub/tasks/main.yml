@@ -14,16 +14,10 @@
     mode: "0644"
   notify: reload udev rules
 
-- name: Ensure network interfaces.d directory exists
-  file:
-    path: /etc/network/interfaces.d
-    state: directory
-    mode: "0755"
-
 - name: Configure network interfaces
   template:
     src: interfaces.j2
-    dest: /etc/network/interfaces.d/usb-interfaces
+    dest: /etc/systemd/network/usb-interfaces.network
     mode: "0644"
   notify: restart networking
 
