@@ -1,0 +1,39 @@
+---
+- name: Enable dwc2 overlay in config.txt
+  lineinfile:
+    path: /boot/config.txt
+    line: "dtoverlay=dwc2"
+    state: present
+
+- name: Check if modules are already in cmdline.txt
+  command: grep -q "modules-load=dwc2,g_ether" /boot/cmdline.txt
+  register: modules_check
+  failed_when: false
+  changed_when: false
+
+- name: Add modules to cmdline.txt if not present
+  replace:
+    path: /boot/cmdline.txt
+    regexp: "(.*rootwait)(.*)$"
+    replace: '\1 modules-load=dwc2,g_ether\2'
+  when: modules_check.rc != 0
+
+- name: Ensure g_ether module is loaded at boot
+  lineinfile:
+    path: /etc/modules
+    line: "g_ether"
+    state: present
+
+- name: Configure g_ether module options
+  template:
+    src: g_ether.conf.j2
+    dest: "{{ modprobe_config.file }}"
+    mode: "0644"
+  notify: reload g_ether module
+
+- name: Configure network interface
+  template:
+    src: interfaces.j2
+    dest: /etc/network/interfaces.d/usb0
+    mode: "0644"
+  notify: restart networking

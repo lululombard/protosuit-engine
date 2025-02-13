@@ -1,0 +1,11 @@
+---
+- name: reload udev rules
+  command: udevadm control --reload-rules && udevadm trigger
+
+- name: restart networking
+  service:
+    name: networking
+    state: restarted
+
+- name: reload iptables
+  command: iptables-restore < /etc/iptables/rules.v4

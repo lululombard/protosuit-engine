@@ -1,0 +1,35 @@
+---
+- name: Enable IP forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    reload: yes
+    sysctl_file: /etc/sysctl.d/99-ip-forward.conf
+
+- name: Create udev rules for persistent interface names
+  template:
+    src: 70-persistent-net.rules.j2
+    dest: /etc/udev/rules.d/70-persistent-net.rules
+    mode: "0644"
+  notify: reload udev rules
+
+- name: Configure network interfaces
+  template:
+    src: interfaces.j2
+    dest: /etc/network/interfaces.d/usb-interfaces
+    mode: "0644"
+  notify: restart networking
+
+- name: Install iptables-persistent
+  apt:
+    name: iptables-persistent
+    state: present
+    update_cache: yes
+
+- name: Configure NAT rules
+  template:
+    src: iptables-rules.j2
+    dest: /etc/iptables/rules.v4
+    mode: "0644"
+  notify: reload iptables

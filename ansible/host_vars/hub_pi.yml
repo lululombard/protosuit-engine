@@ -1,0 +1,32 @@
+---
+# Network Interfaces Configuration
+interfaces:
+  usb_left:
+    name: usb_left
+    mac: "00:05:69:00:42:02"
+    ip: "192.168.42.2"
+    netmask: "255.255.255.0"
+    network: "192.168.42.0"
+  usb_right:
+    name: usb_right
+    mac: "00:05:69:00:43:02"
+    ip: "192.168.43.2"
+    netmask: "255.255.255.0"
+    network: "192.168.43.0"
+
+# NAT Configuration
+nat_rules:
+  - source: "192.168.42.0/24"
+    out_interface: "usb_right"
+  - source: "192.168.43.0/24"
+    out_interface: "usb_left"
+
+# System Configuration
+enable_ip_forward: true
+
+# Udev Rules
+udev_rules:
+  - name: "70-persistent-net.rules"
+    rules:
+      - 'SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="00:05:69:00:42:02", NAME="usb_left"'
+      - 'SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="00:05:69:00:43:02", NAME="usb_right"'

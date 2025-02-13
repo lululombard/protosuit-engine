@@ -1,0 +1,12 @@
+---
+- name: Configure Hub
+  hosts: hub
+  become: true
+  roles:
+    - hub
+
+- name: Configure Pi Zeros
+  hosts: pizeros
+  become: true
+  roles:
+    - pizero

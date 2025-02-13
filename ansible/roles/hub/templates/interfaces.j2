@@ -1,0 +1,8 @@
+# USB network interfaces configuration
+{% for interface in interfaces.values() %}
+auto {{ interface.name }}
+iface {{ interface.name }} inet static
+    address {{ interface.ip }}
+    netmask {{ interface.netmask }}
+
+{% endfor %}

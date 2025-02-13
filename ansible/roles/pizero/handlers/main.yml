@@ -1,0 +1,12 @@
+---
+- name: reload g_ether module
+  shell:
+    cmd: |
+      modprobe -r g_ether
+      modprobe g_ether
+  ignore_errors: true
+
+- name: restart networking
+  service:
+    name: networking
+    state: restarted
