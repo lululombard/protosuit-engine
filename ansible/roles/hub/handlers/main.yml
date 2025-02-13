@@ -3,9 +3,10 @@
   command: udevadm control --reload-rules && udevadm trigger
 
 - name: restart networking
-  service:
-    name: networking
+  systemd:
+    name: systemd-networkd
     state: restarted
+    daemon_reload: yes
 
 - name: reload iptables
   command: iptables-restore < /etc/iptables/rules.v4

@@ -7,6 +7,7 @@
   ignore_errors: true
 
 - name: restart networking
-  service:
-    name: networking
+  systemd:
+    name: systemd-networkd
     state: restarted
+    daemon_reload: yes
