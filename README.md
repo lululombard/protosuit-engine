@@ -69,13 +69,33 @@ EOF
    ssh-keygen -t ed25519
    ```
 
-2. Copy SSH key to both Pi Zeros:
+2. Copy SSH key to all devices (including the hub itself):
    ```bash
+   # Copy to the hub itself (needed for Ansible local connections)
+   ssh-copy-id localhost
+
+   # Copy to both Pi Zeros
    ssh-copy-id <protoleftfin-wifi-ip>
    ssh-copy-id <protorightfin-wifi-ip>
    ```
 
-### 4. Configure Ansible Inventory
+### 4. Update Firmware (Recommended)
+
+⚠️ **Important**: For better USB OTG support, it's recommended to update the firmware on all devices before proceeding. You can do this by running:
+```bash
+sudo rpi-update
+```
+on each device (hub and both Pi Zeros), followed by a reboot.
+
+Please be aware that:
+- `rpi-update` installs testing firmware that may be unstable
+- If the update process is interrupted, it may leave your device in an unbootable state
+- You should have a backup of your SD card before proceeding
+- Power loss during the update can brick your device
+
+This step is optional but recommended for better USB gadget mode stability.
+
+### 5. Configure Ansible Inventory
 
 1. Edit `ansible/inventory/hosts.yml` and replace the placeholder IP addresses with actual WiFi IPs:
    ```yaml
