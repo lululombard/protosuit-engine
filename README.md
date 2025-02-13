@@ -106,10 +106,19 @@ EOF
    ```
    Note: The playbooks are idempotent - you can safely run them multiple times. Each run will ensure the configuration is correct without breaking existing setups.
 
-3. After the playbook completes successfully, reboot all devices:
+3. After the playbook completes successfully, reboot the devices in the correct order:
    ```bash
-   ansible all -i ansible/inventory/hosts.yml -m reboot
+   # First reboot the Pi Zeros
+   ansible pizeros -i ansible/inventory/hosts.yml -m reboot -b
+
+   # Wait a moment for the Pi Zeros to go down
+   sleep 5
+
+   # Then reboot the hub
+   ansible hub -i ansible/inventory/hosts.yml -m reboot -b
    ```
+   Note: The `-b` flag (or `--become`) is required for the reboot command as it needs root privileges.
+   We reboot the Pi Zeros first since rebooting the hub (which runs the playbook) first would interrupt the process.
 
 ## Network Configuration Details
 
@@ -142,7 +151,7 @@ After successful deployment:
 
 1. If interfaces don't come up after reboot:
    ```bash
-   sudo systemctl restart networking
+   sudo systemctl restart systemd-networkd
    ```
 
 2. If NAT isn't working:
