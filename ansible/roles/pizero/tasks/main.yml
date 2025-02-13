@@ -1,19 +1,19 @@
 ---
 - name: Enable dwc2 overlay in config.txt
   lineinfile:
-    path: /boot/config.txt
+    path: /boot/firmware/config.txt
     line: "dtoverlay=dwc2"
     state: present
 
 - name: Check if modules are already in cmdline.txt
-  command: grep -q "modules-load=dwc2,g_ether" /boot/cmdline.txt
+  command: grep -q "modules-load=dwc2,g_ether" /boot/firmware/cmdline.txt
   register: modules_check
   failed_when: false
   changed_when: false
 
 - name: Add modules to cmdline.txt if not present
   replace:
-    path: /boot/cmdline.txt
+    path: /boot/firmware/cmdline.txt
     regexp: "(.*rootwait)(.*)$"
     replace: '\1 modules-load=dwc2,g_ether\2'
   when: modules_check.rc != 0
@@ -30,6 +30,12 @@
     dest: "{{ modprobe_config.file }}"
     mode: "0644"
   notify: reload g_ether module
+
+- name: Ensure network interfaces.d directory exists
+  file:
+    path: /etc/network/interfaces.d
+    state: directory
+    mode: "0755"
 
 - name: Configure network interface
   template:
