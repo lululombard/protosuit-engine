@@ -166,8 +166,30 @@ After successful deployment:
 
 4. To check USB gadget mode on Pi Zeros:
    ```bash
+   # Check if modules are loaded
+   lsmod | grep dwc2
    lsmod | grep g_ether
+
+   # Check kernel messages for USB issues
+   dmesg | grep -i usb
+
+   # Verify boot configuration
+   cat /boot/firmware/config.txt | grep dwc2
+   cat /boot/firmware/cmdline.txt | grep modules-load
+
+   # If modules are missing, try loading them manually:
+   sudo modprobe dwc2
+   sudo modprobe g_ether
+
+   # Check if the interface appears
+   ip a show usb0
    ```
+
+5. If USB gadget mode isn't working:
+   - Make sure both modules (dwc2 and g_ether) are loaded
+   - Verify the boot configuration files are correct
+   - Try rebooting the Pi Zero
+   - Check that the USB cable is connected to the data port (not the power-only port) on the Pi Zero
 
 ## Notes
 

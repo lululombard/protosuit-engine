@@ -24,6 +24,18 @@
     line: "g_ether"
     state: present
 
+- name: Load dwc2 module
+  modprobe:
+    name: dwc2
+    state: present
+  ignore_errors: true
+
+- name: Load g_ether module
+  modprobe:
+    name: g_ether
+    state: present
+  ignore_errors: true
+
 - name: Configure g_ether module options
   template:
     src: g_ether.conf.j2
@@ -43,3 +55,10 @@
     dest: /etc/network/interfaces.d/usb0
     mode: "0644"
   notify: restart networking
+
+- name: Enable and start systemd-networkd
+  systemd:
+    name: systemd-networkd
+    state: started
+    enabled: true
+    daemon_reload: true
