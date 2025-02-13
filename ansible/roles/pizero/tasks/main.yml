@@ -50,13 +50,6 @@
     mode: "0644"
   notify: restart networking
 
-- name: Add static route for other subnet
-  template:
-    src: static-route.network.j2
-    dest: /etc/systemd/network/static-route.network
-    mode: "0644"
-  notify: restart networking
-
 - name: Enable and start systemd-networkd
   systemd:
     name: systemd-networkd
