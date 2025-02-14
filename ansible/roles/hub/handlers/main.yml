@@ -10,3 +10,9 @@
 
 - name: reload iptables
   shell: iptables-restore < /etc/iptables/rules.v4
+
+- name: restart networkmanager
+  systemd:
+    name: NetworkManager
+    state: restarted
+    daemon_reload: yes

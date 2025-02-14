@@ -41,3 +41,10 @@
     state: started
     enabled: true
     daemon_reload: true
+
+- name: Configure NetworkManager to ignore USB interfaces
+  template:
+    src: 99-usb-interfaces.conf.j2
+    dest: /etc/NetworkManager/conf.d/99-usb-interfaces.conf
+    mode: "0644"
+  notify: restart networkmanager
