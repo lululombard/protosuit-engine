@@ -16,10 +16,21 @@ interfaces:
 
 # NAT Configuration
 nat_rules:
+  # Rules for inter-subnet routing between Raspberry Pis
   - source: "192.168.42.0/24"
     out_interface: "usb_right"
   - source: "192.168.43.0/24"
     out_interface: "usb_left"
+  # Rules for internet access via Ethernet
+  - source: "192.168.42.0/24"
+    out_interface: "eth0"
+  - source: "192.168.43.0/24"
+    out_interface: "eth0"
+  # Rules for internet access via Wi-Fi
+  - source: "192.168.42.0/24"
+    out_interface: "wlan0"
+  - source: "192.168.43.0/24"
+    out_interface: "wlan0"
 
 # System Configuration
 enable_ip_forward: true
