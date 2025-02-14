@@ -9,4 +9,4 @@
     daemon_reload: yes
 
 - name: reload iptables
-  command: iptables-restore < /etc/iptables/rules.v4
+  shell: iptables-restore < /etc/iptables/rules.v4
