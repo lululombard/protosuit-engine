@@ -1,18 +1,47 @@
-# Protosuit Network
+# Protosuit Engine
 
-This repository contains Ansible playbooks to configure a network setup with a Raspberry Pi 5 hub and two Pi Zero 2W nodes. The hub acts as a gateway performing NAT between two subnets, with each Pi Zero connected via USB gadget mode.
+A Protogen fursuit control system combining networked Raspberry Pi devices with SDL-based animation control. Manages two Pi Zero 2W (one per fin) with a round 4" 720x720 display each via a Raspberry Pi 5 hub using USB gadget mode networking and MQTT messaging.
+
+## Project Overview
+
+The Protosuit Engine consists of three main components:
+
+1. **Ansible Deployment** (Hub + Fins)
+   - Raspberry Pi 5 hub managing two Pi Zero 2W nodes
+   - USB gadget mode networking for reliable low-latency communication
+   - NAT routing between dedicated subnets
+   - MQTT broker for control messages
+   - Matchbox window manager for display management
+   - Automated Ansible deployment
+
+2. **Engine Client** (Fins)
+   - Rust-based SDL application runtime
+   - MQTT-controlled animation/application management
+   - Lightweight X11 environment with Matchbox WM
+   - Support for embedded applications (Doom, custom animations, etc)
+
+## System Architecture
+
+```ascii
+                    [Raspberry Pi 5 Hub]
+                    /                  \
+[Left Fin] USB <-> (192.168.42.0/24)   (192.168.43.0/24) <-> USB [Right Fin]
+ 720x720 Display                       720x720 Display
+```
 
 ## System Requirements
 
 ### Hub (Raspberry Pi 5)
 - Raspberry Pi OS Lite (64-bit)
-- Two USB ports for connecting the Pi Zeros
-- WiFi connectivity for initial setup and Ansible communication
+- 2x USB ports for fin connections (or use a USB hub)
+- Wi-Fi for initial setup
+- 4GB+ RAM recommended
 
-### Pi Zeros (Raspberry Pi Zero 2W)
+### Fins (Raspberry Pi Zero 2W)
 - Raspberry Pi OS Lite (32-bit)
-- USB gadget mode enabled
-- WiFi connectivity for initial setup and Ansible communication
+- Wi-Fi for initial setup
+- USB gadget via micro USB OTG
+- 4" 720x720 round display
 
 ## Initial Setup
 
@@ -22,95 +51,75 @@ This repository contains Ansible playbooks to configure a network setup with a R
    - Use Raspberry Pi Imager and click the gear icon (⚙️) to pre-configure:
      - Hostname: `protohub`
      - SSH (enable and set password or add your key)
-     - WiFi credentials
+     - Wi-Fi credentials
 2. Boot the Pi and wait for it to connect to your network
-3. Install Ansible and dependencies:
-   ```bash
-   sudo apt update
-   sudo apt install -y ansible git
-   ```
-4. Clone this repository:
-   ```bash
-   git clone https://github.com/lululombard/protosuit-network.git
-   cd protosuit-network
-   ```
 
 ### 2. Prepare the Pi Zeros
 
 1. Install Raspberry Pi OS Lite (32-bit) on both Pi Zeros
    - Use Raspberry Pi Imager and click the gear icon (⚙️) to pre-configure:
      - Hostname: `protoleftfin` for left Pi Zero, `protorightfin` for right Pi Zero
-     - SSH (enable and set password or add your key)
-     - WiFi credentials
+     - SSH: enable and set password (or add your key, but you will have to copy the key to the hub manually)
+     - Wi-Fi credentials
 2. Boot the Pi Zeros and wait for them to connect to your network
-
-Note: If you didn't use Raspberry Pi Imager's pre-configuration, you can manually enable SSH and WiFi by creating these files on the boot partition:
-```bash
-# Enable SSH
-touch /boot/ssh
-
-# Configure WiFi (replace with your details)
-cat > /boot/wpa_supplicant.conf << EOF
-country=US
-ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
-update_config=1
-
-network={
-    ssid="YOUR_WIFI_NAME"
-    psk="YOUR_WIFI_PASSWORD"
-}
-EOF
-```
 
 ### 3. Configure SSH Access
 
-1. Generate SSH key on the hub (if not already done):
+1. Connect to the hub via SSH:
    ```bash
-   ssh-keygen -t ed25519
+   ssh pi@protohub
+   ```
+
+2. Generate SSH key on the hub:
+   ```bash
+   ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
    ```
 
 2. Copy SSH key to all devices (including the hub itself):
    ```bash
    # Copy to the hub itself (needed for Ansible local connections)
-   ssh-copy-id localhost
+   ssh-copy-id localhost -i ~/.ssh/id_ed25519.pub
 
    # Copy to both Pi Zeros
-   ssh-copy-id <protoleftfin-wifi-ip>
-   ssh-copy-id <protorightfin-wifi-ip>
+   ssh-copy-id pi@protoleftfin -i ~/.ssh/id_ed25519.pub
+   ssh-copy-id pi@protorightfin -i ~/.ssh/id_ed25519.pub
    ```
 
-### 4. Update Firmware (Recommended)
+3. Test SSH access to all devices:
+   ```bash
+   ssh pi@protoleftfin
+   ssh pi@protorightfin
+   ```
 
-⚠️ **Important**: For better USB OTG support, it's recommended to update the firmware on all devices before proceeding. You can do this by running:
-```bash
-sudo rpi-update
-```
-on each device (hub and both Pi Zeros), followed by a reboot.
+### 4. Clone the repository
 
-Please be aware that:
-- `rpi-update` installs testing firmware that may be unstable
-- If the update process is interrupted, it may leave your device in an unbootable state
-- You should have a backup of your SD card before proceeding
-- Power loss during the update can brick your device
-
-This step is optional but recommended for better USB gadget mode stability.
+1. Install Ansible and dependencies:
+   ```bash
+   sudo apt update
+   sudo apt install -y ansible git
+   ```
+2. Clone this repository:
+   ```bash
+   git clone https://github.com/lululombard/protosuit-engine.git
+   cd protosuit-engine
+   ```
 
 ### 5. Configure Ansible Inventory
 
-1. Edit `ansible/inventory/hosts.yml` and replace the placeholder IP addresses with actual WiFi IPs:
+1. Edit `ansible/inventory/hosts.yml` and replace the placeholder IP addresses with actual Wi-Fi IPs:
    ```yaml
    all:
      children:
        hub:
          hosts:
            hub_pi:
-             ansible_host: "192.168.1.X"  # Replace with protohub's actual WiFi IP
+             ansible_host: "192.168.1.X"  # Replace with protohub's actual Wi-Fi IP
        pizeros:
          hosts:
            left_pizero:
-             ansible_host: "192.168.1.Y"  # Replace with protoleftfin's actual WiFi IP
+             ansible_host: "192.168.1.Y"  # Replace with protoleftfin's actual Wi-Fi IP
            right_pizero:
-             ansible_host: "192.168.1.Z"  # Replace with protorightfin's actual WiFi IP
+             ansible_host: "192.168.1.Z"  # Replace with protorightfin's actual Wi-Fi IP
    ```
 
 ## Running the Playbook
@@ -126,94 +135,114 @@ This step is optional but recommended for better USB gadget mode stability.
    ```
    Note: The playbooks are idempotent - you can safely run them multiple times. Each run will ensure the configuration is correct without breaking existing setups.
 
-3. After the playbook completes successfully, reboot the devices in the correct order:
+3. Revert `ansible/inventory/hosts.yml` to use the newly created USB network instead of Wi-Fi:
    ```bash
-   # First reboot the Pi Zeros
-   ansible pizeros -i ansible/inventory/hosts.yml -m reboot -b
-
-   # Wait a moment for the Pi Zeros to go down
-   sleep 5
-
-   # Then reboot the hub
-   ansible hub -i ansible/inventory/hosts.yml -m reboot -b
+   git checkout -- ansible/inventory/hosts.yml
    ```
-   Note: The `-b` flag (or `--become`) is required for the reboot command as it needs root privileges.
-   We reboot the Pi Zeros first since rebooting the hub (which runs the playbook) first would interrupt the process.
 
 ## Network Configuration Details
 
-After successful deployment:
+### Hub Interfaces
+| Interface | IP Address    | MAC Address |
+|-----------|---------------|-------------|
+| usb_left  | 192.168.42.2  | 00:05:69:00:42:02 |
+| usb_right | 192.168.43.2  | 00:05:69:00:43:02 |
 
-### Hub (Raspberry Pi 5)
-- Left interface (usb_left):
-  - Name: usb_left
-  - IP: 192.168.42.2/24
-  - MAC: 00:05:69:00:42:02
+### Fin Interfaces
+| Device | IP Address    | Gateway     | MAC Address |
+|--------|---------------|-------------|-------------|
+| usb0   | 192.168.42.1  | 192.168.42.2| 00:05:69:00:42:01|
+| usb0   | 192.168.43.1  | 192.168.43.2| 00:05:69:00:43:01|
 
-- Right interface (usb_right):
-  - Name: usb_right
-  - IP: 192.168.43.2/24
-  - MAC: 00:05:69:00:43:02
+## Engine Client
 
-### Left Pi Zero
-- Interface: usb0
-- IP: 192.168.42.1/24
-- Gateway: 192.168.42.2
-- MAC: 00:05:69:00:42:01
+The Engine Client is a Rust application that runs on the Pi Zeros. It is responsible for managing the SDL-based animation/application and sending control messages to the hub.
 
-### Right Pi Zero
-- Interface: usb0
-- IP: 192.168.43.1/24
-- Gateway: 192.168.43.2
-- MAC: 00:05:69:00:43:01
+### Installing Dependencies
 
-## Troubleshooting
+On Raspberry Pi OS or Debian/Ubuntu:
+```bash
+sudo apt update
+sudo apt install -y \
+    build-essential \
+    libsdl2-dev \
+    libsdl2-ttf-dev \
+    libsdl2-gfx-dev \
+    libx11-dev \
+    mosquitto \
+    mosquitto-clients \
+    curl \
+    git \
+    cmake \
+    pkg-config
 
-1. If interfaces don't come up after reboot:
-   ```bash
-   sudo systemctl restart systemd-networkd
-   ```
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+```
 
-2. If NAT isn't working:
-   ```bash
-   sudo iptables-restore < /etc/iptables/rules.v4
-   ```
+## Building
 
-3. To verify interface names on the hub:
-   ```bash
-   ip addr show
-   ```
+1. Build the project:
+```bash
+cargo build --release
+```
 
-4. To check USB gadget mode on Pi Zeros:
-   ```bash
-   # Check if modules are loaded
-   lsmod | grep dwc2
-   lsmod | grep g_ether
+2. The optimized binary will be available at `target/release/protosuit-engine-client`
 
-   # Check kernel messages for USB issues
-   dmesg | grep -i usb
+## Configuration
 
-   # Verify boot configuration
-   cat /boot/firmware/config.txt | grep dwc2
-   cat /boot/firmware/cmdline.txt | grep modules-load
+The application can be configured through environment variables:
 
-   # If modules are missing, try loading them manually:
-   sudo modprobe dwc2
-   sudo modprobe g_ether
+- `MQTT_BROKER`: MQTT broker address (default: "localhost")
+- `MQTT_PORT`: MQTT broker port (default: 1883)
+- `RUST_LOG`: Logging level (default: "info")
+- `SDL_WINDOW_WIDTH`: Window width in pixels (default: 720)
+- `SDL_WINDOW_HEIGHT`: Window height in pixels (default: 720)
 
-   # Check if the interface appears
-   ip a show usb0
-   ```
+## Running
 
-5. If USB gadget mode isn't working:
-   - Make sure both modules (dwc2 and g_ether) are loaded
-   - Verify the boot configuration files are correct
-   - Try rebooting the Pi Zero
-   - Check that the USB cable is connected to the data port (not the power-only port) on the Pi Zero
+1. Start the application (if running as root/sudo):
+```bash
+sudo DISPLAY=:0 target/release/protosuit-engine-client
+```
 
-## Notes
+2. Control applications through MQTT messages:
 
-- The configuration uses persistent interface naming on the hub via udev rules
-- NAT rules are configured to allow traffic between subnets
-- All configurations persist across reboots
-- The Pi Zeros must be connected to their designated USB ports on the hub
+Start an application:
+```bash
+mosquitto_pub -t "app/start" -m '{
+    "name": "doom",
+    "command": "/usr/games/doom",
+    "args": ["--fullscreen"]
+}'
+```
+
+Switch to an application:
+```bash
+mosquitto_pub -t "app/switch" -m '{
+    "name": "doom"
+}'
+```
+
+Stop an application:
+```bash
+mosquitto_pub -t "app/stop" -m '{
+    "name": "doom"
+}'
+```
+
+## MQTT Topics
+
+- `app/start`: Start a new application
+- `app/stop`: Stop a running application
+- `app/switch`: Switch focus to a running application
+- `app/status/{app_name}`: Status updates for applications
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request

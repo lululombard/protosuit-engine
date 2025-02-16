@@ -10,3 +10,4 @@
   become: true
   roles:
     - pizero
+    - matchbox_setup

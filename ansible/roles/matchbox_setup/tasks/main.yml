@@ -1,0 +1,65 @@
+---
+# Install minimal X server and Matchbox dependencies
+- name: Install X server and Matchbox Window Manager
+  apt:
+    name:
+      - xserver-xorg-core
+      - xserver-xorg-input-all
+      - xinit
+      - matchbox-window-manager
+      - unclutter
+    state: present
+    update_cache: yes
+
+# Disable unnecessary X server features
+- name: Create custom X server configuration
+  template:
+    src: xorg.conf.j2
+    dest: /etc/X11/xorg.conf
+    mode: "0644"
+
+# Configure autostart for Matchbox
+- name: Create Matchbox autostart directory
+  file:
+    path: /etc/X11/matchbox
+    state: directory
+    mode: "0755"
+
+- name: Configure Matchbox autostart
+  template:
+    src: autostart.sh.j2
+    dest: /etc/X11/matchbox/autostart.sh
+    mode: "0755"
+
+# Configure systemd service for X server with Matchbox
+- name: Create systemd service for Matchbox
+  template:
+    src: matchbox.service.j2
+    dest: /etc/systemd/system/matchbox.service
+    mode: "0644"
+  notify: restart matchbox
+
+# Configure .xinitrc for the pi user
+- name: Create .xinitrc file
+  template:
+    src: xinitrc.j2
+    dest: /home/pi/.xinitrc
+    mode: "0644"
+    owner: pi
+    group: pi
+
+# Enable the service
+- name: Enable and start Matchbox service
+  systemd:
+    name: matchbox
+    state: started
+    enabled: true
+    daemon_reload: true
+
+# Disable screen blanking
+- name: Disable screen blanking in X
+  lineinfile:
+    path: /etc/X11/xorg.conf
+    line: '    Option "BlankTime" "0"'
+    insertafter: 'Section "ServerFlags"'
+    create: yes

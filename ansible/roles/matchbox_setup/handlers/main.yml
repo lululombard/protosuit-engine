@@ -1,0 +1,6 @@
+---
+- name: restart matchbox
+  systemd:
+    name: matchbox
+    state: restarted
+    daemon_reload: yes
