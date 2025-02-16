@@ -42,7 +42,6 @@
       - libwayland-bin:armhf
       - wayland-protocols:armhf
       - libwayland-cursor0:armhf
-      - libwayland-cursor-dev:armhf
       - libwayland-egl1:armhf
       - libwayland-egl-backend-dev:armhf
       - libwayland-client0:armhf
