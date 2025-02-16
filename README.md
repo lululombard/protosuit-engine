@@ -118,11 +118,11 @@ The Protosuit Engine consists of three main components:
          hosts:
            hub_pi:
              ansible_host: "192.168.1.X"  # Replace with protohub's actual Wi-Fi IP
-       pizeros:
+       fins:
          hosts:
-           left_pizero:
+           left_fin:
              ansible_host: "192.168.1.Y"  # Replace with protoleftfin's actual Wi-Fi IP
-           right_pizero:
+           right_fin:
              ansible_host: "192.168.1.Z"  # Replace with protorightfin's actual Wi-Fi IP
    ```
 

@@ -39,14 +39,14 @@
     mode: "0644"
   notify: restart matchbox
 
-# Configure .xinitrc for the pi user
+# Configure .xinitrc for the proto user
 - name: Create .xinitrc file
   template:
     src: xinitrc.j2
     dest: /home/proto/.xinitrc
     mode: "0644"
-    owner: pi
-    group: pi
+    owner: proto
+    group: proto
 
 # Enable the service
 - name: Enable and start Matchbox service

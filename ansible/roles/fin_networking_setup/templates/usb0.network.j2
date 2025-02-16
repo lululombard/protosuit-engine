@@ -6,7 +6,7 @@ Address={{ usb_gadget.ip }}/24
 Gateway={{ usb_gadget.gateway }}
 
 [Route]
-{% if inventory_hostname == 'left_pizero' %}
+{% if inventory_hostname == 'left_fin' %}
 # Route to right subnet via hub
 Destination=192.168.43.0/24
 Gateway={{ usb_gadget.gateway }}

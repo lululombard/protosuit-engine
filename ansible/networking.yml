@@ -9,4 +9,4 @@
   hosts: fins
   become: true
   roles:
-    - pizero_networking_setup
+    - fin_networking_setup

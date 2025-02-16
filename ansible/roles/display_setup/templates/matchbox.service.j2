@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=pi
+User=proto
 Environment=DISPLAY=:0
 ExecStart=/usr/bin/startx /etc/X11/matchbox/autostart.sh -- -nocursor
 Restart=on-failure

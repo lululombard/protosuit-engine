@@ -2,7 +2,7 @@
 Name=usb0
 
 [Route]
-{% if inventory_hostname == 'left_pizero' %}
+{% if inventory_hostname == 'left_fin' %}
 # Route to right subnet via hub
 Destination=192.168.43.0/24
 Gateway=192.168.42.2
