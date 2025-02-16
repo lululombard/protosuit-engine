@@ -21,8 +21,10 @@
       - libudev-dev:armhf
       - libdbus-1-dev:armhf
       - libasound2-dev:armhf
-      - libm-dev:armhf
       - libc6:armhf
+      - libc6-dev:armhf
+      - libgcc-s1:armhf
+      - libstdc++6:armhf
     state: present
     update_cache: yes
   when: inventory_hostname in groups['hub']
