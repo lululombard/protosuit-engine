@@ -23,12 +23,11 @@
     content: |
       export ZSH="/home/proto/.oh-my-zsh"
       ZSH_THEME="robbyrussell"
-
-      # Show user@host in prompt
-      PROMPT="%F{cyan}%n@%m%f $PROMPT"
-
       plugins=(git)
       source $ZSH/oh-my-zsh.sh
+
+      # Show user@host in prompt (after Oh My Zsh is sourced)
+      PROMPT="%F{cyan}%n@%m%f $PROMPT"
     owner: proto
     group: proto
     mode: "0644"
