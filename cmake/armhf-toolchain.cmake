@@ -29,6 +29,14 @@ set(SDL_STATIC ON CACHE BOOL "Build a static version of the library")
 set(SDL_WAYLAND OFF CACHE BOOL "Disable Wayland support")
 set(SDL_X11 ON CACHE BOOL "Enable X11 support")
 
+# Disable audio backends we don't need
+set(SDL_PULSEAUDIO OFF CACHE BOOL "Disable PulseAudio")
+set(SDL_ALSA OFF CACHE BOOL "Disable ALSA")
+set(SDL_JACK OFF CACHE BOOL "Disable JACK")
+set(SDL_ESD OFF CACHE BOOL "Disable ESD")
+set(SDL_PIPEWIRE OFF CACHE BOOL "Disable PipeWire")
+set(SDL_OSS OFF CACHE BOOL "Disable OSS")
+
 # Additional include paths for D-Bus and other dependencies
 include_directories(SYSTEM
   /usr/arm-linux-gnueabihf/include

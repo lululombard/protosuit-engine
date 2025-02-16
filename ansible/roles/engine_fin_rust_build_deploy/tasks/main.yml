@@ -154,6 +154,8 @@
       export SDL_NO_SHARED=1
       export SDL_VIDEODRIVER=x11
       export SDL_WAYLAND_DISABLE=1
+      export SDL_AUDIODRIVER=dummy
+      export SDL_DISABLEAUDIO=1
       cargo build --release --target armv7-unknown-linux-gnueabihf
     executable: /bin/bash
   become_user: proto
