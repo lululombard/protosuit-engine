@@ -38,16 +38,6 @@
       - libxxf86vm-dev:armhf
       - libdrm-dev:armhf
       - libgbm-dev:armhf
-      - libwayland-dev:armhf
-      - libwayland-bin:armhf
-      - wayland-protocols:armhf
-      - libwayland-cursor0:armhf
-      - libwayland-egl1:armhf
-      - libwayland-egl-backend-dev:armhf
-      - libwayland-client0:armhf
-      - libwayland-server0:armhf
-      - libxkbcommon-dev:armhf
-      - libdecor-0-dev:armhf
       - libgl1-mesa-dev:armhf
       - libgles2-mesa-dev:armhf
       - libegl1-mesa-dev:armhf
@@ -55,28 +45,9 @@
       - libglx-dev:armhf
       - libopengl-dev:armhf
       - libglu1-mesa-dev:armhf
-      - libsamplerate0-dev:armhf
-      - libasound2-dev:armhf
-      - libpulse-dev:armhf
-      - libudev-dev:armhf
-      - libusb-1.0-0-dev:armhf
-      - libdbus-1-dev:armhf
-      - libibus-1.0-dev:armhf
-      - libsndio-dev:armhf
-      - libxcursor-dev:armhf
-      - libxinerama-dev:armhf
-      - libxi-dev:armhf
-      - libxrandr-dev:armhf
-      - libxss-dev:armhf
-      - libxt-dev:armhf
-      - libxv-dev:armhf
-      - libxxf86vm-dev:armhf
       - libxdmcp-dev:armhf
       - libxau-dev:armhf
       - libxcb1-dev:armhf
-      - libxkbfile-dev:armhf
-      - librust-wayland-scanner-dev:armhf
-      - wayland-scanner++:armhf
     state: present
     update_cache: yes
   when: inventory_hostname in groups['hub']

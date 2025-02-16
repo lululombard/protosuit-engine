@@ -25,11 +25,11 @@ set(SDL2_DIR /usr/arm-linux-gnueabihf/lib/cmake/SDL2)
 set(SDL_SHARED OFF CACHE BOOL "Build a shared version of the library")
 set(SDL_STATIC ON CACHE BOOL "Build a static version of the library")
 
-# Disable Wayland, enable X11
-set(SDL_WAYLAND OFF CACHE BOOL "Disable Wayland support")
+# Enable X11 only
 set(SDL_X11 ON CACHE BOOL "Enable X11 support")
+set(SDL_X11_SHARED OFF CACHE BOOL "Build X11 support as shared library")
 
-# Disable audio backends we don't need
+# Disable audio backends
 set(SDL_PULSEAUDIO OFF CACHE BOOL "Disable PulseAudio")
 set(SDL_ALSA OFF CACHE BOOL "Disable ALSA")
 set(SDL_JACK OFF CACHE BOOL "Disable JACK")
@@ -37,20 +37,15 @@ set(SDL_ESD OFF CACHE BOOL "Disable ESD")
 set(SDL_PIPEWIRE OFF CACHE BOOL "Disable PipeWire")
 set(SDL_OSS OFF CACHE BOOL "Disable OSS")
 
-# Additional include paths for D-Bus and other dependencies
+# Additional include paths for X11 and dependencies
 include_directories(SYSTEM
   /usr/arm-linux-gnueabihf/include
-  /usr/include/dbus-1.0
-  /usr/lib/arm-linux-gnueabihf/dbus-1.0/include
   /usr/include/X11
   /usr/include/X11/extensions
-  /usr/include/glib-2.0
-  /usr/lib/arm-linux-gnueabihf/glib-2.0/include
   /usr/include/GL
   /usr/include/GLES
   /usr/include/GLES2
   /usr/include/EGL
-  /usr/include/libdrm
 )
 
 # Set pkg-config paths
