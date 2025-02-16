@@ -1,4 +1,12 @@
 ---
+# First apply common setup to all hosts
+- name: Configure common tools and shell
+  hosts: all
+  become: true
+  roles:
+    - common_setup
+
+# Then configure networking
 - name: Configure hub networking
   hosts: hub
   become: true

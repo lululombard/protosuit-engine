@@ -39,13 +39,13 @@ The Protosuit Engine consists of three main components:
 - Raspberry Pi OS Lite (64-bit)
 - 2x USB ports for fin connections (or use a USB hub)
 - Wi-Fi for initial setup
-- 4GB+ RAM recommended
+- 2GB+ RAM recommended
 
 ### Fins (Raspberry Pi Zero 2W)
 - Raspberry Pi OS Lite (32-bit)
 - Wi-Fi for initial setup
-- USB gadget via micro USB OTG
-- 4" 720x720 round display
+- Micro USB OTG connected to the hub via USB cable (or to a USB hub)
+- 4" 720x720 round display (or any other display with the same resolution, or be creative but you're on your own then)
 
 ## Initial setup
 
@@ -172,6 +172,23 @@ Note: The playbooks are idempotent - you can safely run them multiple times. Eac
 |--------|---------------|-------------|-------------|
 | usb0   | 192.168.42.1  | 192.168.42.2| 00:05:69:00:42:01|
 | usb0   | 192.168.43.1  | 192.168.43.2| 00:05:69:00:43:01|
+
+## Common tools and shell setup
+
+The Ansible playbook automatically installs and configures common tools on all devices:
+
+### Development tools
+- `git` for version control and to clone repositories
+- `htop` for system monitoring
+
+### Shell environment
+- `zsh` as default shell
+- Oh My Zsh configuration
+  - Robbyrussell theme
+  - Git plugin enabled
+  - Custom aliases and improvements
+
+These tools are installed during the networking setup phase to ensure a consistent development environment across all devices.
 
 ## Display configuration details (Pi Zero 2W)
 
