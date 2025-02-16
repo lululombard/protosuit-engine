@@ -22,6 +22,25 @@
       - libc6-dev:armhf
       - libgcc-s1:armhf
       - libstdc++6:armhf
+      - libusb-1.0-0-dev:armhf
+      - libdbus-1-dev:armhf
+      - libibus-1.0-dev:armhf
+      - libglib2.0-dev:armhf
+      - libx11-dev:armhf
+      - libxext-dev:armhf
+      - libxcursor-dev:armhf
+      - libxinerama-dev:armhf
+      - libxi-dev:armhf
+      - libxfixes-dev:armhf
+      - libxrandr-dev:armhf
+      - libxrender-dev:armhf
+      - libxss-dev:armhf
+      - libxxf86vm-dev:armhf
+      - libdrm-dev:armhf
+      - libgbm-dev:armhf
+      - libwayland-dev:armhf
+      - libxkbcommon-dev:armhf
+      - libdecor-0-dev:armhf
     state: present
     update_cache: yes
   when: inventory_hostname in groups['hub']
@@ -65,6 +84,15 @@
       # Force SDL to use our cross-compiler
       set(SDL_FORCE_CROSSCOMPILE ON)
       set(SDL2_DIR /usr/arm-linux-gnueabihf/lib/cmake/SDL2)
+
+      # Additional include paths for D-Bus and other dependencies
+      include_directories(SYSTEM
+        /usr/arm-linux-gnueabihf/include
+        /usr/arm-linux-gnueabihf/include/dbus-1.0
+        /usr/lib/arm-linux-gnueabihf/dbus-1.0/include
+        /usr/arm-linux-gnueabihf/include/glib-2.0
+        /usr/lib/arm-linux-gnueabihf/glib-2.0/include
+      )
     owner: proto
     group: proto
     mode: "0644"
@@ -113,24 +141,6 @@
       rustup target add armv7-unknown-linux-gnueabihf
     executable: /bin/bash
   become_user: proto
-  when: inventory_hostname in groups['hub']
-
-# Configure Rust cross-compilation
-- name: Configure Rust cross-compilation
-  copy:
-    dest: /home/proto/.cargo/config.toml
-    content: |
-      [target.armv7-unknown-linux-gnueabihf]
-      linker = "arm-linux-gnueabihf-gcc"
-      rustflags = [
-        "-C", "link-arg=-L/usr/arm-linux-gnueabihf/lib",
-        "-C", "link-arg=-Wl,-rpath-link,/usr/arm-linux-gnueabihf/lib",
-        "-C", "link-arg=-Wl,--allow-shlib-undefined",
-        "-C", "link-arg=-Wl,--sysroot=/usr/arm-linux-gnueabihf"
-      ]
-    owner: proto
-    group: proto
-    mode: "0644"
   when: inventory_hostname in groups['hub']
 
 - name: Build Rust application for Pi Zero 2W

@@ -29,3 +29,12 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[target.armv7-unknown-linux-gnueabihf]
+linker = "arm-linux-gnueabihf-gcc"
+rustflags = [
+  "-C", "link-arg=-L/usr/arm-linux-gnueabihf/lib",
+  "-C", "link-arg=-Wl,-rpath-link,/usr/arm-linux-gnueabihf/lib",
+  "-C", "link-arg=-Wl,--allow-shlib-undefined",
+  "-C", "link-arg=-Wl,--sysroot=/usr/arm-linux-gnueabihf"
+]
