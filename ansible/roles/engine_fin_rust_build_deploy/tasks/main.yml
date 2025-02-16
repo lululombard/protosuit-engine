@@ -74,7 +74,6 @@
       - libxdmcp-dev:armhf
       - libxau-dev:armhf
       - libxcb1-dev:armhf
-      - libxdbe-dev:armhf
       - libxkbfile-dev:armhf
     state: present
     update_cache: yes
