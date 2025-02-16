@@ -1,0 +1,71 @@
+---
+# Install Rust toolchain and cross-compilation dependencies
+- name: Install Rust build dependencies
+  apt:
+    name:
+      - build-essential
+      - gcc-arm-linux-gnueabihf
+      - pkg-config
+      - libssl-dev
+      - cmake
+    state: present
+    update_cache: yes
+  when: inventory_hostname in groups['hub']
+
+- name: Install Rust using rustup (hub only)
+  shell:
+    cmd: |
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      source $HOME/.cargo/env
+      rustup target add armv7-unknown-linux-gnueabihf
+    creates: /home/proto/.cargo/bin/rustc
+  become_user: proto
+  when: inventory_hostname in groups['hub']
+
+- name: Configure Rust cross-compilation
+  copy:
+    dest: /home/proto/.cargo/config.toml
+    content: |
+      [target.armv7-unknown-linux-gnueabihf]
+      linker = "arm-linux-gnueabihf-gcc"
+    owner: proto
+    group: proto
+    mode: "0644"
+  when: inventory_hostname in groups['hub']
+
+- name: Build Rust application for Pi Zero 2W
+  shell:
+    cmd: |
+      source $HOME/.cargo/env
+      cd /home/proto/protosuit-engine
+      cargo build --release --target armv7-unknown-linux-gnueabihf
+    creates: /home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin
+  become_user: proto
+  register: build_result
+  when: inventory_hostname in groups['hub']
+
+# Deploy to fins
+- name: Copy binary to fins
+  copy:
+    src: /home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin
+    dest: /usr/local/bin/protosuit-engine-fin
+    mode: "0755"
+    remote_src: yes
+  when: inventory_hostname in groups['fins']
+
+# Configure systemd service on fins
+- name: Create systemd service for Engine Fin
+  template:
+    src: engine-fin.service.j2
+    dest: /etc/systemd/system/engine-fin.service
+    mode: "0644"
+  when: inventory_hostname in groups['fins']
+  notify: restart engine fin
+
+- name: Enable and start Engine Fin service
+  systemd:
+    name: engine-fin
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: inventory_hostname in groups['fins']

@@ -1,0 +1,6 @@
+---
+- name: Build and deploy Engine Fin application
+  hosts: all
+  become: true
+  roles:
+    - engine_fin_rust_build_deploy

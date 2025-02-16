@@ -4,3 +4,6 @@
 
 - name: Configure displays
   import_playbook: display.yml
+
+- name: Build and deploy Engine Fin
+  import_playbook: engine_fin.yml

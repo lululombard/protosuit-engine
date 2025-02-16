@@ -1,13 +1,13 @@
 # Protosuit Engine
 
-A Protogen fursuit control system combining networked Raspberry Pi devices with SDL-based animation control. Manages two Pi Zero 2W (one per fin) with a round 4" 720x720 display each via a Raspberry Pi 5 hub using USB gadget mode networking and MQTT messaging.
+A Protogen fursuit control system combining networked Raspberry Pi devices with SDL-based animation control. Manages two Pi Zero 2W (one per fin) with a round 4" 720x720 display each via a Raspberry Pi 5 which acts as a hub using USB gadget mode networking and MQTT messaging.
 
 ## Project overview
 
-The Protosuit Engine consists of three main components:
+The Protosuit Engine consists of those main components:
 
 1. **Ansible deployment** (Hub + Fins)
-   - Raspberry Pi 5 hub managing two Pi Zero 2W nodes
+   - Raspberry Pi 5 hub managing two Pi Zero 2W nodes (one per fin)
    - USB gadget mode networking for reliable low-latency communication between the hub and the fins
    - NAT routing between dedicated subnets to allow the fins to access the internet through the hub
    - MQTT broker for control messages
@@ -18,7 +18,7 @@ The Protosuit Engine consists of three main components:
      - Optimized for embedded displays
      - Automatic startup via systemd
 
-2. **Engine client** (Fins)
+2. **Engine fins** (for the two Pi Zero 2W)
    - Rust-based SDL application runtime
    - MQTT-controlled animation/application management
    - Lightweight X11 environment with Matchbox WM
@@ -157,6 +157,13 @@ Follow these steps in order:
    ansible-playbook -i ansible/inventory/hosts.yml ansible/display.yml
    ```
 
+6. Build and deploy the Engine Fin application:
+   ```bash
+   ansible-playbook -i ansible/inventory/hosts.yml ansible/engine_fin.yml
+   ```
+
+Note: This step will take approximately 15-30 minutes on the first run as it needs to install the Rust toolchain and compile the application.
+
 ### Troubleshooting
 
 If you experience issues with the step-by-step setup, you can try running the complete setup in one go:
@@ -219,9 +226,9 @@ The Ansible playbook configures a minimal display environment optimized for the 
   - DPMS (power management) disabled
   - Automatic startup via systemd
 
-## Engine client
+## Engine client development
 
-The Engine Client is a Rust application that runs on the Pi Zeros. It is responsible for managing the SDL-based animation/application and sending control messages to the hub.
+The Engine Client is a Rust application that runs on the Pi Zeros. It is responsible for managing the SDL-based animation/application and sending control messages to the hub. It will be installed automatically by the Ansible playbook, but if you want to install it manually (for development purposes), here are the dependencies you need to install:
 
 ### Installing dependencies
 
@@ -253,7 +260,7 @@ source $HOME/.cargo/env
 cargo build --release
 ```
 
-2. The optimized binary will be available at `target/release/protosuit-engine-client`
+2. The optimized binary will be available at `target/release/protosuit-engine-fin`
 
 ## Configuration
 
@@ -269,7 +276,7 @@ The application can be configured through environment variables:
 
 1. Start the application (if running as root/sudo):
 ```bash
-sudo DISPLAY=:0 target/release/protosuit-engine-client
+sudo DISPLAY=:0 target/release/protosuit-engine-fin
 ```
 
 2. Control applications through MQTT messages:

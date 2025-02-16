@@ -1,9 +1,9 @@
 [package]
-name = "protosuit-engine-client"
+name = "protosuit-engine-fin"
 version = "0.1.0"
 edition = "2021"
 authors = ["lululombard"]
-description = "A Rust-based SDL application for Raspberry Pi"
+description = "A Rust-based SDL application for Protogen fursuit fins"
 
 [dependencies]
 sdl2 = { version = "0.35", features = ["bundled", "ttf", "gfx"] }

@@ -1,0 +1,16 @@
+[Unit]
+Description=Protosuit Engine Fin Application
+After=matchbox.service
+Requires=matchbox.service
+
+[Service]
+Type=simple
+User=proto
+Environment=DISPLAY=:0
+Environment=RUST_LOG=info
+ExecStart=/usr/local/bin/protosuit-engine-fin
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
