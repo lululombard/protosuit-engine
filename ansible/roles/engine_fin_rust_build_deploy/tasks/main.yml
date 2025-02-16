@@ -48,6 +48,34 @@
       - libwayland-server0:armhf
       - libxkbcommon-dev:armhf
       - libdecor-0-dev:armhf
+      - libgl1-mesa-dev:armhf
+      - libgles2-mesa-dev:armhf
+      - libegl1-mesa-dev:armhf
+      - libglvnd-dev:armhf
+      - libglx-dev:armhf
+      - libopengl-dev:armhf
+      - libglu1-mesa-dev:armhf
+      - libsamplerate0-dev:armhf
+      - libasound2-dev:armhf
+      - libpulse-dev:armhf
+      - libudev-dev:armhf
+      - libusb-1.0-0-dev:armhf
+      - libdbus-1-dev:armhf
+      - libibus-1.0-dev:armhf
+      - libsndio-dev:armhf
+      - libxcursor-dev:armhf
+      - libxinerama-dev:armhf
+      - libxi-dev:armhf
+      - libxrandr-dev:armhf
+      - libxss-dev:armhf
+      - libxt-dev:armhf
+      - libxv-dev:armhf
+      - libxxf86vm-dev:armhf
+      - libxdmcp-dev:armhf
+      - libxau-dev:armhf
+      - libxcb1-dev:armhf
+      - libxdbe-dev:armhf
+      - libxkbfile-dev:armhf
     state: present
     update_cache: yes
   when: inventory_hostname in groups['hub']
@@ -118,8 +146,10 @@
       export PKG_CONFIG_ALLOW_CROSS=1
       export PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig
       export PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf
-      export CMAKE_TOOLCHAIN_FILE=/home/proto/protosuit-engine/cmake/armhf-toolchain.cmake
-      cargo clean && cargo build --release --target armv7-unknown-linux-gnueabihf
+      export CMAKE_TOOLCHAIN_FILE=cmake/armhf-toolchain.cmake
+      export CFLAGS="-I/usr/lib/arm-linux-gnueabihf/dbus-1.0/include -I/usr/include/dbus-1.0 -I/usr/include/wayland"
+      export CXXFLAGS="-I/usr/lib/arm-linux-gnueabihf/dbus-1.0/include -I/usr/include/dbus-1.0 -I/usr/include/wayland"
+      cargo build --release --target armv7-unknown-linux-gnueabihf
     executable: /bin/bash
   become_user: proto
   register: build_result
