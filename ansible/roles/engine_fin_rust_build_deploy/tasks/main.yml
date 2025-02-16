@@ -75,6 +75,8 @@
       - libxau-dev:armhf
       - libxcb1-dev:armhf
       - libxkbfile-dev:armhf
+      - librust-wayland-scanner-dev:armhf
+      - wayland-scanner++:armhf
     state: present
     update_cache: yes
   when: inventory_hostname in groups['hub']
