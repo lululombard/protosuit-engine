@@ -9,14 +9,11 @@
       - pkg-config
       - libssl-dev
       - cmake
-      - libsdl2-dev
-      - libsdl2-ttf-dev
-      - libsdl2-gfx-dev
-      - crossbuild-essential-armhf
-      - libc6-dev-armhf-cross
       - libsdl2-dev:armhf
       - libsdl2-ttf-dev:armhf
       - libsdl2-gfx-dev:armhf
+      - crossbuild-essential-armhf
+      - libc6-dev-armhf-cross
       - libpulse-dev:armhf
       - libudev-dev:armhf
       - libdbus-1-dev:armhf
