@@ -37,6 +37,9 @@ set(SDL_ESD OFF CACHE BOOL "Disable ESD")
 set(SDL_PIPEWIRE OFF CACHE BOOL "Disable PipeWire")
 set(SDL_OSS OFF CACHE BOOL "Disable OSS")
 
+# Disable Wayland
+set(SDL_WAYLAND OFF CACHE BOOL "Disable Wayland")
+
 # Additional include paths for X11 and dependencies
 include_directories(SYSTEM
   /usr/arm-linux-gnueabihf/include

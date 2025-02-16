@@ -48,6 +48,7 @@
       - libxdmcp-dev:armhf
       - libxau-dev:armhf
       - libxcb1-dev:armhf
+      - libdrm-dev:armhf
     state: present
     update_cache: yes
   when: inventory_hostname in groups['hub']
