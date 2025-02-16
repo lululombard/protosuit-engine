@@ -43,7 +43,7 @@
 - name: Create .xinitrc file
   template:
     src: xinitrc.j2
-    dest: /home/pi/.xinitrc
+    dest: /home/proto/.xinitrc
     mode: "0644"
     owner: pi
     group: pi

@@ -71,7 +71,7 @@ The Protosuit Engine consists of three main components:
 
 1. Connect to the hub via SSH:
    ```bash
-   ssh pi@protohub
+   ssh proto@protohub
    ```
 
 2. Generate SSH key on the hub:
@@ -85,14 +85,14 @@ The Protosuit Engine consists of three main components:
    ssh-copy-id localhost -i ~/.ssh/id_ed25519.pub
 
    # Copy to both Pi Zeros
-   ssh-copy-id pi@protoleftfin -i ~/.ssh/id_ed25519.pub
-   ssh-copy-id pi@protorightfin -i ~/.ssh/id_ed25519.pub
+   ssh-copy-id proto@protoleftfin -i ~/.ssh/id_ed25519.pub
+   ssh-copy-id proto@protorightfin -i ~/.ssh/id_ed25519.pub
    ```
 
 3. Test SSH access to all devices:
    ```bash
-   ssh pi@protoleftfin
-   ssh pi@protorightfin
+   ssh proto@protoleftfin
+   ssh proto@protorightfin
    ```
 
 ### 4. Clone the repository
