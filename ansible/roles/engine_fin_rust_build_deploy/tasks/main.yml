@@ -5,12 +5,28 @@
     name:
       - build-essential
       - gcc-arm-linux-gnueabihf
+      - g++-arm-linux-gnueabihf
       - pkg-config
       - libssl-dev
       - cmake
+      - libsdl2-dev
+      - libsdl2-ttf-dev
+      - libsdl2-gfx-dev
+      - crossbuild-essential-armhf
     state: present
     update_cache: yes
   when: inventory_hostname in groups['hub']
+
+# Install SDL2 development files on fins
+- name: Install SDL2 on fins
+  apt:
+    name:
+      - libsdl2-2.0-0
+      - libsdl2-ttf-2.0-0
+      - libsdl2-gfx-1.0-0
+    state: present
+    update_cache: yes
+  when: inventory_hostname in groups['fins']
 
 - name: Download rustup installer
   get_url:
