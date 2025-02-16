@@ -6,6 +6,7 @@
       - zsh
       - git
       - htop
+      - tmux
     state: present
     update_cache: yes
 

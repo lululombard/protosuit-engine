@@ -187,6 +187,7 @@ The Ansible playbook automatically installs and configures common tools on all d
 ### Development tools
 - `git` for version control and to clone repositories
 - `htop` for system monitoring
+- `tmux` for terminal multiplexing and persistent sessions
 
 ### Shell environment
 - `zsh` as default shell
