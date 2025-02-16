@@ -140,12 +140,19 @@ Follow these steps in order:
    ansible-playbook -i ansible/inventory/hosts.yml ansible/networking.yml
    ```
 
-3. Revert `ansible/inventory/hosts.yml` to use the newly created USB network:
+3. Disconnect and reconnect to the hub to apply the new shell configuration:
+   ```bash
+   exit
+   ssh proto@protohub
+   cd protosuit-engine
+   ```
+
+4. Once connected to the hub with the new shell, revert `ansible/inventory/hosts.yml` to use the newly created USB network:
    ```bash
    git checkout -- ansible/inventory/hosts.yml
    ```
 
-4. Configure displays:
+5. Configure displays:
    ```bash
    ansible-playbook -i ansible/inventory/hosts.yml ansible/display.yml
    ```
