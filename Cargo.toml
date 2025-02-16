@@ -6,7 +6,7 @@ authors = ["lululombard"]
 description = "A Rust-based SDL application for Protogen fursuit fins"
 
 [dependencies]
-sdl2 = { version = "0.35", features = ["bundled", "ttf", "gfx"] }
+sdl2 = { version = "0.35", default-features = false, features = ["bundled", "ttf", "gfx"] }
 x11rb = { version = "0.12", features = ["allow-unsafe-code"] }
 rumqttc = "0.23"
 tokio = { version = "1.35", features = ["full"] }
