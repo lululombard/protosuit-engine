@@ -43,9 +43,6 @@ set(SDL_WAYLAND OFF CACHE BOOL "Disable Wayland")
 # Disable KMS/DRM
 set(SDL_KMSDRM OFF CACHE BOOL "Disable KMS/DRM")
 
-# Disable IBus
-set(SDL_IBUS OFF CACHE BOOL "Disable IBus")
-
 # Additional include paths for X11 and dependencies
 include_directories(SYSTEM
   /usr/arm-linux-gnueabihf/include
