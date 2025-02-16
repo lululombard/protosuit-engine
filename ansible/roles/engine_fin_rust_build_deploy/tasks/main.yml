@@ -42,6 +42,25 @@
     update_cache: yes
   when: inventory_hostname in groups['hub'] and add_arch_result.changed
 
+# Create toolchain file for CMake
+- name: Create CMake toolchain file
+  copy:
+    dest: /home/proto/armhf-toolchain.cmake
+    content: |
+      set(CMAKE_SYSTEM_NAME Linux)
+      set(CMAKE_SYSTEM_PROCESSOR arm)
+      set(CMAKE_C_COMPILER /usr/bin/arm-linux-gnueabihf-gcc)
+      set(CMAKE_CXX_COMPILER /usr/bin/arm-linux-gnueabihf-g++)
+      set(CMAKE_FIND_ROOT_PATH /usr/arm-linux-gnueabihf)
+      set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+      set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+      set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+      set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+    owner: proto
+    group: proto
+    mode: "0644"
+  when: inventory_hostname in groups['hub']
+
 # Install SDL2 on fins
 - name: Install SDL2 on fins
   apt:
@@ -93,6 +112,11 @@
     content: |
       [target.armv7-unknown-linux-gnueabihf]
       linker = "arm-linux-gnueabihf-gcc"
+      rustflags = [
+        "-C", "link-arg=-L/usr/arm-linux-gnueabihf/lib",
+        "-C", "link-arg=-Wl,-rpath-link,/usr/arm-linux-gnueabihf/lib",
+        "-C", "link-arg=-Wl,--allow-shlib-undefined"
+      ]
     owner: proto
     group: proto
     mode: "0644"
@@ -103,7 +127,7 @@
     cmd: |
       . "$HOME/.cargo/env"
       cd /home/proto/protosuit-engine
-      cargo build --release --target armv7-unknown-linux-gnueabihf
+      PKG_CONFIG_ALLOW_CROSS=1 PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig CMAKE_TOOLCHAIN_FILE=/home/proto/armhf-toolchain.cmake cargo build --release --target armv7-unknown-linux-gnueabihf
     executable: /bin/bash
   become_user: proto
   register: build_result
