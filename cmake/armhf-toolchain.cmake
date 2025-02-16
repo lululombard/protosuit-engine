@@ -25,16 +25,19 @@ set(SDL2_DIR /usr/arm-linux-gnueabihf/lib/cmake/SDL2)
 set(SDL_SHARED OFF CACHE BOOL "Build a shared version of the library")
 set(SDL_STATIC ON CACHE BOOL "Build a static version of the library")
 
+# Disable Wayland, enable X11
+set(SDL_WAYLAND OFF CACHE BOOL "Disable Wayland support")
+set(SDL_X11 ON CACHE BOOL "Enable X11 support")
+
 # Additional include paths for D-Bus and other dependencies
 include_directories(SYSTEM
   /usr/arm-linux-gnueabihf/include
   /usr/include/dbus-1.0
   /usr/lib/arm-linux-gnueabihf/dbus-1.0/include
-  /usr/include/wayland
-  /usr/include/glib-2.0
-  /usr/lib/arm-linux-gnueabihf/glib-2.0/include
   /usr/include/X11
   /usr/include/X11/extensions
+  /usr/include/glib-2.0
+  /usr/lib/arm-linux-gnueabihf/glib-2.0/include
   /usr/include/GL
   /usr/include/GLES
   /usr/include/GLES2
