@@ -31,14 +31,6 @@
     dest: /etc/X11/matchbox/autostart.sh
     mode: "0755"
 
-# Configure systemd service for X server with Matchbox
-- name: Create systemd service for Matchbox
-  template:
-    src: matchbox.service.j2
-    dest: /etc/systemd/system/matchbox.service
-    mode: "0644"
-  notify: restart matchbox
-
 # Configure .xinitrc for the proto user
 - name: Create .xinitrc file
   template:
@@ -63,3 +55,26 @@
     line: '    Option "BlankTime" "0"'
     insertafter: 'Section "ServerFlags"'
     create: yes
+
+# Configure X.Org permissions
+- name: Add proto user to tty group
+  user:
+    name: proto
+    groups: tty
+    append: yes
+
+- name: Configure X.Org to allow users in tty group
+  copy:
+    dest: /etc/X11/Xwrapper.config
+    content: |
+      allowed_users=anybody
+      needs_root_rights=yes
+    mode: "0644"
+
+# Configure systemd service for X server with Matchbox
+- name: Update matchbox service to run as proto user
+  template:
+    src: matchbox.service.j2
+    dest: /etc/systemd/system/matchbox.service
+    mode: "0644"
+  notify: restart matchbox
