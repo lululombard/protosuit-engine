@@ -8,8 +8,8 @@ The Protosuit Engine consists of three main components:
 
 1. **Ansible deployment** (Hub + Fins)
    - Raspberry Pi 5 hub managing two Pi Zero 2W nodes
-   - USB gadget mode networking for reliable low-latency communication
-   - NAT routing between dedicated subnets
+   - USB gadget mode networking for reliable low-latency communication between the hub and the fins
+   - NAT routing between dedicated subnets to allow the fins to access the internet through the hub
    - MQTT broker for control messages
    - Matchbox window manager for efficient display management on the Pi Zero 2W
      - Minimal X server installation
@@ -128,21 +128,36 @@ The Protosuit Engine consists of three main components:
 
 ## Running the playbook
 
+Follow these steps in order:
+
 1. Test connectivity to all nodes:
    ```bash
    ansible all -i ansible/inventory/hosts.yml -m ping
    ```
 
-2. Run the playbook:
+2. Configure networking:
    ```bash
-   ansible-playbook -i ansible/inventory/hosts.yml ansible/site.yml
+   ansible-playbook -i ansible/inventory/hosts.yml ansible/networking.yml
    ```
-   Note: The playbooks are idempotent - you can safely run them multiple times. Each run will ensure the configuration is correct without breaking existing setups.
 
-3. Revert `ansible/inventory/hosts.yml` to use the newly created USB network instead of Wi-Fi:
+3. Revert `ansible/inventory/hosts.yml` to use the newly created USB network:
    ```bash
    git checkout -- ansible/inventory/hosts.yml
    ```
+
+4. Configure displays:
+   ```bash
+   ansible-playbook -i ansible/inventory/hosts.yml ansible/display.yml
+   ```
+
+### Troubleshooting
+
+If you experience issues with the step-by-step setup, you can try running the complete setup in one go:
+```bash
+ansible-playbook -i ansible/inventory/hosts.yml ansible/site.yml
+```
+
+Note: The playbooks are idempotent - you can safely run them multiple times. Each run will ensure the configuration is correct without breaking existing setups.
 
 ## Network configuration details
 

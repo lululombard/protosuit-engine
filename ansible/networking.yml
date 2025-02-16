@@ -1,0 +1,12 @@
+---
+- name: Configure hub networking
+  hosts: hub
+  become: true
+  roles:
+    - hub_networking_setup
+
+- name: Configure fin networking
+  hosts: fins
+  become: true
+  roles:
+    - pizero_networking_setup

@@ -1,0 +1,6 @@
+---
+- name: Configure fin displays
+  hosts: fins
+  become: true
+  roles:
+    - display_setup

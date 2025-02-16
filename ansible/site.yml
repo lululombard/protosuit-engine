@@ -1,13 +1,6 @@
 ---
-- name: Configure Hub
-  hosts: hub
-  become: true
-  roles:
-    - hub
+- name: Configure networking
+  import_playbook: networking.yml
 
-- name: Configure Pi Zeros
-  hosts: pizeros
-  become: true
-  roles:
-    - pizero
-    - matchbox_setup
+- name: Configure displays
+  import_playbook: display.yml
