@@ -2,25 +2,29 @@
 
 A Protogen fursuit control system combining networked Raspberry Pi devices with SDL-based animation control. Manages two Pi Zero 2W (one per fin) with a round 4" 720x720 display each via a Raspberry Pi 5 hub using USB gadget mode networking and MQTT messaging.
 
-## Project Overview
+## Project overview
 
 The Protosuit Engine consists of three main components:
 
-1. **Ansible Deployment** (Hub + Fins)
+1. **Ansible deployment** (Hub + Fins)
    - Raspberry Pi 5 hub managing two Pi Zero 2W nodes
    - USB gadget mode networking for reliable low-latency communication
    - NAT routing between dedicated subnets
    - MQTT broker for control messages
-   - Matchbox window manager for display management
-   - Automated Ansible deployment
+   - Matchbox window manager for efficient display management on the Pi Zero 2W
+     - Minimal X server installation
+     - Hidden cursor for clean UI
+     - No window decorations
+     - Optimized for embedded displays
+     - Automatic startup via systemd
 
-2. **Engine Client** (Fins)
+2. **Engine client** (Fins)
    - Rust-based SDL application runtime
    - MQTT-controlled animation/application management
    - Lightweight X11 environment with Matchbox WM
    - Support for embedded applications (Doom, custom animations, etc)
 
-## System Architecture
+## System architecture
 
 ```ascii
                     [Raspberry Pi 5 Hub]
@@ -29,7 +33,7 @@ The Protosuit Engine consists of three main components:
  720x720 Display                       720x720 Display
 ```
 
-## System Requirements
+## System requirements
 
 ### Hub (Raspberry Pi 5)
 - Raspberry Pi OS Lite (64-bit)
@@ -43,7 +47,7 @@ The Protosuit Engine consists of three main components:
 - USB gadget via micro USB OTG
 - 4" 720x720 round display
 
-## Initial Setup
+## Initial setup
 
 ### 1. Prepare the Hub (Raspberry Pi 5)
 
@@ -63,7 +67,7 @@ The Protosuit Engine consists of three main components:
      - Wi-Fi credentials
 2. Boot the Pi Zeros and wait for them to connect to your network
 
-### 3. Configure SSH Access
+### 3. Configure SSH access
 
 1. Connect to the hub via SSH:
    ```bash
@@ -104,7 +108,7 @@ The Protosuit Engine consists of three main components:
    cd protosuit-engine
    ```
 
-### 5. Configure Ansible Inventory
+### 5. Configure Ansible inventory
 
 1. Edit `ansible/inventory/hosts.yml` and replace the placeholder IP addresses with actual Wi-Fi IPs:
    ```yaml
@@ -122,7 +126,7 @@ The Protosuit Engine consists of three main components:
              ansible_host: "192.168.1.Z"  # Replace with protorightfin's actual Wi-Fi IP
    ```
 
-## Running the Playbook
+## Running the playbook
 
 1. Test connectivity to all nodes:
    ```bash
@@ -140,25 +144,46 @@ The Protosuit Engine consists of three main components:
    git checkout -- ansible/inventory/hosts.yml
    ```
 
-## Network Configuration Details
+## Network configuration details
 
-### Hub Interfaces
+### Hub interfaces
 | Interface | IP Address    | MAC Address |
 |-----------|---------------|-------------|
 | usb_left  | 192.168.42.2  | 00:05:69:00:42:02 |
 | usb_right | 192.168.43.2  | 00:05:69:00:43:02 |
 
-### Fin Interfaces
+### Fin interfaces
 | Device | IP Address    | Gateway     | MAC Address |
 |--------|---------------|-------------|-------------|
 | usb0   | 192.168.42.1  | 192.168.42.2| 00:05:69:00:42:01|
 | usb0   | 192.168.43.1  | 192.168.43.2| 00:05:69:00:43:01|
 
-## Engine Client
+## Display configuration details (Pi Zero 2W)
+
+The Ansible playbook configures a minimal display environment optimized for the round displays:
+
+### Window manager setup
+- Matchbox window manager
+  - Minimal memory footprint
+  - No window decorations
+  - Hidden cursor
+  - Automatic startup at boot
+  - Power management disabled
+  - Screen blanking disabled
+
+### X server configuration
+- Minimal X server installation
+  - Only essential input drivers
+  - No unnecessary extensions
+  - Optimized for embedded displays
+  - DPMS (power management) disabled
+  - Automatic startup via systemd
+
+## Engine client
 
 The Engine Client is a Rust application that runs on the Pi Zeros. It is responsible for managing the SDL-based animation/application and sending control messages to the hub.
 
-### Installing Dependencies
+### Installing dependencies
 
 On Raspberry Pi OS or Debian/Ubuntu:
 ```bash
@@ -232,17 +257,7 @@ mosquitto_pub -t "app/stop" -m '{
 }'
 ```
 
-## MQTT Topics
+## MQTT topics
 
 - `app/start`: Start a new application
-- `app/stop`: Stop a running application
-- `app/switch`: Switch focus to a running application
-- `app/status/{app_name}`: Status updates for applications
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+- `
