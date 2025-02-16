@@ -21,6 +21,8 @@
       - libudev-dev:armhf
       - libdbus-1-dev:armhf
       - libasound2-dev:armhf
+      - libm-dev:armhf
+      - libc6:armhf
     state: present
     update_cache: yes
   when: inventory_hostname in groups['hub']
@@ -29,6 +31,14 @@
 - name: Enable armhf architecture
   command: dpkg --add-architecture armhf
   when: inventory_hostname in groups['hub']
+  register: add_arch_result
+  changed_when: add_arch_result.rc == 0
+
+# Update package lists after adding architecture
+- name: Update package lists
+  apt:
+    update_cache: yes
+  when: inventory_hostname in groups['hub'] and add_arch_result.changed
 
 # Install SDL2 on fins
 - name: Install SDL2 on fins
