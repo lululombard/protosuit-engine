@@ -21,6 +21,10 @@ set(CMAKE_INCLUDE_PATH /usr/arm-linux-gnueabihf/include)
 set(SDL_FORCE_CROSSCOMPILE ON)
 set(SDL2_DIR /usr/arm-linux-gnueabihf/lib/cmake/SDL2)
 
+# Force static build
+set(SDL_SHARED OFF CACHE BOOL "Build a shared version of the library")
+set(SDL_STATIC ON CACHE BOOL "Build a static version of the library")
+
 # Additional include paths for D-Bus and other dependencies
 include_directories(SYSTEM
   /usr/arm-linux-gnueabihf/include
@@ -29,4 +33,16 @@ include_directories(SYSTEM
   /usr/include/wayland
   /usr/include/glib-2.0
   /usr/lib/arm-linux-gnueabihf/glib-2.0/include
+  /usr/include/X11
+  /usr/include/X11/extensions
+  /usr/include/GL
+  /usr/include/GLES
+  /usr/include/GLES2
+  /usr/include/EGL
+  /usr/include/libdrm
 )
+
+# Set pkg-config paths
+set(ENV{PKG_CONFIG_PATH} "/usr/lib/arm-linux-gnueabihf/pkgconfig")
+set(ENV{PKG_CONFIG_SYSROOT_DIR} "/usr/arm-linux-gnueabihf")
+set(ENV{PKG_CONFIG_LIBDIR} "/usr/lib/arm-linux-gnueabihf/pkgconfig")

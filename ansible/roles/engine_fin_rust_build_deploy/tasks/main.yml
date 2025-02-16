@@ -147,9 +147,11 @@
       export PKG_CONFIG_ALLOW_CROSS=1
       export PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig
       export PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf
-      export CMAKE_TOOLCHAIN_FILE=cmake/armhf-toolchain.cmake
+      export CMAKE_TOOLCHAIN_FILE=/home/proto/protosuit-engine/cmake/armhf-toolchain.cmake
       export CFLAGS="-I/usr/lib/arm-linux-gnueabihf/dbus-1.0/include -I/usr/include/dbus-1.0 -I/usr/include/wayland"
       export CXXFLAGS="-I/usr/lib/arm-linux-gnueabihf/dbus-1.0/include -I/usr/include/dbus-1.0 -I/usr/include/wayland"
+      export SDL_STATIC=1
+      export SDL_NO_SHARED=1
       cargo build --release --target armv7-unknown-linux-gnueabihf
     executable: /bin/bash
   become_user: proto
