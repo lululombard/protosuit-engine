@@ -40,6 +40,9 @@ set(SDL_OSS OFF CACHE BOOL "Disable OSS")
 # Disable Wayland
 set(SDL_WAYLAND OFF CACHE BOOL "Disable Wayland")
 
+# Disable KMS/DRM
+set(SDL_KMSDRM OFF CACHE BOOL "Disable KMS/DRM")
+
 # Additional include paths for X11 and dependencies
 include_directories(SYSTEM
   /usr/arm-linux-gnueabihf/include
