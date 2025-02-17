@@ -81,9 +81,9 @@
       hdmi_mode=87
       hdmi_cvt 720 720 60 1 0 0 0
       {% if inventory_hostname == 'left_fin' %}
-      display_rotate=3  # 270 degrees rotation
+      video=HDMI-A-1:720x720@60,rotate=270
       {% elif inventory_hostname == 'right_fin' %}
-      display_rotate=1  # 90 degrees rotation
+      video=HDMI-A-1:720x720@60,rotate=90
       {% endif %}
     marker: "# {mark} ANSIBLE MANAGED BLOCK - DISPLAY CONFIG"
   register: config_changes
