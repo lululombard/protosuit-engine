@@ -16,7 +16,7 @@ pub struct MQTTHandler {
     eventloop: EventLoop,
     command_tx: mpsc::Sender<AppCommand>,
     connection_status_tx: mpsc::Sender<bool>,
-    shutdown_rx: oneshot::Receiver<()>,
+    pub(crate) shutdown_rx: oneshot::Receiver<()>,
 }
 
 impl MQTTHandler {
@@ -26,12 +26,12 @@ impl MQTTHandler {
         client_id: &str,
         command_tx: mpsc::Sender<AppCommand>,
         connection_status_tx: mpsc::Sender<bool>,
-        shutdown_rx: oneshot::Receiver<()>,
     ) -> Result<Self> {
         let mut mqttopts = MqttOptions::new(client_id, broker, port);
         mqttopts.set_keep_alive(Duration::from_secs(5));
 
         let (client, eventloop) = AsyncClient::new(mqttopts, 10);
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
         Ok(Self {
             client,

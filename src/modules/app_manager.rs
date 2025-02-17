@@ -65,7 +65,7 @@ impl AppManager {
         // Create shutdown channels
         let (mqtt_shutdown_tx, mqtt_shutdown_rx) = tokio::sync::oneshot::channel();
 
-        // Add shutdown receiver to MQTT handler
+        // Replace the default shutdown receiver with our own
         mqtt_handler.shutdown_rx = mqtt_shutdown_rx;
 
         // Spawn MQTT handler task
