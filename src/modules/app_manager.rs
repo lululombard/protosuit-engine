@@ -15,6 +15,7 @@ pub struct AppManager {
     window_manager: Arc<WindowManager>,
     mqtt_handler: Option<MQTTHandler>,
     command_rx: mpsc::Receiver<AppCommand>,
+    mqtt_status_rx: mpsc::Receiver<bool>,
     active_app: Option<String>,
     idle_display: Option<IdleDisplay>,
 }
@@ -25,11 +26,14 @@ impl AppManager {
         let window_manager = Arc::new(WindowManager::new()?);
 
         let (command_tx, command_rx) = mpsc::channel(32);
+        let (mqtt_status_tx, mqtt_status_rx) = mpsc::channel(32);
+
         let mqtt_handler = MQTTHandler::new(
             mqtt_broker,
             mqtt_port,
             &format!("protosuit-engine-client-{}", hostname::get()?.to_string_lossy()),
             command_tx,
+            mqtt_status_tx,
         )?;
 
         // Create idle display window
@@ -48,6 +52,7 @@ impl AppManager {
             window_manager,
             mqtt_handler: Some(mqtt_handler),
             command_rx,
+            mqtt_status_rx,
             active_app: None,
             idle_display: Some(idle_display),
         })
@@ -80,6 +85,11 @@ impl AppManager {
                         AppCommand::Switch { name } => {
                             self.handle_switch(&name).await?;
                         }
+                    }
+                }
+                Some(mqtt_connected) = self.mqtt_status_rx.recv() => {
+                    if let Some(idle_display) = &mut self.idle_display {
+                        idle_display.set_mqtt_status(mqtt_connected);
                     }
                 }
                 _ = update_interval.tick() => {

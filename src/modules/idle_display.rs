@@ -84,7 +84,11 @@ impl IdleDisplay {
         let lines = vec![
             format!("Hostname: {}", self.hostname),
             format!("IP Address: {}", ip),
-            format!("Uptime: {}h {}m", uptime.as_secs() / 3600, (uptime.as_secs() % 3600) / 60),
+            format!("Uptime: {}h {}m {}s",
+                uptime.as_secs() / 3600,
+                (uptime.as_secs() % 3600) / 60,
+                uptime.as_secs() % 60
+            ),
             format!("MQTT Status: {}", mqtt_status),
         ];
 

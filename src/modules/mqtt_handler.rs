@@ -15,10 +15,17 @@ pub struct MQTTHandler {
     client: AsyncClient,
     eventloop: EventLoop,
     command_tx: mpsc::Sender<AppCommand>,
+    connection_status_tx: mpsc::Sender<bool>,
 }
 
 impl MQTTHandler {
-    pub fn new(broker: &str, port: u16, client_id: &str, command_tx: mpsc::Sender<AppCommand>) -> Result<Self> {
+    pub fn new(
+        broker: &str,
+        port: u16,
+        client_id: &str,
+        command_tx: mpsc::Sender<AppCommand>,
+        connection_status_tx: mpsc::Sender<bool>,
+    ) -> Result<Self> {
         let mut mqttopts = MqttOptions::new(client_id, broker, port);
         mqttopts.set_keep_alive(Duration::from_secs(5));
 
@@ -28,6 +35,7 @@ impl MQTTHandler {
             client,
             eventloop,
             command_tx,
+            connection_status_tx,
         })
     }
 
@@ -68,6 +76,8 @@ impl MQTTHandler {
                 }
                 Ok(Event::Incoming(Packet::ConnAck(_))) => {
                     log::info!("Connected to MQTT broker");
+                    self.connection_status_tx.send(true).await
+                        .context("Failed to send connection status")?;
                 }
                 Ok(Event::Outgoing(_)) => {
                     log::debug!("Sending PING");
@@ -77,6 +87,8 @@ impl MQTTHandler {
                 }
                 Err(e) => {
                     log::error!("MQTT Error: {}", e);
+                    self.connection_status_tx.send(false).await
+                        .context("Failed to send connection status")?;
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 }
                 _ => {}
