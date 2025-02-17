@@ -10,13 +10,12 @@
     state: present
     update_cache: yes
 
-# Configure X server with rotation
-- name: Configure X server with display rotation
+# Disable unnecessary X server features
+- name: Create custom X server configuration
   template:
     src: xorg.conf.j2
     dest: /etc/X11/xorg.conf
     mode: "0644"
-  notify: restart matchbox
 
 # Configure autostart for Matchbox
 - name: Create Matchbox autostart directory
@@ -30,7 +29,6 @@
     src: autostart.sh.j2
     dest: /etc/X11/matchbox/autostart.sh
     mode: "0755"
-  notify: restart matchbox
 
 # Configure .xinitrc for the proto user
 - name: Create .xinitrc file
@@ -40,7 +38,6 @@
     mode: "0644"
     owner: proto
     group: proto
-  notify: restart matchbox
 
 # Configure X.Org permissions
 - name: Add proto user to tty group
@@ -56,7 +53,6 @@
       allowed_users=anybody
       needs_root_rights=yes
     mode: "0644"
-  notify: restart matchbox
 
 # Configure systemd service for X server with Matchbox
 - name: Update matchbox service to run as proto user
@@ -64,20 +60,22 @@
     src: matchbox.service.j2
     dest: /etc/systemd/system/matchbox.service
     mode: "0644"
-  notify: restart matchbox
 
-# Enable and start the service
+# Enable the service
 - name: Enable and start Matchbox service
   systemd:
     name: matchbox
     state: started
     enabled: true
     daemon_reload: true
+  notify: restart matchbox
 
-# Disable screen blanking
-- name: Disable screen blanking in X
+# Configure display rotation in config.txt
+- name: Configure display rotation
   lineinfile:
-    path: /etc/X11/xorg.conf
-    line: '    Option "BlankTime" "0"'
-    insertafter: 'Section "ServerFlags"'
-    create: yes
+    path: /boot/firmware/config.txt
+    regexp: "^display_rotate="
+    line: "{% if inventory_hostname == 'left_fin' %}display_rotate=3{% elif inventory_hostname == 'right_fin' %}display_rotate=1{% endif %}" # 3=270 degrees, 1=90 degrees
+  register: rotation_config
+  notify: reboot system
+  when: "'fins' in group_names"
