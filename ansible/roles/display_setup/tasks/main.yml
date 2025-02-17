@@ -10,12 +10,13 @@
     state: present
     update_cache: yes
 
-# Disable unnecessary X server features
-- name: Create custom X server configuration
+# Configure X server with rotation
+- name: Configure X server with display rotation
   template:
     src: xorg.conf.j2
     dest: /etc/X11/xorg.conf
     mode: "0644"
+  notify: restart matchbox
 
 # Configure autostart for Matchbox
 - name: Create Matchbox autostart directory
@@ -29,6 +30,7 @@
     src: autostart.sh.j2
     dest: /etc/X11/matchbox/autostart.sh
     mode: "0755"
+  notify: restart matchbox
 
 # Configure .xinitrc for the proto user
 - name: Create .xinitrc file
@@ -38,22 +40,7 @@
     mode: "0644"
     owner: proto
     group: proto
-
-# Enable the service
-- name: Enable and start Matchbox service
-  systemd:
-    name: matchbox
-    state: started
-    enabled: true
-    daemon_reload: true
-
-# Disable screen blanking
-- name: Disable screen blanking in X
-  lineinfile:
-    path: /etc/X11/xorg.conf
-    line: '    Option "BlankTime" "0"'
-    insertafter: 'Section "ServerFlags"'
-    create: yes
+  notify: restart matchbox
 
 # Configure X.Org permissions
 - name: Add proto user to tty group
@@ -69,6 +56,7 @@
       allowed_users=anybody
       needs_root_rights=yes
     mode: "0644"
+  notify: restart matchbox
 
 # Configure systemd service for X server with Matchbox
 - name: Update matchbox service to run as proto user
@@ -77,3 +65,19 @@
     dest: /etc/systemd/system/matchbox.service
     mode: "0644"
   notify: restart matchbox
+
+# Enable and start the service
+- name: Enable and start Matchbox service
+  systemd:
+    name: matchbox
+    state: started
+    enabled: true
+    daemon_reload: true
+
+# Disable screen blanking
+- name: Disable screen blanking in X
+  lineinfile:
+    path: /etc/X11/xorg.conf
+    line: '    Option "BlankTime" "0"'
+    insertafter: 'Section "ServerFlags"'
+    create: yes
