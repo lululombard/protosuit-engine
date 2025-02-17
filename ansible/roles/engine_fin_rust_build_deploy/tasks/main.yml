@@ -44,11 +44,12 @@
 - name: Build release binary
   become_user: proto
   shell: |
-    source $HOME/.cargo/env
+    . $HOME/.cargo/env
     cargo build --release --target=armv7-unknown-linux-gnueabihf
   args:
     chdir: /home/proto/protosuit-engine
     creates: "/home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin"
+    executable: /bin/bash
   when: "'hub' in group_names"
   changed_when: false
 
