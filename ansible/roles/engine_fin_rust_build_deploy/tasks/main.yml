@@ -1,167 +1,66 @@
----
-# Install Rust toolchain and cross-compilation dependencies
-- name: Install Rust build dependencies
+- name: Install ARM cross-compilation dependencies
   apt:
-    name:
-      - build-essential
-      - gcc-arm-linux-gnueabihf
-      - g++-arm-linux-gnueabihf
-      - pkg-config
-      - libssl-dev
-      - cmake
-      - libsdl2-dev:armhf
-      - libsdl2-ttf-dev:armhf
-      - libsdl2-gfx-dev:armhf
-      - crossbuild-essential-armhf
-      - libc6-dev-armhf-cross
-      - libpulse-dev:armhf
-      - libudev-dev:armhf
-      - libdbus-1-dev:armhf
-      - libasound2-dev:armhf
-      - libc6:armhf
-      - libc6-dev:armhf
-      - libgcc-s1:armhf
-      - libstdc++6:armhf
-      - libusb-1.0-0-dev:armhf
-      - libdbus-1-dev:armhf
-      - libibus-1.0-dev:armhf
-      - libglib2.0-dev:armhf
-      - libx11-dev:armhf
-      - libxext-dev:armhf
-      - libxcursor-dev:armhf
-      - libxinerama-dev:armhf
-      - libxi-dev:armhf
-      - libxfixes-dev:armhf
-      - libxrandr-dev:armhf
-      - libxrender-dev:armhf
-      - libxss-dev:armhf
-      - libxxf86vm-dev:armhf
-      - libdrm-dev:armhf
-      - libgbm-dev:armhf
-      - libgl1-mesa-dev:armhf
-      - libgles2-mesa-dev:armhf
-      - libegl1-mesa-dev:armhf
-      - libglvnd-dev:armhf
-      - libglx-dev:armhf
-      - libopengl-dev:armhf
-      - libglu1-mesa-dev:armhf
-      - libxdmcp-dev:armhf
-      - libxau-dev:armhf
-      - libxcb1-dev:armhf
-      - libdrm-dev:armhf
+    name: "{{ item }}"
     state: present
-    update_cache: yes
-  when: inventory_hostname in groups['hub']
+  loop:
+    - libsdl2-dev
+    - libx11-dev
+    - libdbus-1-dev
+    - libgl1-mesa-dev
+    - libasound2-dev
+  when: "'hub' in group_names"
 
-# Enable armhf architecture
-- name: Enable armhf architecture
-  command: dpkg --add-architecture armhf
-  when: inventory_hostname in groups['hub']
-  register: add_arch_result
-  changed_when: add_arch_result.rc == 0
-
-# Update package lists after adding architecture
-- name: Update package lists
-  apt:
-    update_cache: yes
-  when: inventory_hostname in groups['hub'] and add_arch_result.changed
-
-# Install SDL2 on fins
-- name: Install SDL2 on fins
-  apt:
-    name:
-      - libsdl2-2.0-0
-      - libsdl2-ttf-2.0-0
-      - libsdl2-gfx-1.0-0
-      - libudev1
-      - libdbus-1-3
-      - libasound2
-    state: present
-    update_cache: yes
-  when: inventory_hostname in groups['fins']
-
-- name: Download rustup installer
-  get_url:
-    url: https://sh.rustup.rs
-    dest: /tmp/rustup.sh
-    mode: "0755"
-  when: inventory_hostname in groups['hub']
-
-- name: Install Rust using rustup (hub only)
-  shell:
-    cmd: /tmp/rustup.sh -y
-    creates: /home/proto/.cargo/bin/rustc
+- name: Set up Rust toolchain for user 'proto'
   become_user: proto
-  when: inventory_hostname in groups['hub']
+  shell: |
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    source $HOME/.cargo/env
+    rustup target add armv7-unknown-linux-gnueabihf
+  args:
+    creates: "/home/proto/.cargo/bin/rustup"
+  when: "'hub' in group_names"
+  changed_when: false
 
-- name: Add Rust to proto's PATH
+- name: Configure cargo environment for ARMv7 target
   lineinfile:
-    path: /home/proto/.zshrc
-    line: 'export PATH="$HOME/.cargo/bin:$PATH"'
-    create: yes
+    path: /home/proto/.cargo/config
+    line: |
+      [target.armv7-unknown-linux-gnueabihf]
+      linker = "arm-linux-gnueabihf-gcc"
+  when: "'hub' in group_names"
+
+- name: Build release binary
   become_user: proto
-  when: inventory_hostname in groups['hub']
+  shell: |
+    cargo build --release --target=armv7-unknown-linux-gnueabihf
+  args:
+    chdir: /home/proto/protosuit-engine-fin
+    creates: "/home/proto/protosuit-engine-fin/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin"
+  when: "'hub' in group_names"
+  changed_when: false
 
-- name: Source cargo env and add ARM target
-  shell:
-    cmd: |
-      . "$HOME/.cargo/env"
-      rustup target add armv7-unknown-linux-gnueabihf
-    executable: /bin/bash
-  become_user: proto
-  when: inventory_hostname in groups['hub']
+- name: Install minimal runtime dependencies
+  apt:
+    name: libsdl2-2.0-0
+    state: present
+  when: "'fins' in group_names"
 
-- name: Build Rust application for Pi Zero 2W
-  shell:
-    cmd: |
-      . "$HOME/.cargo/env"
-      cd /home/proto/protosuit-engine
-      export PKG_CONFIG_ALLOW_CROSS=1
-      export PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig
-      export PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf
-      export CMAKE_TOOLCHAIN_FILE=/home/proto/protosuit-engine/cmake/armhf-toolchain.cmake
-      export CFLAGS="-I/usr/lib/arm-linux-gnueabihf -I/usr/lib/arm-linux-gnueabihf/dbus-1.0/include -I/usr/include/dbus-1.0 -I/usr/include/ibus-1.0 -I/usr/include/X11"
-      export CXXFLAGS="-I/usr/lib/arm-linux-gnueabihf -I/usr/include/dbus-1.0 -I/usr/include/ibus-1.0 -I/usr/include/X11"
-      export SDL_STATIC=1
-      export SDL_NO_SHARED=1
-      export SDL_VIDEODRIVER=x11
-      export SDL_WAYLAND_DISABLE=1
-      export SDL_AUDIODRIVER=dummy
-      export SDL_DISABLEAUDIO=1
-      cargo build --release --target armv7-unknown-linux-gnueabihf
-    executable: /bin/bash
-  become_user: proto
-  register: build_result
-  when: inventory_hostname in groups['hub']
-
-# Deploy to fins
-- name: Ensure binary exists before copying
-  stat:
-    path: /home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin
-  register: binary_stat
-  when: inventory_hostname in groups['hub']
-
-- name: Copy binary to fins
+- name: Deploy compiled binary
   copy:
-    src: /home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin
+    src: /home/proto/protosuit-engine-fin/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin
     dest: /usr/local/bin/protosuit-engine-fin
     mode: "0755"
-    remote_src: yes
-  when: inventory_hostname in groups['fins']
+  when: "'fins' in group_names"
 
-# Configure systemd service on fins
-- name: Create systemd service for Engine Fin
+- name: Configure systemd service
   template:
     src: engine-fin.service.j2
     dest: /etc/systemd/system/engine-fin.service
-    mode: "0644"
-  when: inventory_hostname in groups['fins']
-  notify: restart engine fin
+  when: "'fins' in group_names"
 
-- name: Enable and start Engine Fin service
+- name: Enable and start systemd service
   systemd:
     name: engine-fin
+    enabled: yes
     state: started
-    enabled: true
-    daemon_reload: true
-  when: inventory_hostname in groups['fins']
+  when: "'fins' in group_names"
