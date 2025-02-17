@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AppCommand {
@@ -16,6 +16,7 @@ pub struct MQTTHandler {
     eventloop: EventLoop,
     command_tx: mpsc::Sender<AppCommand>,
     connection_status_tx: mpsc::Sender<bool>,
+    shutdown_rx: oneshot::Receiver<()>,
 }
 
 impl MQTTHandler {
@@ -25,6 +26,7 @@ impl MQTTHandler {
         client_id: &str,
         command_tx: mpsc::Sender<AppCommand>,
         connection_status_tx: mpsc::Sender<bool>,
+        shutdown_rx: oneshot::Receiver<()>,
     ) -> Result<Self> {
         let mut mqttopts = MqttOptions::new(client_id, broker, port);
         mqttopts.set_keep_alive(Duration::from_secs(5));
@@ -36,6 +38,7 @@ impl MQTTHandler {
             eventloop,
             command_tx,
             connection_status_tx,
+            shutdown_rx,
         })
     }
 
@@ -47,53 +50,64 @@ impl MQTTHandler {
             .context("Failed to subscribe to topics")?;
 
         loop {
-            match self.eventloop.poll().await {
-                Ok(Event::Incoming(Packet::Publish(publish))) => {
-                    let topic = publish.topic;
-                    let payload = String::from_utf8_lossy(&publish.payload);
+            tokio::select! {
+                mqtt_event = self.eventloop.poll() => {
+                    match mqtt_event {
+                        Ok(Event::Incoming(Packet::Publish(publish))) => {
+                            let topic = publish.topic;
+                            let payload = String::from_utf8_lossy(&publish.payload);
 
-                    match topic.as_str() {
-                        "app/start" => {
-                            if let Ok(cmd) = serde_json::from_str::<AppCommand>(&payload) {
-                                self.command_tx.send(cmd).await
-                                    .context("Failed to send command")?;
+                            match topic.as_str() {
+                                "app/start" => {
+                                    if let Ok(cmd) = serde_json::from_str::<AppCommand>(&payload) {
+                                        self.command_tx.send(cmd).await
+                                            .context("Failed to send command")?;
+                                    }
+                                }
+                                "app/stop" => {
+                                    if let Ok(cmd) = serde_json::from_str::<AppCommand>(&payload) {
+                                        self.command_tx.send(cmd).await
+                                            .context("Failed to send command")?;
+                                    }
+                                }
+                                "app/switch" => {
+                                    if let Ok(cmd) = serde_json::from_str::<AppCommand>(&payload) {
+                                        self.command_tx.send(cmd).await
+                                            .context("Failed to send command")?;
+                                    }
+                                }
+                                _ => log::warn!("Received message on unknown topic: {}", topic),
                             }
                         }
-                        "app/stop" => {
-                            if let Ok(cmd) = serde_json::from_str::<AppCommand>(&payload) {
-                                self.command_tx.send(cmd).await
-                                    .context("Failed to send command")?;
-                            }
+                        Ok(Event::Incoming(Packet::ConnAck(_))) => {
+                            log::info!("Connected to MQTT broker");
+                            self.connection_status_tx.send(true).await
+                                .context("Failed to send connection status")?;
                         }
-                        "app/switch" => {
-                            if let Ok(cmd) = serde_json::from_str::<AppCommand>(&payload) {
-                                self.command_tx.send(cmd).await
-                                    .context("Failed to send command")?;
-                            }
+                        Ok(Event::Outgoing(_)) => {
+                            log::debug!("Sending PING");
                         }
-                        _ => log::warn!("Received message on unknown topic: {}", topic),
+                        Ok(Event::Incoming(Packet::PingResp)) => {
+                            log::debug!("Received PONG");
+                        }
+                        Err(e) => {
+                            log::error!("MQTT Error: {}", e);
+                            self.connection_status_tx.send(false).await
+                                .context("Failed to send connection status")?;
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        }
+                        _ => {}
                     }
                 }
-                Ok(Event::Incoming(Packet::ConnAck(_))) => {
-                    log::info!("Connected to MQTT broker");
-                    self.connection_status_tx.send(true).await
-                        .context("Failed to send connection status")?;
-                }
-                Ok(Event::Outgoing(_)) => {
-                    log::debug!("Sending PING");
-                }
-                Ok(Event::Incoming(Packet::PingResp)) => {
-                    log::debug!("Received PONG");
-                }
-                Err(e) => {
-                    log::error!("MQTT Error: {}", e);
+                _ = &mut self.shutdown_rx => {
+                    log::info!("MQTT handler received shutdown signal");
                     self.connection_status_tx.send(false).await
-                        .context("Failed to send connection status")?;
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                        .context("Failed to send final connection status")?;
+                    break;
                 }
-                _ => {}
             }
         }
+        Ok(())
     }
 
     pub async fn publish_status(&self, app_name: &str, status: &str) -> Result<()> {

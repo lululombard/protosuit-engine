@@ -92,6 +92,12 @@ impl SDLManager {
         self.sdl_context.video()
             .map_err(|e| SDLError::SDLError(e.to_string()).into())
     }
+
+    pub fn get_running_apps(&self) -> Vec<String> {
+        self.running_apps.iter()
+            .map(|entry| entry.key().clone())
+            .collect()
+    }
 }
 
 impl Drop for SDLManager {

@@ -62,8 +62,14 @@ impl AppManager {
         let mut mqtt_handler = self.mqtt_handler.take()
             .context("MQTT handler not initialized")?;
 
+        // Create shutdown channels
+        let (mqtt_shutdown_tx, mqtt_shutdown_rx) = tokio::sync::oneshot::channel();
+
+        // Add shutdown receiver to MQTT handler
+        mqtt_handler.shutdown_rx = mqtt_shutdown_rx;
+
         // Spawn MQTT handler task
-        let _mqtt_handle = tokio::spawn(async move {
+        let mqtt_handle = tokio::spawn(async move {
             if let Err(e) = mqtt_handler.start().await {
                 log::error!("MQTT handler error: {}", e);
             }
@@ -72,18 +78,35 @@ impl AppManager {
         // Create an interval for updating the idle display
         let mut update_interval = interval(Duration::from_secs(1));
 
-        loop {
+        // Handle Ctrl+C
+        let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
+
+        tokio::spawn(async move {
+            if let Err(e) = tokio::signal::ctrl_c().await {
+                log::error!("Failed to listen for Ctrl+C: {}", e);
+                return;
+            }
+            let _ = shutdown_tx.send(());
+        });
+
+        let result = loop {
             tokio::select! {
                 Some(command) = self.command_rx.recv() => {
                     match command {
                         AppCommand::Start { name, command, args } => {
-                            self.handle_start(&name, &command, &args).await?;
+                            if let Err(e) = self.handle_start(&name, &command, &args).await {
+                                break Err(e);
+                            }
                         }
                         AppCommand::Stop { name } => {
-                            self.handle_stop(&name).await?;
+                            if let Err(e) = self.handle_stop(&name).await {
+                                break Err(e);
+                            }
                         }
                         AppCommand::Switch { name } => {
-                            self.handle_switch(&name).await?;
+                            if let Err(e) = self.handle_switch(&name).await {
+                                break Err(e);
+                            }
                         }
                     }
                 }
@@ -95,12 +118,29 @@ impl AppManager {
                 _ = update_interval.tick() => {
                     if self.active_app.is_none() {
                         if let Some(idle_display) = &mut self.idle_display {
-                            idle_display.render()?;
+                            if let Err(e) = idle_display.render() {
+                                break Err(e);
+                            }
                         }
                     }
                 }
+                _ = &mut shutdown_rx => {
+                    log::info!("Shutdown signal received, cleaning up...");
+                    // Send shutdown signal to MQTT handler
+                    let _ = mqtt_shutdown_tx.send(());
+                    // Wait for MQTT handler to finish
+                    let _ = mqtt_handle.await;
+                    // Stop all running apps
+                    if let Err(e) = self.cleanup().await {
+                        break Err(e);
+                    }
+                    break Ok(());
+                }
             }
-        }
+        };
+
+        log::info!("App manager shutting down");
+        result
     }
 
     async fn handle_start(&mut self, name: &str, command: &str, args: &[String]) -> Result<()> {
@@ -153,6 +193,17 @@ impl AppManager {
             self.active_app = Some(name.to_string());
         }
 
+        Ok(())
+    }
+
+    async fn cleanup(&mut self) -> Result<()> {
+        // Stop all running apps
+        let running_apps: Vec<String> = self.sdl_manager.get_running_apps();
+        for app_name in running_apps {
+            if let Err(e) = self.handle_stop(&app_name).await {
+                log::error!("Failed to stop {}: {}", app_name, e);
+            }
+        }
         Ok(())
     }
 }
