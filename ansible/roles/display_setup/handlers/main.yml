@@ -12,4 +12,4 @@
     reboot_timeout: 300
     pre_reboot_delay: 0
     post_reboot_delay: 30
-  when: rotation_config.changed
+  when: config_changes.changed or cmdline_changes.changed
