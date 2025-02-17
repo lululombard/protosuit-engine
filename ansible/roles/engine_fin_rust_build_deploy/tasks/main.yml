@@ -46,8 +46,8 @@
   shell: |
     cargo build --release --target=armv7-unknown-linux-gnueabihf
   args:
-    chdir: /home/proto/protosuit-engine-fin
-    creates: "/home/proto/protosuit-engine-fin/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin"
+    chdir: /home/proto/protosuit-engine
+    creates: "/home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin"
   when: "'hub' in group_names"
   changed_when: false
 
@@ -59,7 +59,7 @@
 
 - name: Deploy compiled binary
   copy:
-    src: /home/proto/protosuit-engine-fin/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin
+    src: /home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin
     dest: /usr/local/bin/protosuit-engine-fin
     mode: "0755"
   when: "'fins' in group_names"
