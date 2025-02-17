@@ -44,6 +44,7 @@
 - name: Build release binary
   become_user: proto
   shell: |
+    source $HOME/.cargo/env
     cargo build --release --target=armv7-unknown-linux-gnueabihf
   args:
     chdir: /home/proto/protosuit-engine
@@ -62,6 +63,7 @@
     src: /home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin
     dest: /usr/local/bin/protosuit-engine-fin
     mode: "0755"
+    remote_src: yes
   when: "'fins' in group_names"
 
 - name: Configure systemd service
