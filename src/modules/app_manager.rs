@@ -78,13 +78,20 @@ impl AppManager {
         // Create an interval for updating the idle display
         let mut update_interval = interval(Duration::from_secs(1));
 
-        // Handle Ctrl+C
+        // Handle Ctrl+C and SIGTERM
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
 
         tokio::spawn(async move {
-            if let Err(e) = tokio::signal::ctrl_c().await {
-                log::error!("Failed to listen for Ctrl+C: {}", e);
-                return;
+            let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("Failed to create SIGTERM signal handler");
+
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    log::info!("Received Ctrl+C signal");
+                }
+                _ = sigterm.recv() => {
+                    log::info!("Received SIGTERM signal");
+                }
             }
             let _ = shutdown_tx.send(());
         });
