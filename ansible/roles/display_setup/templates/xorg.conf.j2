@@ -26,6 +26,20 @@ Section "ServerLayout"
     Option "BlankTime" "0"
 EndSection
 
+Section "Device"
+    Identifier "Device0"
+    Driver "modesetting"
+    {% if inventory_hostname == 'left_fin' %}
+    Option "Monitor-HDMI-1" "Monitor0"
+    Option "RandRRotation" "on"
+    Option "Rotate" "CCW"
+    {% elif inventory_hostname == 'right_fin' %}
+    Option "Monitor-HDMI-1" "Monitor0"
+    Option "RandRRotation" "on"
+    Option "Rotate" "CW"
+    {% endif %}
+EndSection
+
 Section "Screen"
     Identifier "Screen0"
     Device "Device0"
@@ -33,10 +47,5 @@ Section "Screen"
     DefaultDepth 24
     SubSection "Display"
         Depth 24
-        {% if inventory_hostname == 'left_fin' %}
-        Option "Rotate" "left"
-        {% elif inventory_hostname == 'right_fin' %}
-        Option "Rotate" "right"
-        {% endif %}
     EndSubSection
 EndSection
