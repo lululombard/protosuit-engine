@@ -31,11 +31,12 @@
   when: "'hub' in group_names"
 
 - name: Configure cargo environment for ARMv7 target
-  copy:
-    dest: /home/proto/.cargo/config
-    content: |
+  lineinfile:
+    path: /home/proto/.cargo/config.toml
+    line: |
       [target.armv7-unknown-linux-gnueabihf]
       linker = "arm-linux-gnueabihf-gcc"
+    create: yes
     owner: proto
     group: proto
     mode: "0644"
