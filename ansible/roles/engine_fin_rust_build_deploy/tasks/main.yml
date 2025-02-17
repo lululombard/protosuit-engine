@@ -72,6 +72,7 @@
     src: engine-fin.service.j2
     dest: /etc/systemd/system/engine-fin.service
   when: "'fins' in group_names"
+  notify: restart engine fin
 
 - name: Enable and start systemd service
   systemd:

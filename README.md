@@ -157,12 +157,17 @@ Follow these steps in order:
    ansible-playbook -i ansible/inventory/hosts.yml ansible/display.yml
    ```
 
-6. Build and deploy the Engine Fin application:
+6. Configure hub server (MQTT broker):
+   ```bash
+   ansible-playbook -i ansible/inventory/hosts.yml ansible/hub_server.yml
+   ```
+
+7. Build and deploy the Engine Fin application:
    ```bash
    ansible-playbook -i ansible/inventory/hosts.yml ansible/engine_fin.yml
    ```
 
-Note: This step will take approximately 15-30 minutes on the first run as it needs to install the Rust toolchain and compile the application.
+Note: The Engine Fin deployment step will take approximately 15-30 minutes on the first run as it needs to install the Rust toolchain and compile the application.
 
 ### Troubleshooting
 

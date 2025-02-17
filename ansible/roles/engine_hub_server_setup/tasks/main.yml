@@ -1,0 +1,27 @@
+---
+# Install Mosquitto MQTT broker and client
+- name: Install Mosquitto packages
+  apt:
+    name:
+      - mosquitto
+      - mosquitto-clients
+    state: present
+    update_cache: yes
+  when: "'hub' in group_names"
+
+# Configure Mosquitto for network access
+- name: Configure Mosquitto listener
+  template:
+    src: mosquitto.conf.j2
+    dest: /etc/mosquitto/conf.d/custom.conf
+    mode: "0644"
+  notify: restart mosquitto
+  when: "'hub' in group_names"
+
+# Ensure Mosquitto service is enabled and running
+- name: Enable and start Mosquitto service
+  systemd:
+    name: mosquitto
+    state: started
+    enabled: yes
+  when: "'hub' in group_names"

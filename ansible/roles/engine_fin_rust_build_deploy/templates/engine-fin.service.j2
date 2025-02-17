@@ -8,6 +8,11 @@ Type=simple
 User=proto
 Environment=DISPLAY=:0
 Environment=RUST_LOG=info
+{% if inventory_hostname == 'left_fin' %}
+Environment=MQTT_BROKER=192.168.42.2
+{% elif inventory_hostname == 'right_fin' %}
+Environment=MQTT_BROKER=192.168.43.2
+{% endif %}
 ExecStart=/usr/local/bin/protosuit-engine-fin
 Restart=on-failure
 RestartSec=5
