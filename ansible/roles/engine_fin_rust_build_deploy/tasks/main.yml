@@ -49,10 +49,10 @@
     cargo build --release --target=armv7-unknown-linux-gnueabihf
   args:
     chdir: /home/proto/protosuit-engine
-    creates: "/home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin"
     executable: /bin/bash
   when: "'hub' in group_names"
-  changed_when: false
+  register: build_result
+  changed_when: build_result.rc == 0
 
 - name: Install minimal runtime dependencies
   apt:
