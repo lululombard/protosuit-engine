@@ -7,7 +7,6 @@
       - xserver-xorg-input-all
       - xinit
       - matchbox-window-manager
-      - unclutter
     state: present
     update_cache: yes
 
