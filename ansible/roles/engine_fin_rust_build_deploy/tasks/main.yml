@@ -41,14 +41,20 @@
     block: |
       [target.arm-unknown-linux-gnueabihf]
       linker = "arm-linux-gnueabihf-gcc"
-      rustflags = ["-C", "target-cpu=arm1176jzf-s"]
+      rustflags = [
+        "-C", "target-cpu=arm1176jzf-s",
+        "-C", "target-feature=+v6",
+        "-C", "link-arg=-march=armv6",
+        "-C", "link-arg=-mfpu=vfp",
+        "-C", "link-arg=-marm"
+      ]
   when: "'hub' in group_names"
 
 - name: Build release binary
   become_user: proto
   shell: |
     . $HOME/.cargo/env
-    cargo build --release --target=arm-unknown-linux-gnueabihf
+    CFLAGS="-march=armv6 -mfpu=vfp -marm" cargo build --release --target=arm-unknown-linux-gnueabihf
   args:
     chdir: /home/proto/protosuit-engine
     executable: /bin/bash
