@@ -251,22 +251,18 @@ sudo apt install -y \
     curl \
     git \
     cmake \
-    pkg-config \
-    gcc-arm-linux-gnueabihf
+    pkg-config
 
 # Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-
-# Add ARM target (compatible with both Pi Zero and Pi Zero 2W)
-rustup target add arm-unknown-linux-gnueabihf
 ```
 
 ## Building
 
 1. Build the project:
 ```bash
-cargo build --release --target=arm-unknown-linux-gnueabihf
+cargo build --release
 ```
 
 2. The optimized binary will be available at `target/release/protosuit-engine-fin`
