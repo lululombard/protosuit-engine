@@ -41,6 +41,7 @@
     block: |
       [target.arm-unknown-linux-gnueabihf]
       linker = "arm-linux-gnueabihf-gcc"
+      rustflags = ["-C", "target-cpu=arm1176jzf-s"]
   when: "'hub' in group_names"
 
 - name: Build release binary
