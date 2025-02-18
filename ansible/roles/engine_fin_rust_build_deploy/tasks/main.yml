@@ -15,7 +15,7 @@
   shell: |
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     source $HOME/.cargo/env
-    rustup target add armv7-unknown-linux-gnueabihf
+    rustup target add arm-unknown-linux-gnueabihf
   args:
     creates: "/home/proto/.cargo/bin/rustup"
   when: "'hub' in group_names"
@@ -30,16 +30,16 @@
     mode: "0755"
   when: "'hub' in group_names"
 
-- name: Configure cargo environment for ARMv7 target
+- name: Configure cargo environment for ARM target
   blockinfile:
     path: /home/proto/.cargo/config.toml
     create: yes
     owner: proto
     group: proto
     mode: "0644"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK - ARMV7 TARGET"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - ARM TARGET"
     block: |
-      [target.armv7-unknown-linux-gnueabihf]
+      [target.arm-unknown-linux-gnueabihf]
       linker = "arm-linux-gnueabihf-gcc"
   when: "'hub' in group_names"
 
@@ -47,7 +47,7 @@
   become_user: proto
   shell: |
     . $HOME/.cargo/env
-    cargo build --release --target=armv7-unknown-linux-gnueabihf
+    cargo build --release --target=arm-unknown-linux-gnueabihf
   args:
     chdir: /home/proto/protosuit-engine
     executable: /bin/bash
@@ -63,7 +63,7 @@
 
 - name: Deploy compiled binary
   copy:
-    src: /home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin
+    src: /home/proto/protosuit-engine/target/arm-unknown-linux-gnueabihf/release/protosuit-engine-fin
     dest: /usr/local/bin/protosuit-engine-fin
     mode: "0755"
   when: "'fins' in group_names"
