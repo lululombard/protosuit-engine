@@ -3,6 +3,7 @@
     name: "{{ item }}"
     state: present
   loop:
+    - build-essential
     - libsdl2-dev
     - libx11-dev
     - libdbus-1-dev
