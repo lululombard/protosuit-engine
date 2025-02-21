@@ -76,21 +76,27 @@ The Protosuit Engine consists of those main components:
 
 2. Generate SSH key on the hub:
    ```bash
-   ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+   ssh-keygen -t ed25519 -N "" -f ~/.ssh/protosuit
    ```
 
-2. Copy SSH key to all devices (including the hub itself):
+3. Make that key default for SSH:
+   ```bash
+   echo -e "Host *\n    IdentityFile ~/.ssh/protosuit" >> ~/.ssh/config
+   ```
+
+4. Copy SSH key to all devices (including the hub itself):
    ```bash
    # Copy to the hub itself (needed for Ansible local connections)
-   ssh-copy-id localhost -i ~/.ssh/id_ed25519.pub
+   ssh-copy-id -i ~/.ssh/protosuit.pub localhost
 
    # Copy to both Pi Zeros
-   ssh-copy-id proto@protoleftfin -i ~/.ssh/id_ed25519.pub
-   ssh-copy-id proto@protorightfin -i ~/.ssh/id_ed25519.pub
+   ssh-copy-id -i ~/.ssh/protosuit.pub proto@protoleftfin
+   ssh-copy-id -i ~/.ssh/protosuit.pub proto@protorightfin
    ```
 
-3. Test SSH access to all devices:
+5. Connect via SSH to all devices to allow the key fingerprint to be added to the known_hosts file:
    ```bash
+   ssh proto@127.0.0.1
    ssh proto@protoleftfin
    ssh proto@protorightfin
    ```
@@ -117,13 +123,13 @@ The Protosuit Engine consists of those main components:
        hub:
          hosts:
            hub_pi:
-             ansible_host: "192.168.1.X"  # Replace with protohub's actual Wi-Fi IP
+             ansible_host: "127.0.0.1"
        fins:
          hosts:
            left_fin:
-             ansible_host: "192.168.1.Y"  # Replace with protoleftfin's actual Wi-Fi IP
+             ansible_host: "192.168.42.1"  # Replace with protoleftfin's actual Wi-Fi IP
            right_fin:
-             ansible_host: "192.168.1.Z"  # Replace with protorightfin's actual Wi-Fi IP
+             ansible_host: "192.168.43.1"  # Replace with protorightfin's actual Wi-Fi IP
    ```
 
 ## Running the playbook
