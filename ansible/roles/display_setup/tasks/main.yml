@@ -95,8 +95,9 @@
   lineinfile:
     path: /boot/firmware/cmdline.txt
     regexp: "video=HDMI-A-1:"
-    line: '{{ lookup("file", "/boot/firmware/cmdline.txt") | regex_replace("$", "") }}{% if inventory_hostname == "left_fin" %} video=HDMI-A-1:720x720@60,rotate=270{% elif inventory_hostname == "right_fin" %} video=HDMI-A-1:720x720@60,rotate=90{% endif %}'
+    line: '{% if inventory_hostname == "left_fin" %}video=HDMI-A-1:720x720@60,rotate=270{% elif inventory_hostname == "right_fin" %}video=HDMI-A-1:720x720@60,rotate=90{% endif %}'
     backrefs: yes
+    insertafter: EOF
   register: cmdline_changes
   notify: reboot system
   when: "'fins' in group_names"
