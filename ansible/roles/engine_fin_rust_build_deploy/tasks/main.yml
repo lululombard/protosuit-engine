@@ -5,11 +5,14 @@
   loop:
     - build-essential
     - gcc-arm-linux-gnueabihf
+    - g++-arm-linux-gnueabihf
     - libsdl2-dev
     - libx11-dev
     - libdbus-1-dev
     - libgl1-mesa-dev
     - libasound2-dev
+    - libc6-dev-armhf-cross
+    - cmake
   when: "'hub' in group_names"
 
 - name: Set up Rust toolchain for user 'proto'
