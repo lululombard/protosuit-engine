@@ -14,12 +14,11 @@
   become_user: proto
   shell: |
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    source $HOME/.cargo/env
-    rustup target add armv7-unknown-linux-gnueabihf
+    . $HOME/.cargo/env
+    $HOME/.cargo/bin/rustup target add armv7-unknown-linux-gnueabihf
   args:
-    creates: "/home/proto/.cargo/bin/rustup"
+    creates: "/home/proto/.rustup"
   when: "'hub' in group_names"
-  changed_when: false
 
 - name: Ensure .cargo directory exists
   file:
