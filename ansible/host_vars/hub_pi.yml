@@ -26,6 +26,11 @@ nat_rules:
     out_interface: "eth0"
   - source: "192.168.43.0/24"
     out_interface: "eth0"
+  # Rules for internet access via Ethernet USB adapter
+  - source: "192.168.42.0/24"
+    out_interface: "end0"
+  - source: "192.168.43.0/24"
+    out_interface: "end0"
   # Rules for internet access via Wi-Fi
   - source: "192.168.42.0/24"
     out_interface: "wlan0"
