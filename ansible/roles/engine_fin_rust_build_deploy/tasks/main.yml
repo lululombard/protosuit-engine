@@ -4,6 +4,7 @@
     state: present
   loop:
     - build-essential
+    - gcc-arm-linux-gnueabihf
     - libsdl2-dev
     - libx11-dev
     - libdbus-1-dev
