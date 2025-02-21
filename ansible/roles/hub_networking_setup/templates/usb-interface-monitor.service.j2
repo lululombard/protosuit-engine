@@ -1,0 +1,13 @@
+[Unit]
+Description=USB Interface Monitor Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/check-usb-interfaces.sh
+User=root
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

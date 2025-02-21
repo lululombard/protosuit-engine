@@ -48,3 +48,23 @@
     dest: /etc/NetworkManager/conf.d/99-usb-interfaces.conf
     mode: "0644"
   notify: restart networkmanager
+
+- name: Install USB interface monitor script
+  template:
+    src: check-usb-interfaces.sh.j2
+    dest: /usr/local/bin/check-usb-interfaces.sh
+    mode: "0755"
+
+- name: Install USB interface monitor service
+  template:
+    src: usb-interface-monitor.service.j2
+    dest: /etc/systemd/system/usb-interface-monitor.service
+    mode: "0644"
+  notify: restart usb monitor
+
+- name: Enable and start USB interface monitor service
+  systemd:
+    name: usb-interface-monitor
+    state: started
+    enabled: true
+    daemon_reload: true

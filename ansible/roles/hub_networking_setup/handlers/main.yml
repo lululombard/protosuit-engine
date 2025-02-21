@@ -16,3 +16,9 @@
     name: NetworkManager
     state: restarted
     daemon_reload: yes
+
+- name: restart usb monitor
+  systemd:
+    name: usb-interface-monitor
+    state: restarted
+    daemon_reload: yes
