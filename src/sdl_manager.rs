@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use sdl2::video::Window;
+use sdl2::video::{Window, WindowPos};
 use std::sync::Arc;
 use dashmap::DashMap;
 use std::process::{Child, Command};
@@ -7,11 +7,40 @@ use std::process::{Child, Command};
 const DEFAULT_WINDOW_WIDTH: u32 = 720;
 const DEFAULT_WINDOW_HEIGHT: u32 = 720;
 
+#[derive(Debug, Clone, Copy)]
+pub enum DisplayRotation {
+    Normal,
+    Right,
+    Left,
+    Flipped,
+}
+
+impl DisplayRotation {
+    fn from_env() -> Self {
+        match std::env::var("SDL_DISPLAY_ROTATION").as_deref() {
+            Ok("right") => DisplayRotation::Right,
+            Ok("left") => DisplayRotation::Left,
+            Ok("flipped") => DisplayRotation::Flipped,
+            _ => DisplayRotation::Normal,
+        }
+    }
+
+    fn to_degrees(&self) -> f64 {
+        match self {
+            DisplayRotation::Normal => 0.0,
+            DisplayRotation::Right => 90.0,
+            DisplayRotation::Left => 270.0,
+            DisplayRotation::Flipped => 180.0,
+        }
+    }
+}
+
 pub struct SDLManager {
     sdl_context: Arc<sdl2::Sdl>,
     running_apps: DashMap<String, (Child, Window)>,
     window_width: u32,
     window_height: u32,
+    rotation: DisplayRotation,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -46,11 +75,15 @@ impl SDLManager {
             .and_then(|h| h.parse().ok())
             .unwrap_or(DEFAULT_WINDOW_HEIGHT);
 
+        // Get rotation from environment
+        let rotation = DisplayRotation::from_env();
+
         Ok(Self {
             sdl_context: Arc::new(sdl_context),
             running_apps: DashMap::new(),
             window_width,
             window_height,
+            rotation,
         })
     }
 
@@ -63,24 +96,29 @@ impl SDLManager {
         let video_subsystem = self.sdl_context.video()
             .map_err(|e| SDLError::SDLError(e.to_string()))?;
 
-        // Get current display mode
-        let display = video_subsystem.display(0)
-            .map_err(|e| SDLError::SDLError(e.to_string()))?;
+        // Adjust dimensions based on rotation
+        let (width, height) = match self.rotation {
+            DisplayRotation::Right | DisplayRotation::Left => (self.window_height, self.window_width),
+            _ => (self.window_width, self.window_height),
+        };
 
-        let current_mode = display.current_display_mode()
-            .map_err(|e| SDLError::SDLError(e.to_string()))?;
-
-        let window = video_subsystem.window(app_name, self.window_width, self.window_height)
-            .position_centered()
+        let window = video_subsystem.window(app_name, width, height)
+            .position(WindowPos::Centered)
             .opengl()
-            .allow_highdpi()
-            .x11_window_flags(sdl2::sys::SDL_WindowFlags::SDL_WINDOW_X11_MAXIMIZED as u32)
             .build()
             .context("Failed to create window")?;
 
-        // Set the display mode to match current settings
-        window.set_display_mode(Some(current_mode))
+        // Create a canvas to handle rotation
+        let mut canvas = window.into_canvas()
+            .present_vsync()
+            .build()
+            .context("Failed to create canvas")?;
+
+        // Set rotation
+        canvas.set_logical_size(self.window_width, self.window_height)
             .map_err(|e| SDLError::SDLError(e.to_string()))?;
+
+        let window = canvas.into_window();
 
         // Launch the application process
         let mut child = Command::new(command)
