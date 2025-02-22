@@ -26,6 +26,9 @@ pub enum SDLError {
 
 impl SDLManager {
     pub fn new() -> Result<Self> {
+        // Set SDL hint to respect existing display settings
+        sdl2::hint::set("SDL_VIDEO_X11_XRANDR", "1");
+
         let sdl_context = sdl2::init()
             .map_err(|e| SDLError::SDLError(e.to_string()))
             .context("Failed to initialize SDL")?;
@@ -58,11 +61,24 @@ impl SDLManager {
         let video_subsystem = self.sdl_context.video()
             .map_err(|e| SDLError::SDLError(e.to_string()))?;
 
+        // Get current display mode
+        let display = video_subsystem.display(0)
+            .map_err(|e| SDLError::SDLError(e.to_string()))?;
+
+        let current_mode = display.current_display_mode()
+            .map_err(|e| SDLError::SDLError(e.to_string()))?;
+
         let window = video_subsystem.window(app_name, self.window_width, self.window_height)
             .position_centered()
             .opengl()
+            .allow_highdpi()
+            .x11_window_flags(sdl2::sys::SDL_WindowFlags::SDL_WINDOW_X11_MAXIMIZED as u32)
             .build()
             .context("Failed to create window")?;
+
+        // Set the display mode to match current settings
+        window.set_display_mode(Some(current_mode))
+            .map_err(|e| SDLError::SDLError(e.to_string()))?;
 
         // Launch the application process
         let mut child = Command::new(command)
