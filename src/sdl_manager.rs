@@ -134,7 +134,7 @@ impl SDLManager {
         Ok((window, canvas))
     }
 
-    pub fn launch_app(&self, app_name: &str, command: &str, args: &[&str]) -> Result<(Option<sdl2::render::Canvas<Window>>, Window)> {
+    pub fn launch_app(&self, app_name: &str, command: &str, args: &[&str]) -> Result<Option<sdl2::render::Canvas<Window>>> {
         if self.running_apps.contains_key(app_name) {
             return Err(SDLError::AlreadyRunning(app_name.to_string()).into());
         }
@@ -183,12 +183,12 @@ impl SDLManager {
                 .context("Failed to spawn process")?
         };
 
-        self.running_apps.insert(app_name.to_string(), (child, window.clone()));
+        self.running_apps.insert(app_name.to_string(), (child, window));
 
         if command == "true" {
-            Ok((Some(canvas), window))
+            Ok(Some(canvas))
         } else {
-            Ok((None, window))
+            Ok(None)
         }
     }
 
