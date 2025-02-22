@@ -36,10 +36,10 @@ impl AppManager {
             mqtt_status_tx,
         )?;
 
-        // Create idle display window using SDLManager
-        sdl_manager.launch_app("idle", "true", &[])?;
-        let window = sdl_manager.get_window_obj("idle")?;
-        let idle_display = IdleDisplay::new(window)?;
+        // Create idle display window
+        let window = sdl_manager.create_window("Protosuit Idle")?;
+        let canvas = sdl_manager.create_canvas(window)?;
+        let idle_display = IdleDisplay::new(canvas)?;
 
         Ok(Self {
             sdl_manager,

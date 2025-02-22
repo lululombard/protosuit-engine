@@ -29,9 +29,7 @@ pub struct IdleDisplay {
 }
 
 impl IdleDisplay {
-    pub fn new(window: Window) -> Result<Self> {
-        let canvas = window.into_canvas().build()
-            .map_err(|e| anyhow::anyhow!("Failed to create canvas: {}", e))?;
+    pub fn new(canvas: Canvas<Window>) -> Result<Self> {
         let texture_creator = canvas.texture_creator();
 
         // Initialize TTF only once

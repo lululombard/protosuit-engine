@@ -97,12 +97,7 @@ impl SDLManager {
         })
     }
 
-    pub fn launch_app(&self, app_name: &str, command: &str, args: &[&str]) -> Result<()> {
-        if self.running_apps.contains_key(app_name) {
-            return Err(SDLError::AlreadyRunning(app_name.to_string()).into());
-        }
-
-        // Create SDL window for the application
+    pub fn create_window(&self, title: &str) -> Result<Window> {
         let video_subsystem = self.sdl_context.video()
             .map_err(|e| SDLError::SDLError(e.to_string()))?;
 
@@ -112,13 +107,38 @@ impl SDLManager {
             _ => (self.window_width, self.window_height),
         };
 
-        let window = video_subsystem.window(app_name, width, height)
+        let window = video_subsystem.window(title, width, height)
             .position(WindowPos::Centered)
             .opengl()
+            .borderless()
             .build()
             .context("Failed to create window")?;
 
-        // Create a canvas to handle rotation
+        Ok(window)
+    }
+
+    pub fn launch_app(&self, app_name: &str, command: &str, args: &[&str]) -> Result<()> {
+        if self.running_apps.contains_key(app_name) {
+            return Err(SDLError::AlreadyRunning(app_name.to_string()).into());
+        }
+
+        let window = self.create_window(app_name)?;
+
+        // For the idle display, we don't actually launch a process
+        let child = if command == "true" {
+            Command::new("true").spawn().context("Failed to spawn dummy process")?
+        } else {
+            Command::new(command)
+                .args(args)
+                .spawn()
+                .context("Failed to spawn process")?
+        };
+
+        self.running_apps.insert(app_name.to_string(), (child, window));
+        Ok(())
+    }
+
+    pub fn create_canvas(&self, window: Window) -> Result<sdl2::render::Canvas<Window>> {
         let mut canvas = window.into_canvas()
             .present_vsync()
             .build()
@@ -135,20 +155,7 @@ impl SDLManager {
         canvas.clear();
         canvas.present();
 
-        let window = canvas.into_window();
-
-        // For the idle display, we don't actually launch a process
-        let child = if command == "true" {
-            Command::new("true").spawn().context("Failed to spawn dummy process")?
-        } else {
-            Command::new(command)
-                .args(args)
-                .spawn()
-                .context("Failed to spawn process")?
-        };
-
-        self.running_apps.insert(app_name.to_string(), (child, window));
-        Ok(())
+        Ok(canvas)
     }
 
     pub fn get_window(&self, app_name: &str) -> Option<u32> {
