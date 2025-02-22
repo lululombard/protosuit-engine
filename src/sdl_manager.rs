@@ -173,8 +173,11 @@ impl SDLManager {
 
         let window = canvas.window().clone();
 
+        log::debug!("Launching app: {} with command: {}", app_name, command);
+
         // For the idle display, we don't actually launch a process
         let child = if command == "true" {
+            log::debug!("Creating idle display canvas for app: {}", app_name);
             Command::new("true").spawn().context("Failed to spawn dummy process")?
         } else {
             Command::new(command)
@@ -186,6 +189,7 @@ impl SDLManager {
         self.running_apps.insert(app_name.to_string(), (child, window));
 
         if command == "true" {
+            log::debug!("Returning canvas for idle display app: {}", app_name);
             Ok(Some(canvas))
         } else {
             Ok(None)
