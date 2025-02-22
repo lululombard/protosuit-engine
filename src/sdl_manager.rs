@@ -134,12 +134,44 @@ impl SDLManager {
         Ok((window, canvas))
     }
 
-    pub fn launch_app(&self, app_name: &str, command: &str, args: &[&str]) -> Result<()> {
+    pub fn launch_app(&self, app_name: &str, command: &str, args: &[&str]) -> Result<(Option<sdl2::render::Canvas<Window>>, Window)> {
         if self.running_apps.contains_key(app_name) {
             return Err(SDLError::AlreadyRunning(app_name.to_string()).into());
         }
 
-        let (window, _) = self.create_window_and_canvas(app_name)?;
+        let video_subsystem = self.sdl_context.video()
+            .map_err(|e| SDLError::SDLError(e.to_string()))?;
+
+        // Adjust dimensions based on rotation
+        let (width, height) = match self.rotation {
+            DisplayRotation::Right | DisplayRotation::Left => (self.window_height, self.window_width),
+            _ => (self.window_width, self.window_height),
+        };
+
+        let window = video_subsystem.window(app_name, width, height)
+            .position(WindowPos::Centered)
+            .opengl()
+            .borderless()
+            .build()
+            .context("Failed to create window")?;
+
+        let mut canvas = window.into_canvas()
+            .present_vsync()
+            .build()
+            .context("Failed to create canvas")?;
+
+        // Set rotation
+        canvas.set_logical_size(self.window_width, self.window_height)
+            .map_err(|e| SDLError::SDLError(e.to_string()))?;
+
+        // Apply rotation
+        let rotation_degrees = self.rotation.to_degrees();
+        log::debug!("Setting canvas rotation to {} degrees", rotation_degrees);
+        canvas.set_draw_color(sdl2::pixels::Color::RGB(0, 0, 0));
+        canvas.clear();
+        canvas.present();
+
+        let window = canvas.window().clone();
 
         // For the idle display, we don't actually launch a process
         let child = if command == "true" {
@@ -151,8 +183,13 @@ impl SDLManager {
                 .context("Failed to spawn process")?
         };
 
-        self.running_apps.insert(app_name.to_string(), (child, window));
-        Ok(())
+        self.running_apps.insert(app_name.to_string(), (child, window.clone()));
+
+        if command == "true" {
+            Ok((Some(canvas), window))
+        } else {
+            Ok((None, window))
+        }
     }
 
     pub fn get_window(&self, app_name: &str) -> Option<u32> {
