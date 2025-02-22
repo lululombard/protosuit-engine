@@ -81,7 +81,6 @@
       hdmi_mode=87
       hdmi_cvt 720 720 60 1 0 0 0
       video=HDMI-A-1:720x720@60
-      {% endif %}
     marker: "# {mark} ANSIBLE MANAGED BLOCK - DISPLAY CONFIG"
   register: config_changes
   notify: reboot system
