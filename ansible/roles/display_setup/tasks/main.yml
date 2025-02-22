@@ -83,5 +83,4 @@
       video=HDMI-A-1:720x720@60
     marker: "# {mark} ANSIBLE MANAGED BLOCK - DISPLAY CONFIG"
   register: config_changes
-  notify: reboot system
   when: "'fins' in group_names"
