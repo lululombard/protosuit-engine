@@ -37,8 +37,7 @@ impl AppManager {
         )?;
 
         // Create idle display window
-        let window = sdl_manager.create_window("Protosuit Idle")?;
-        let canvas = sdl_manager.create_canvas(window)?;
+        let (_, canvas) = sdl_manager.create_window_and_canvas("Protosuit Idle")?;
         let idle_display = IdleDisplay::new(canvas)?;
 
         Ok(Self {
