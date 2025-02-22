@@ -8,5 +8,8 @@
 - name: Configure hub server
   import_playbook: hub_server.yml
 
+- name: Configure Rust to compile Engine
+  import_playbook: engine_rust_config.yml
+
 - name: Build and deploy Engine Fin
-  import_playbook: engine_fin.yml
+  import_playbook: build_deploy_fin_engine.yml

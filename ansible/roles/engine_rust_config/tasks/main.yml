@@ -1,0 +1,67 @@
+- name: Add armhf architecture
+  shell: dpkg --add-architecture armhf
+  when: "'hub' in group_names"
+
+- name: Install ARM cross-compilation dependencies
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - build-essential
+    - gcc-arm-linux-gnueabihf
+    - g++-arm-linux-gnueabihf
+    - libsdl2-dev
+    - libx11-dev
+    - libdbus-1-dev
+    - libgl1-mesa-dev
+    - libasound2-dev
+    - libc6-dev-armhf-cross
+    - cmake
+    - libsdl2-dev:armhf
+    - libsdl2-ttf-dev:armhf
+    - libsdl2-image-dev:armhf
+    - libsdl2-mixer-dev:armhf
+    - libsdl2-gfx-dev:armhf
+    - libdbus-1-dev:armhf
+    - libibus-1.0-dev:armhf
+    - libglib2.0-dev:armhf
+    - libpulse-dev:armhf
+    - libgcc-s1:armhf
+  when: "'hub' in group_names"
+
+- name: Set up Rust toolchain for user 'proto'
+  become_user: proto
+  shell: |
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    $HOME/.cargo/bin/rustup target add armv7-unknown-linux-gnueabihf
+  args:
+    creates: "/home/proto/.rustup"
+  when: "'hub' in group_names"
+
+- name: Ensure .cargo directory exists
+  file:
+    path: /home/proto/.cargo
+    state: directory
+    owner: proto
+    group: proto
+    mode: "0755"
+  when: "'hub' in group_names"
+
+- name: Configure cargo environment for ARMv7 target
+  blockinfile:
+    path: /home/proto/.cargo/config.toml
+    create: yes
+    owner: proto
+    group: proto
+    mode: "0644"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - ARMV7 TARGET"
+    block: |
+      [target.armv7-unknown-linux-gnueabihf]
+      linker = "arm-linux-gnueabihf-gcc"
+  when: "'hub' in group_names"
+
+- name: Install minimal runtime dependencies
+  apt:
+    name: libsdl2-2.0-0
+    state: present
+  when: "'fins' in group_names"
