@@ -3,6 +3,7 @@ use sdl2::video::{Window, WindowPos};
 use std::sync::Arc;
 use dashmap::DashMap;
 use std::process::{Child, Command};
+use log;
 
 const DEFAULT_WINDOW_WIDTH: u32 = 720;
 const DEFAULT_WINDOW_HEIGHT: u32 = 720;
@@ -17,12 +18,21 @@ pub enum DisplayRotation {
 
 impl DisplayRotation {
     fn from_env() -> Self {
-        match std::env::var("SDL_DISPLAY_ROTATION").as_deref() {
+        let rotation = match std::env::var("SDL_DISPLAY_ROTATION").as_deref() {
             Ok("right") => DisplayRotation::Right,
             Ok("left") => DisplayRotation::Left,
             Ok("flipped") => DisplayRotation::Flipped,
-            _ => DisplayRotation::Normal,
-        }
+            Ok(value) => {
+                log::debug!("Unknown rotation value '{}', defaulting to normal", value);
+                DisplayRotation::Normal
+            }
+            Err(_) => {
+                log::debug!("No SDL_DISPLAY_ROTATION set, defaulting to normal");
+                DisplayRotation::Normal
+            }
+        };
+        log::info!("Using display rotation: {:?}", rotation);
+        rotation
     }
 
     fn to_degrees(&self) -> f64 {
