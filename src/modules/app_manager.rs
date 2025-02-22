@@ -36,15 +36,9 @@ impl AppManager {
             mqtt_status_tx,
         )?;
 
-        // Create idle display window
-        let video_subsystem = sdl_manager.get_video_subsystem()?;
-        let window = video_subsystem.window("Protosuit Idle", 720, 720)
-            .position_centered()
-            .borderless()
-            .opengl()
-            .build()
-            .context("Failed to create idle window")?;
-
+        // Create idle display window using SDLManager
+        sdl_manager.launch_app("idle", "true", &[])?;
+        let window = sdl_manager.get_window_obj("idle")?;
         let idle_display = IdleDisplay::new(window)?;
 
         Ok(Self {

@@ -128,15 +128,52 @@ impl SDLManager {
         canvas.set_logical_size(self.window_width, self.window_height)
             .map_err(|e| SDLError::SDLError(e.to_string()))?;
 
+        // Apply rotation
+        let rotation_degrees = self.rotation.to_degrees();
+        log::debug!("Setting canvas rotation to {} degrees", rotation_degrees);
+        canvas.set_draw_color(sdl2::pixels::Color::RGB(0, 0, 0));
+        canvas.clear();
+        canvas.present();
+
         let window = canvas.into_window();
 
-        // Launch the application process
-        let mut child = Command::new(command)
-            .args(args)
-            .spawn()
-            .context("Failed to spawn process")?;
+        // For the idle display, we don't actually launch a process
+        let child = if command == "true" {
+            Command::new("true").spawn().context("Failed to spawn dummy process")?
+        } else {
+            Command::new(command)
+                .args(args)
+                .spawn()
+                .context("Failed to spawn process")?
+        };
 
         self.running_apps.insert(app_name.to_string(), (child, window));
+        Ok(())
+    }
+
+    pub fn get_window(&self, app_name: &str) -> Option<u32> {
+        self.running_apps.get(app_name).map(|entry| {
+            let window = &entry.value().1;
+            window.raw() as u32
+        })
+    }
+
+    pub fn get_window_obj(&self, app_name: &str) -> Result<Window> {
+        if let Some(entry) = self.running_apps.get(app_name) {
+            let (_, window) = entry.value();
+            Ok(window.clone())
+        } else {
+            Err(SDLError::NotFound(app_name.to_string()).into())
+        }
+    }
+
+    pub fn cleanup(&self) -> Result<()> {
+        for mut entry in self.running_apps.iter_mut() {
+            let (ref mut child, _) = entry.value_mut();
+            child.kill().context("Failed to kill process")?;
+            child.wait().context("Failed to wait for process")?;
+        }
+        self.running_apps.clear();
         Ok(())
     }
 }
