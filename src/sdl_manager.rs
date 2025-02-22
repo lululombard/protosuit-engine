@@ -27,7 +27,9 @@ pub enum SDLError {
 impl SDLManager {
     pub fn new() -> Result<Self> {
         // Set SDL hint to respect existing display settings
+        sdl2::hint::set("SDL_VIDEO_ALLOW_SCREENSAVER", "1");
         sdl2::hint::set("SDL_VIDEO_X11_XRANDR", "1");
+        sdl2::hint::set("SDL_VIDEO_X11_XVIDMODE", "1");
 
         let sdl_context = sdl2::init()
             .map_err(|e| SDLError::SDLError(e.to_string()))
