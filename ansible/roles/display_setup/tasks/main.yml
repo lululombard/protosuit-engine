@@ -80,24 +80,9 @@
       hdmi_group=2
       hdmi_mode=87
       hdmi_cvt 720 720 60 1 0 0 0
-      {% if inventory_hostname == 'left_fin' %}
-      video=HDMI-A-1:720x720@60,rotate=270
-      {% elif inventory_hostname == 'right_fin' %}
-      video=HDMI-A-1:720x720@60,rotate=90
+      video=HDMI-A-1:720x720@60
       {% endif %}
     marker: "# {mark} ANSIBLE MANAGED BLOCK - DISPLAY CONFIG"
   register: config_changes
-  notify: reboot system
-  when: "'fins' in group_names"
-
-# Configure kernel parameters in cmdline.txt
-- name: Configure display rotation in cmdline.txt
-  lineinfile:
-    path: /boot/firmware/cmdline.txt
-    regexp: "video=HDMI-A-1:"
-    line: '{% if inventory_hostname == "left_fin" %}video=HDMI-A-1:720x720@60,rotate=270{% elif inventory_hostname == "right_fin" %}video=HDMI-A-1:720x720@60,rotate=90{% endif %}'
-    backrefs: yes
-    insertafter: EOF
-  register: cmdline_changes
   notify: reboot system
   when: "'fins' in group_names"
