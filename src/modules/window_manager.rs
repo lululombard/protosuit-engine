@@ -5,6 +5,7 @@ use {
     anyhow::Context,
     x11rb::connection::Connection,
     x11rb::protocol::xproto::*,
+    x11rb::rust_connection::RustConnection,
     std::sync::Arc,
 };
 
@@ -21,7 +22,7 @@ mod unix {
     }
 
     pub struct WindowManager {
-        conn: Arc<x11rb::xcb_ffi::XCBConnection>,
+        conn: Arc<RustConnection>,
         root: Window,
     }
 
@@ -65,13 +66,11 @@ mod unix {
             let atom_minimize = self.conn.intern_atom(false, b"_NET_WM_STATE_HIDDEN")?;
 
             if let (Ok(atom_reply), Ok(atom_minimize_reply)) = (atom.reply(), atom_minimize.reply()) {
-                self.conn.change_property(
+                self.conn.change_property32(
                     PropMode::REPLACE,
                     window,
                     atom_reply.atom,
                     AtomEnum::ATOM,
-                    32,
-                    1,
                     &[atom_minimize_reply.atom],
                 )?;
                 self.conn.flush()?;
