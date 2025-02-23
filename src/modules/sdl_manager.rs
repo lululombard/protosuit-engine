@@ -72,7 +72,7 @@ impl SDLManager {
         // For the idle/debug displays, we don't actually launch a process
         let child = if command == "true" {
             log::debug!("Creating display canvas for app: {}", app_name);
-            let mut canvas = window.into_canvas()
+            let canvas = window.into_canvas()
                 .present_vsync()
                 .build()
                 .context("Failed to create canvas")?;
@@ -120,19 +120,10 @@ impl SDLManager {
         Ok(())
     }
 
-    pub fn get_video_subsystem(&self) -> Result<sdl2::VideoSubsystem> {
-        self.sdl_context.video()
-            .map_err(|e| SDLError::SDLError(e.to_string()).into())
-    }
-
     pub fn get_running_apps(&self) -> Vec<String> {
         self.running_apps.iter()
             .map(|entry| entry.key().clone())
             .collect()
-    }
-
-    pub fn get_ttf_context(&self) -> Arc<sdl2::ttf::Sdl2TtfContext> {
-        TTF_CONTEXT.clone()
     }
 
     pub fn pump_events(&self) {

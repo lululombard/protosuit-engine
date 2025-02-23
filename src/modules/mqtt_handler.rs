@@ -34,7 +34,7 @@ impl MQTTHandler {
             .set_request_channel_capacity(10);
 
         let (client, eventloop) = AsyncClient::new(mqttopts, 10);
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let (_shutdown_tx, shutdown_rx) = oneshot::channel();
 
         Ok(Self {
             client,
