@@ -16,7 +16,6 @@ EndSection
 Section "Monitor"
     Identifier "HDMI-1"
     Option "DPMS" "false"
-
 {% if inventory_hostname == 'left_fin' %}
     Option "Rotate" "right"
 {% elif inventory_hostname == 'right_fin' %}

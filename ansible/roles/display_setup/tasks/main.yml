@@ -5,8 +5,6 @@
     name:
       - xserver-xorg-core
       - xserver-xorg-input-all
-      - xinit
-      - matchbox-window-manager
     state: present
     update_cache: yes
 
@@ -16,28 +14,6 @@
     src: xorg.conf.j2
     dest: /etc/X11/xorg.conf
     mode: "0644"
-
-# Configure autostart for Matchbox
-- name: Create Matchbox autostart directory
-  file:
-    path: /etc/X11/matchbox
-    state: directory
-    mode: "0755"
-
-- name: Configure Matchbox autostart
-  template:
-    src: autostart.sh.j2
-    dest: /etc/X11/matchbox/autostart.sh
-    mode: "0755"
-
-# Configure .xinitrc for the proto user
-- name: Create .xinitrc file
-  template:
-    src: xinitrc.j2
-    dest: /home/proto/.xinitrc
-    mode: "0644"
-    owner: proto
-    group: proto
 
 # Configure X.Org permissions
 - name: Add proto user to tty group
@@ -53,22 +29,6 @@
       allowed_users=anybody
       needs_root_rights=yes
     mode: "0644"
-
-# Configure systemd service for X server with Matchbox
-- name: Update matchbox service to run as proto user
-  template:
-    src: matchbox.service.j2
-    dest: /etc/systemd/system/matchbox.service
-    mode: "0644"
-
-# Enable the service
-- name: Enable and start Matchbox service
-  systemd:
-    name: matchbox
-    state: started
-    enabled: true
-    daemon_reload: true
-  notify: restart matchbox
 
 # Configure display settings in config.txt
 - name: Ensure display configuration exists
