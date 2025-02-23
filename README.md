@@ -246,31 +246,13 @@ The engine client can be developed and tested on different platforms:
 #### macOS
 ```bash
 # Install dependencies via Homebrew
-brew install sdl2 sdl2_ttf sdl2_gfx pkg-config
+brew install sdl2 sdl2_ttf sdl2_gfx mosquitto pkg-config
 
-# Set up environment variables for SDL2
-export LIBRARY_PATH="$(brew --prefix)/lib"
-export CPATH="$(brew --prefix)/include"
-export PKG_CONFIG_PATH="$(brew --prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
-
-# Verify SDL2 is properly linked
-pkg-config --libs --cflags sdl2 sdl2_ttf sdl2_gfx
-
-# Build the project (no X11 support needed)
-cargo clean  # Clean previous build artifacts
-cargo build
-# or for release
-cargo build --release
+# Build and run in debug mode
+make dev
 ```
 
-Note: You might want to add these environment variables to your `~/.zshrc` or `~/.bashrc`:
-```bash
-export LIBRARY_PATH="$(brew --prefix)/lib"
-export CPATH="$(brew --prefix)/include"
-export PKG_CONFIG_PATH="$(brew --prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
-```
-
-#### Linux (Debian/Ubuntu)
+#### Linux (Debian/Ubuntu/Raspberry Pi OS)
 ```bash
 # Install dependencies
 sudo apt update
@@ -283,34 +265,8 @@ sudo apt install -y \
     mosquitto \
     mosquitto-clients
 
-# Build with X11 support
-cargo build --features x11
-# or for release
-cargo build --release --features x11
-```
-
-#### Raspberry Pi OS
-```bash
-sudo apt update
-sudo apt install -y \
-    build-essential \
-    libsdl2-dev \
-    libsdl2-ttf-dev \
-    libsdl2-gfx-dev \
-    libx11-dev \
-    mosquitto \
-    mosquitto-clients \
-    curl \
-    git \
-    cmake \
-    pkg-config
-
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-
-# Build with X11 support
-cargo build --features x11
+# Build
+make
 ```
 
 ### Feature flags
@@ -330,13 +286,13 @@ cargo build --release
 For quick development and testing, you can use:
 ```bash
 # Compile and run in debug mode with logging
-RUST_LOG=debug cargo run
+make dev
 
-# Compile and run in release mode
-RUST_LOG=debug cargo run --release
+# Compile for current platform
+make
 
-# For Linux/Raspberry Pi, include X11 feature
-RUST_LOG=debug cargo run --features x11
+# Compile for ARMhf (Raspberry Pi 32-bit)
+make armhf
 ```
 
 These commands combine the build and run steps. The `RUST_LOG` environment variable enables debug logging to help track what's happening in the application.
@@ -348,9 +304,9 @@ The application can be configured through environment variables:
 - `PROTOSUIT_ENGINE_DEFAULT_SCENE`: Default scene to load at startup ("debug" or "idle", default: "debug")
 - `MQTT_BROKER`: MQTT broker address (default: "localhost")
 - `MQTT_PORT`: MQTT broker port (default: 1883)
-- `RUST_LOG`: Logging level (default: "info")
-- `SDL_WINDOW_WIDTH`: Window width in pixels (default: 720)
-- `SDL_WINDOW_HEIGHT`: Window height in pixels (default: 720)
+- `DOOM_PATH`: Path to the Doom executable (default: "/usr/games/chocolate-doom")
+- `DOOM_IWAD`: Path to the Doom IWAD file (default: "/usr/share/games/doom/freedoom1.wad")
+
 
 ### Scene management
 

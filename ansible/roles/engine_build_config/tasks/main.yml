@@ -1,0 +1,32 @@
+- name: Add armhf architecture
+  shell: dpkg --add-architecture armhf
+  when: "'hub' in group_names"
+
+- name: Install ARM cross-compilation dependencies
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - build-essential
+    - gcc-arm-linux-gnueabihf
+    - g++-arm-linux-gnueabihf
+    - libsdl2-dev
+    - libx11-dev
+    - libdbus-1-dev
+    - libgl1-mesa-dev
+    - libasound2-dev
+    - libc6-dev-armhf-cross
+    - cmake
+    - libmosquitto-dev
+    - libsdl2-dev:armhf
+    - libsdl2-ttf-dev:armhf
+    - libsdl2-image-dev:armhf
+    - libsdl2-mixer-dev:armhf
+    - libsdl2-gfx-dev:armhf
+    - libdbus-1-dev:armhf
+    - libibus-1.0-dev:armhf
+    - libglib2.0-dev:armhf
+    - libpulse-dev:armhf
+    - libgcc-s1:armhf
+    - libmosquitto-dev:armhf
+  when: "'hub' in group_names"
