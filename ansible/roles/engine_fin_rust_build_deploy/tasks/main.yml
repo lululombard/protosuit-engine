@@ -11,7 +11,7 @@
 
 - name: Deploy compiled binary
   copy:
-    src: /home/proto/protosuit-engine/src/protosuit-engine-fin
+    src: /home/proto/protosuit-engine/src/protosuit-engine-fin_armhf
     dest: /usr/local/bin/protosuit-engine-fin
     mode: "0755"
   when: "'fins' in group_names"
