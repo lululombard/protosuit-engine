@@ -1,8 +1,7 @@
 - name: Build release binary
   become_user: proto
   shell: |
-    export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
-    $HOME/.cargo/bin/cargo build --release --features x11 --target=armv7-unknown-linux-gnueabihf
+    make armhf
   args:
     chdir: /home/proto/protosuit-engine
     executable: /bin/bash
@@ -12,7 +11,7 @@
 
 - name: Deploy compiled binary
   copy:
-    src: /home/proto/protosuit-engine/target/armv7-unknown-linux-gnueabihf/release/protosuit-engine-fin
+    src: /home/proto/protosuit-engine/src/protosuit-engine-fin
     dest: /usr/local/bin/protosuit-engine-fin
     mode: "0755"
   when: "'fins' in group_names"

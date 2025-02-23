@@ -1,4 +1,4 @@
 *.o
 *.armhf.o
 *.armhf
-sdl_app
+protosuit-engine-fin

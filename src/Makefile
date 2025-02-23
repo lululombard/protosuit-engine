@@ -11,7 +11,7 @@ ARM_TARGET = $(TARGET)_armhf
 SRCS = main.c debug_scene.c idle_scene.c transitions.c doom_scene.c embedded_assets.c
 OBJS = $(SRCS:.c=.o)
 ARM_OBJS = $(SRCS:.c=.armhf.o)
-TARGET = sdl_app
+TARGET = protosuit-engine-fin
 
 all: embedded_assets.c $(TARGET)
 

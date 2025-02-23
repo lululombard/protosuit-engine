@@ -276,10 +276,10 @@ make
 
 1. Build the project:
 ```bash
-cargo build --release
+make
 ```
 
-2. The optimized binary will be available at `target/release/protosuit-engine-fin`
+2. The optimized binary will be available at `protosuit-engine-fin`
 
 ## Development
 
@@ -327,7 +327,7 @@ mosquitto_pub -t "app/switch" -m '{"name": "idle"}'
 
 1. Start the application (if running as root/sudo):
 ```bash
-sudo DISPLAY=:0 target/release/protosuit-engine-fin
+sudo DISPLAY=:0 protosuit-engine-fin
 ```
 
 2. Control applications through MQTT messages:
