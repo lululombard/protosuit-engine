@@ -236,6 +236,8 @@ int main(void)
 
     while (running)
     {
+        Uint32 frame_start = SDL_GetTicks();
+
         while (SDL_PollEvent(&event))
         {
             if (event.type == SDL_QUIT)
@@ -267,7 +269,13 @@ int main(void)
         render_scene_transition(renderer, &scene_state, font, rotation_angle);
 
         SDL_RenderPresent(renderer);
-        SDL_Delay(16); // Cap at roughly 60 FPS
+
+        // Calculate delay needed to maintain 60 FPS
+        Uint32 frame_time = SDL_GetTicks() - frame_start;
+        if (frame_time < 16) // 1000ms/60fps ≈ 16.67ms
+        {
+            SDL_Delay(16 - frame_time);
+        }
     }
 
     // Cleanup scene system
