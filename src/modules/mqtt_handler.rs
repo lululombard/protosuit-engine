@@ -28,7 +28,17 @@ impl MQTTHandler {
         connection_status_tx: mpsc::Sender<bool>,
     ) -> Result<Self> {
         let mut mqttopts = MqttOptions::new(client_id, broker, port);
-        mqttopts.set_keep_alive(Duration::from_secs(5));
+        mqttopts
+            .set_keep_alive(Duration::from_secs(5))
+            .set_clean_session(false)  // Enable persistent session
+            .set_connection_timeout(Duration::from_secs(10))
+            .set_max_packet_size(100 * 1024)
+            .set_pending_throttle(Duration::from_millis(100))
+            .set_reconnect_opts(rumqttc::ReconnectOptions::Exponential(
+                Duration::from_secs(1),    // Initial delay
+                Duration::from_secs(60),   // Max delay
+                10,                        // Max retries (set to a high number for continuous retry)
+            ));
 
         let (client, eventloop) = AsyncClient::new(mqttopts, 10);
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -49,11 +59,15 @@ impl MQTTHandler {
             .await
             .context("Failed to subscribe to topics")?;
 
+        let mut consecutive_errors = 0;
+        let max_consecutive_errors = 3;
+
         loop {
             tokio::select! {
                 mqtt_event = self.eventloop.poll() => {
                     match mqtt_event {
                         Ok(Event::Incoming(Packet::Publish(publish))) => {
+                            consecutive_errors = 0;  // Reset error counter on successful message
                             let topic = publish.topic;
                             let payload = String::from_utf8_lossy(&publish.payload);
 
@@ -81,20 +95,33 @@ impl MQTTHandler {
                         }
                         Ok(Event::Incoming(Packet::ConnAck(_))) => {
                             log::info!("Connected to MQTT broker");
+                            consecutive_errors = 0;  // Reset error counter on successful connection
                             self.connection_status_tx.send(true).await
                                 .context("Failed to send connection status")?;
+
+                            // Resubscribe to topics after reconnection
+                            self.client.subscribe("app/+", QoS::AtLeastOnce).await
+                                .context("Failed to resubscribe to topics")?;
                         }
                         Ok(Event::Outgoing(_)) => {
-                            log::debug!("Sending PING");
+                            log::trace!("Sending MQTT packet");
                         }
                         Ok(Event::Incoming(Packet::PingResp)) => {
-                            log::debug!("Received PONG");
+                            log::trace!("Received MQTT PONG");
                         }
                         Err(e) => {
-                            log::error!("MQTT Error: {}", e);
+                            consecutive_errors += 1;
+                            log::error!("MQTT Error (attempt {}/{}): {}", consecutive_errors, max_consecutive_errors, e);
                             self.connection_status_tx.send(false).await
                                 .context("Failed to send connection status")?;
-                            tokio::time::sleep(Duration::from_secs(1)).await;
+
+                            if consecutive_errors >= max_consecutive_errors {
+                                log::error!("Too many consecutive MQTT errors, attempting reconnection");
+                                tokio::time::sleep(Duration::from_secs(5)).await;
+                                consecutive_errors = 0;
+                            } else {
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                            }
                         }
                         _ => {}
                     }
