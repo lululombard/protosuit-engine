@@ -2,7 +2,7 @@
   become_user: proto
   shell: |
     export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
-    $HOME/.cargo/bin/cargo build --release --target=armv7-unknown-linux-gnueabihf
+    $HOME/.cargo/bin/cargo build --release --features x11 --target=armv7-unknown-linux-gnueabihf
   args:
     chdir: /home/proto/protosuit-engine
     executable: /bin/bash

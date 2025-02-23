@@ -5,9 +5,13 @@ edition = "2021"
 authors = ["lululombard"]
 description = "A Rust-based SDL application for Protogen fursuit fins"
 
+[features]
+default = []
+x11 = ["x11rb"]
+
 [dependencies]
 sdl2 = { version = "0.37", default-features = false, features = ["bundled", "ttf", "gfx"] }
-x11rb = { version = "0.12", features = ["allow-unsafe-code"] }
+x11rb = { version = "0.12", features = ["allow-unsafe-code"], optional = true }
 rumqttc = "0.23"
 tokio = { version = "1.35", features = ["full"] }
 anyhow = "1.0"

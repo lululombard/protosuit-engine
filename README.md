@@ -239,9 +239,57 @@ The Ansible playbook configures a minimal display environment optimized for the 
 
 The Engine Client is a Rust application that runs on the Pi Zeros. It is responsible for managing the SDL-based animation/application and sending control messages to the hub. It will be installed automatically by the Ansible playbook, but if you want to install it manually (for development purposes), here are the dependencies you need to install:
 
-### Installing dependencies
+### Cross-platform development setup
 
-On Raspberry Pi OS or Debian/Ubuntu:
+The engine client can be developed and tested on different platforms:
+
+#### macOS
+```bash
+# Install dependencies via Homebrew
+brew install sdl2 sdl2_ttf sdl2_gfx pkg-config
+
+# Set up environment variables for SDL2
+export LIBRARY_PATH="$(brew --prefix)/lib"
+export CPATH="$(brew --prefix)/include"
+export PKG_CONFIG_PATH="$(brew --prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
+
+# Verify SDL2 is properly linked
+pkg-config --libs --cflags sdl2 sdl2_ttf sdl2_gfx
+
+# Build the project (no X11 support needed)
+cargo clean  # Clean previous build artifacts
+cargo build
+# or for release
+cargo build --release
+```
+
+Note: You might want to add these environment variables to your `~/.zshrc` or `~/.bashrc`:
+```bash
+export LIBRARY_PATH="$(brew --prefix)/lib"
+export CPATH="$(brew --prefix)/include"
+export PKG_CONFIG_PATH="$(brew --prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
+```
+
+#### Linux (Debian/Ubuntu)
+```bash
+# Install dependencies
+sudo apt update
+sudo apt install -y \
+    build-essential \
+    libsdl2-dev \
+    libsdl2-ttf-dev \
+    libsdl2-gfx-dev \
+    libx11-dev \
+    mosquitto \
+    mosquitto-clients
+
+# Build with X11 support
+cargo build --features x11
+# or for release
+cargo build --release --features x11
+```
+
+#### Raspberry Pi OS
 ```bash
 sudo apt update
 sudo apt install -y \
@@ -260,7 +308,13 @@ sudo apt install -y \
 # Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
+
+# Build with X11 support
+cargo build --features x11
 ```
+
+### Feature flags
+- `x11`: Enables X11 window management (required for Linux/Raspberry Pi, not needed for macOS)
 
 ## Building
 
@@ -271,15 +325,47 @@ cargo build --release
 
 2. The optimized binary will be available at `target/release/protosuit-engine-fin`
 
+## Development
+
+For quick development and testing, you can use:
+```bash
+# Compile and run in debug mode with logging
+RUST_LOG=debug cargo run
+
+# Compile and run in release mode
+RUST_LOG=debug cargo run --release
+
+# For Linux/Raspberry Pi, include X11 feature
+RUST_LOG=debug cargo run --features x11
+```
+
+These commands combine the build and run steps. The `RUST_LOG` environment variable enables debug logging to help track what's happening in the application.
+
 ## Configuration
 
 The application can be configured through environment variables:
 
+- `PROTOSUIT_ENGINE_DEFAULT_SCENE`: Default scene to load at startup ("debug" or "idle", default: "debug")
 - `MQTT_BROKER`: MQTT broker address (default: "localhost")
 - `MQTT_PORT`: MQTT broker port (default: 1883)
 - `RUST_LOG`: Logging level (default: "info")
 - `SDL_WINDOW_WIDTH`: Window width in pixels (default: 720)
 - `SDL_WINDOW_HEIGHT`: Window height in pixels (default: 720)
+
+### Scene management
+
+The engine supports two built-in scenes:
+- Debug scene: Displays system information and MQTT connection status
+- Idle scene: Shows current date and time
+
+Scenes can be switched via MQTT commands:
+```bash
+# Switch to debug scene
+mosquitto_pub -t "app/switch" -m '{"name": "debug"}'
+
+# Switch to idle scene
+mosquitto_pub -t "app/switch" -m '{"name": "idle"}'
+```
 
 ## Running
 
@@ -316,4 +402,5 @@ mosquitto_pub -t "app/stop" -m '{
 ## MQTT topics
 
 - `app/start`: Start a new application
-- `
+- `app/switch`: Switch to a different scene or application
+- `app/stop`: Stop an application
