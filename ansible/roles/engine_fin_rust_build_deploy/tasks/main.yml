@@ -23,9 +23,9 @@
   when: "'fins' in group_names"
   notify: restart engine fin
 
-- name: Enable and start systemd service
+- name: Enable and restart systemd service
   systemd:
     name: engine-fin
     enabled: yes
-    state: started
+    state: restarted
   when: "'fins' in group_names"
