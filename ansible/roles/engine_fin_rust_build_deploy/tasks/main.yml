@@ -3,7 +3,7 @@
   shell: |
     make armhf
   args:
-    chdir: /home/proto/protosuit-engine
+    chdir: /home/proto/protosuit-engine/src
     executable: /bin/bash
   when: "'hub' in group_names"
   register: build_result
