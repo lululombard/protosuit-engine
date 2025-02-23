@@ -112,21 +112,22 @@ mod macos {
 
     impl WindowManager {
         pub fn new() -> Result<Self> {
+            log::debug!("Creating macOS WindowManager");
             Ok(Self {})
         }
 
         pub fn focus_window(&self, _window_id: u32) -> Result<()> {
-            // SDL on macOS handles window management automatically
+            log::debug!("macOS focus_window called");
             Ok(())
         }
 
         pub fn minimize_window(&self, _window_id: u32) -> Result<()> {
-            // SDL on macOS handles window management automatically
+            log::debug!("macOS minimize_window called");
             Ok(())
         }
 
         pub fn close_window(&self, _window_id: u32) -> Result<()> {
-            // SDL on macOS handles window management automatically
+            log::debug!("macOS close_window called");
             Ok(())
         }
     }

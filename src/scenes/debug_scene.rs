@@ -61,15 +61,21 @@ impl DebugScene {
         self.canvas.set_draw_color(Color::RGB(0, 0, 0));
         self.canvas.clear();
 
+        log::trace!("Getting canvas size");
+
         let (width, height) = self.canvas.output_size()
             .map_err(|e| anyhow::anyhow!("Failed to get canvas size: {}", e))?;
         let center_x = width as i32 / 2;
         let center_y = height as i32 / 2;
 
+        log::trace!("Getting system information");
+
         // Get system information
         let ip = local_ip().context("Failed to get local IP")?;
         let uptime = self.system.uptime().context("Failed to get uptime")?;
         let mqtt_status = if self.mqtt_connected { "Connected" } else { "Disconnected" };
+
+        log::trace!("Formatting text lines");
 
         // Render text lines
         let lines = vec![
@@ -83,19 +89,29 @@ impl DebugScene {
             format!("MQTT Status: {}", mqtt_status),
         ];
 
+        log::trace!("Calculating line height and total height");
+
         let line_height = 30;
         let total_height = lines.len() as i32 * line_height;
         let start_y = center_y - (total_height / 2);
 
+        log::trace!("Rendering text lines");
+
         for (i, line) in lines.iter().enumerate() {
+            log::trace!("Rendering text line {}", i);
+            log::trace!("Line: {}", line);
+
+            log::trace!("Surfaceing text");
             let surface = self.font.render(line)
                 .blended(Color::RGB(255, 255, 255))
                 .map_err(|e| anyhow::anyhow!("Failed to render text: {}", e))?;
 
+            log::trace!("Creating texture");
             let texture = self.texture_creator
                 .create_texture_from_surface(&surface)
                 .map_err(|e| anyhow::anyhow!("Failed to create texture: {}", e))?;
 
+            log::trace!("Creating text rect");
             let text_rect = Rect::new(
                 center_x - (surface.width() as i32 / 2),
                 start_y + (i as i32 * line_height),
@@ -103,9 +119,13 @@ impl DebugScene {
                 surface.height(),
             );
 
+            log::trace!("Copying texture to canvas");
+
             self.canvas.copy(&texture, None, Some(text_rect))
                 .map_err(|e| anyhow::anyhow!("Failed to copy texture: {}", e))?;
         }
+
+        log::trace!("Presenting canvas");
 
         self.canvas.present();
         Ok(())

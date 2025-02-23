@@ -52,15 +52,11 @@ impl MQTTHandler {
             .await
             .context("Failed to subscribe to topics")?;
 
-        let mut consecutive_errors = 0;
-        let max_consecutive_errors = 3;
-
         loop {
             tokio::select! {
                 mqtt_event = self.eventloop.poll() => {
                     match mqtt_event {
                         Ok(Event::Incoming(Packet::Publish(publish))) => {
-                            consecutive_errors = 0;  // Reset error counter on successful message
                             let topic = publish.topic;
                             let payload = String::from_utf8_lossy(&publish.payload);
 
@@ -88,7 +84,6 @@ impl MQTTHandler {
                         }
                         Ok(Event::Incoming(Packet::ConnAck(_))) => {
                             log::info!("Connected to MQTT broker");
-                            consecutive_errors = 0;  // Reset error counter on successful connection
                             self.connection_status_tx.send(true).await
                                 .context("Failed to send connection status")?;
 
@@ -96,25 +91,8 @@ impl MQTTHandler {
                             self.client.subscribe("app/+", QoS::AtLeastOnce).await
                                 .context("Failed to resubscribe to topics")?;
                         }
-                        Ok(Event::Outgoing(_)) => {
-                            log::trace!("Sending MQTT packet");
-                        }
                         Ok(Event::Incoming(Packet::PingResp)) => {
-                            log::trace!("Received MQTT PONG");
-                        }
-                        Err(e) => {
-                            consecutive_errors += 1;
-                            log::error!("MQTT Error (attempt {}/{}): {}", consecutive_errors, max_consecutive_errors, e);
-                            self.connection_status_tx.send(false).await
-                                .context("Failed to send connection status")?;
-
-                            if consecutive_errors >= max_consecutive_errors {
-                                log::error!("Too many consecutive MQTT errors, attempting reconnection");
-                                tokio::time::sleep(Duration::from_secs(5)).await;
-                                consecutive_errors = 0;
-                            } else {
-                                tokio::time::sleep(Duration::from_secs(1)).await;
-                            }
+                            log::trace!("Received MQTT PONG {:?}", Event::Incoming(Packet::PingResp));
                         }
                         _ => {}
                     }

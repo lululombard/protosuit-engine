@@ -4,6 +4,7 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use std::process::{Child, Command};
 use lazy_static::lazy_static;
+use sdl2::event::Event;
 
 lazy_static! {
     pub static ref TTF_CONTEXT: Arc<sdl2::ttf::Sdl2TtfContext> = Arc::new(sdl2::ttf::init().unwrap());
@@ -51,20 +52,31 @@ impl SDLManager {
         let video_subsystem = self.sdl_context.video()
             .map_err(|e| SDLError::SDLError(e.to_string()))?;
 
-        let window = video_subsystem.window(app_name, 800, 600)
+        // Add macOS-specific GL attributes
+        #[cfg(target_os = "macos")]
+        {
+            let gl_attr = video_subsystem.gl_attr();
+            gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
+            gl_attr.set_context_version(3, 2);
+        }
+
+        let window = video_subsystem.window(app_name, 720, 720)
             .position_centered()
             .borderless()
-            .opengl()
+            // .opengl()
+            // .allow_highdpi()
+            // .resizable()
             .build()
             .context("Failed to create window")?;
 
         // For the idle/debug displays, we don't actually launch a process
         let child = if command == "true" {
             log::debug!("Creating display canvas for app: {}", app_name);
-            let canvas = window.into_canvas()
+            let mut canvas = window.into_canvas()
                 .present_vsync()
                 .build()
                 .context("Failed to create canvas")?;
+
             let window = canvas.window().clone();
             let child = Command::new("true").spawn().context("Failed to spawn dummy process")?;
             self.running_apps.insert(app_name.to_string(), (child, window));
@@ -121,6 +133,23 @@ impl SDLManager {
 
     pub fn get_ttf_context(&self) -> Arc<sdl2::ttf::Sdl2TtfContext> {
         TTF_CONTEXT.clone()
+    }
+
+    pub fn pump_events(&self) {
+        let mut event_pump = self.sdl_context.event_pump()
+            .expect("Failed to get event pump");
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit {..} => {
+                    log::info!("SDL quit event received");
+                    std::process::exit(0);
+                }
+                _ => {
+                    // Handle other events if needed
+                    log::debug!("SDL event: {:?}", event);
+                }
+            }
+        }
     }
 }
 

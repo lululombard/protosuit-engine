@@ -127,6 +127,9 @@ impl AppManager {
         });
 
         let result = loop {
+            // Process SDL events
+            self.sdl_manager.pump_events();
+
             tokio::select! {
                 Some(command) = self.command_rx.recv() => {
                     match command {
@@ -186,6 +189,10 @@ impl AppManager {
                     }
                     break Ok(());
                 }
+                // Add frame delay with synchronous sleep
+                _ = tokio::task::spawn_blocking(|| {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }) => {}
             }
         };
 
