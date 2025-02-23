@@ -10,13 +10,18 @@
     - build-essential
     - gcc-arm-linux-gnueabihf
     - g++-arm-linux-gnueabihf
-    - libsdl2-dev
-    - libx11-dev
-    - libdbus-1-dev
-    - libgl1-mesa-dev
-    - libasound2-dev
     - libc6-dev-armhf-cross
     - cmake
+    - libsdl2-dev
+    - libsdl2-ttf-dev
+    - libsdl2-image-dev
+    - libsdl2-mixer-dev
+    - libsdl2-gfx-dev
+    - libdbus-1-dev
+    - libibus-1.0-dev
+    - libglib2.0-dev
+    - libpulse-dev
+    - libgcc-s1
     - libmosquitto-dev
     - libsdl2-dev:armhf
     - libsdl2-ttf-dev:armhf
