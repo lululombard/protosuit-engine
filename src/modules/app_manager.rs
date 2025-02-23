@@ -21,7 +21,6 @@ pub struct AppManager {
     mqtt_status_rx: mpsc::Receiver<bool>,
     active_app: Option<String>,
     debug_scene: Option<DebugScene>,
-    idle_scene: Option<IdleScene>,
 }
 
 impl AppManager {
@@ -54,7 +53,6 @@ impl AppManager {
             mqtt_status_rx,
             active_app: None,
             debug_scene: Some(debug_scene),
-            idle_scene: Some(idle_scene),
         })
     }
 
