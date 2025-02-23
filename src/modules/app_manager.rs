@@ -19,8 +19,9 @@ pub struct AppManager {
     mqtt_handler: Option<MQTTHandler>,
     command_rx: mpsc::Receiver<AppCommand>,
     mqtt_status_rx: mpsc::Receiver<bool>,
-    active_app: Option<String>,
+    active_scene: String, // Track which scene is currently active
     debug_scene: Option<DebugScene>,
+    idle_scene: Option<IdleScene>,
 }
 
 impl AppManager {
@@ -39,11 +40,41 @@ impl AppManager {
             mqtt_status_tx,
         )?;
 
-        // Create debug scene window
-        log::debug!("Attempting to launch debug scene");
-        let debug_canvas = (*sdl_manager).launch_app("Protosuit Debug", "true", &[])?
-            .context("Failed to get debug canvas")?;
-        let debug_scene = DebugScene::new(debug_canvas)?;
+        // Get default scene from environment variable, fallback to "debug"
+        let mut default_scene = std::env::var("PROTOSUIT_ENGINE_DEFAULT_SCENE")
+            .unwrap_or_else(|_| {
+                log::info!("PROTOSUIT_ENGINE_DEFAULT_SCENE not set, defaulting to 'debug'");
+                "debug".to_string()
+            });
+
+        // Validate the scene name
+        if !matches!(default_scene.as_str(), "debug" | "idle") {
+            log::warn!("Unknown default scene '{}', falling back to debug", default_scene);
+            default_scene = "debug".to_string();
+        }
+
+        log::info!("Loading default scene: {}", default_scene);
+
+        // Initialize scenes as None
+        let mut debug_scene = None;
+        let mut idle_scene = None;
+
+        // Create the default scene
+        match default_scene.as_str() {
+            "debug" => {
+                log::debug!("Creating debug scene");
+                let debug_canvas = (*sdl_manager).launch_app("Protosuit Debug", "true", &[])?
+                    .context("Failed to get debug canvas")?;
+                debug_scene = Some(DebugScene::new(debug_canvas)?);
+            }
+            "idle" => {
+                log::debug!("Creating idle scene");
+                let idle_canvas = (*sdl_manager).launch_app("Protosuit Idle", "true", &[])?
+                    .context("Failed to get idle canvas")?;
+                idle_scene = Some(IdleScene::new(idle_canvas)?);
+            }
+            _ => unreachable!(), // We validated the scene name above
+        }
 
         Ok(Self {
             sdl_manager,
@@ -51,8 +82,9 @@ impl AppManager {
             mqtt_handler: Some(mqtt_handler),
             command_rx,
             mqtt_status_rx,
-            active_app: None,
-            debug_scene: Some(debug_scene),
+            active_scene: default_scene,
+            debug_scene,
+            idle_scene,
         })
     }
 
@@ -73,7 +105,7 @@ impl AppManager {
             }
         });
 
-        // Create an interval for updating the idle display
+        // Create an interval for updating displays
         let mut update_interval = interval(Duration::from_secs(1));
 
         // Handle Ctrl+C and SIGTERM
@@ -116,16 +148,29 @@ impl AppManager {
                     }
                 }
                 Some(mqtt_connected) = self.mqtt_status_rx.recv() => {
+                    log::debug!("MQTT connection status changed to: {}", mqtt_connected);
                     if let Some(debug_scene) = &mut self.debug_scene {
                         debug_scene.set_mqtt_status(mqtt_connected);
                     }
                 }
                 _ = update_interval.tick() => {
-                    if self.active_app.is_none() {
-                        if let Some(debug_scene) = &mut self.debug_scene {
-                            if let Err(e) = debug_scene.render() {
-                                break Err(e);
+                    match self.active_scene.as_str() {
+                        "debug" => {
+                            if let Some(debug_scene) = &mut self.debug_scene {
+                                if let Err(e) = debug_scene.render() {
+                                    log::error!("Failed to render debug scene: {}", e);
+                                }
                             }
+                        }
+                        "idle" => {
+                            if let Some(idle_scene) = &mut self.idle_scene {
+                                if let Err(e) = idle_scene.render() {
+                                    log::error!("Failed to render idle scene: {}", e);
+                                }
+                            }
+                        }
+                        _ => {
+                            log::error!("Unknown active scene: {}", self.active_scene);
                         }
                     }
                 }
@@ -156,8 +201,8 @@ impl AppManager {
         self.sdl_manager.launch_app(name, command, &args_str)?;
 
         // If this is the first app, make it active
-        if self.active_app.is_none() {
-            self.active_app = Some(name.to_string());
+        if self.active_scene.is_empty() {
+            self.active_scene = name.to_string();
             if let Some(window_id) = self.sdl_manager.get_window(name) {
                 self.window_manager.focus_window(window_id)?;
             }
@@ -176,28 +221,38 @@ impl AppManager {
         self.sdl_manager.stop_app(name)?;
 
         // If this was the active app, clear the active app state
-        if self.active_app.as_deref() == Some(name) {
-            self.active_app = None;
+        if self.active_scene == name {
+            self.active_scene.clear();
         }
 
         Ok(())
     }
 
     async fn handle_switch(&mut self, name: &str) -> Result<()> {
-        // If the app exists and it's not already active
-        if let Some(window_id) = self.sdl_manager.get_window(name) {
-            // Minimize the currently active app if it exists
-            if let Some(active_name) = &self.active_app {
-                if let Some(active_window_id) = self.sdl_manager.get_window(active_name) {
-                    self.window_manager.minimize_window(active_window_id)?;
+        match name {
+            "debug" => {
+                if self.debug_scene.is_none() {
+                    log::debug!("Creating debug scene");
+                    let debug_canvas = self.sdl_manager.launch_app("Protosuit Debug", "true", &[])?
+                        .context("Failed to get debug canvas")?;
+                    self.debug_scene = Some(DebugScene::new(debug_canvas)?);
                 }
+                self.active_scene = "debug".to_string();
             }
-
-            // Focus the new app
-            self.window_manager.focus_window(window_id)?;
-            self.active_app = Some(name.to_string());
+            "idle" => {
+                if self.idle_scene.is_none() {
+                    log::debug!("Creating idle scene");
+                    let idle_canvas = self.sdl_manager.launch_app("Protosuit Idle", "true", &[])?
+                        .context("Failed to get idle canvas")?;
+                    self.idle_scene = Some(IdleScene::new(idle_canvas)?);
+                }
+                self.active_scene = "idle".to_string();
+            }
+            _ => {
+                log::error!("Unknown scene: {}", name);
+                return Ok(());
+            }
         }
-
         Ok(())
     }
 

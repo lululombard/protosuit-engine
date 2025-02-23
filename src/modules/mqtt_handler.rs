@@ -30,15 +30,8 @@ impl MQTTHandler {
         let mut mqttopts = MqttOptions::new(client_id, broker, port);
         mqttopts
             .set_keep_alive(Duration::from_secs(5))
-            .set_clean_session(false)  // Enable persistent session
-            .set_connection_timeout(Duration::from_secs(10))
-            .set_max_packet_size(100 * 1024)
-            .set_pending_throttle(Duration::from_millis(100))
-            .set_reconnect_opts(rumqttc::ReconnectOptions::Exponential(
-                Duration::from_secs(1),    // Initial delay
-                Duration::from_secs(60),   // Max delay
-                10,                        // Max retries (set to a high number for continuous retry)
-            ));
+            .set_clean_session(false)
+            .set_request_channel_capacity(10);
 
         let (client, eventloop) = AsyncClient::new(mqttopts, 10);
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
