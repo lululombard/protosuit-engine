@@ -11,7 +11,7 @@ The Protosuit Engine consists of those main components:
    - USB gadget mode networking for reliable low-latency communication between the hub and the fins
    - NAT routing between dedicated subnets to allow the fins to access the internet through the hub
    - MQTT broker for control messages
-   - Matchbox window manager for efficient display management on the Pi Zero 2W
+   - X11 server for efficient display management on the Pi Zero 2W
      - Minimal X server installation
      - Hidden cursor for clean UI
      - No window decorations
@@ -21,7 +21,6 @@ The Protosuit Engine consists of those main components:
 2. **Engine fins** (for the two Pi Zero 2W)
    - Rust-based SDL application runtime
    - MQTT-controlled animation/application management
-   - Lightweight X11 environment with Matchbox WM
    - Support for embedded applications (Doom, custom animations, etc)
 
 ## System architecture
@@ -221,7 +220,6 @@ These tools are installed during the networking setup phase to ensure a consiste
 The Ansible playbook configures a minimal display environment optimized for the round displays:
 
 ### Window manager setup
-- Matchbox window manager
   - Minimal memory footprint
   - No window decorations
   - Hidden cursor

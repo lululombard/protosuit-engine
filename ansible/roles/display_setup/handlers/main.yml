@@ -1,10 +1,4 @@
 ---
-- name: restart matchbox
-  systemd:
-    name: matchbox
-    state: restarted
-    daemon_reload: yes
-
 - name: reboot system
   reboot:
     msg: "Rebooting to apply display rotation changes"

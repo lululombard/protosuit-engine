@@ -1,6 +1,6 @@
 ---
-# Install minimal X server and Matchbox dependencies
-- name: Install X server and Matchbox Window Manager
+# Install minimal X server
+- name: Install X server
   apt:
     name:
       - xserver-xorg-core
