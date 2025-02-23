@@ -8,49 +8,11 @@ use log;
 const DEFAULT_WINDOW_WIDTH: u32 = 720;
 const DEFAULT_WINDOW_HEIGHT: u32 = 720;
 
-#[derive(Debug, Clone, Copy)]
-pub enum DisplayRotation {
-    Normal,
-    Right,
-    Left,
-    Flipped,
-}
-
-impl DisplayRotation {
-    fn from_env() -> Self {
-        let rotation = match std::env::var("SDL_DISPLAY_ROTATION").as_deref() {
-            Ok("right") => DisplayRotation::Right,
-            Ok("left") => DisplayRotation::Left,
-            Ok("flipped") => DisplayRotation::Flipped,
-            Ok(value) => {
-                log::debug!("Unknown rotation value '{}', defaulting to normal", value);
-                DisplayRotation::Normal
-            }
-            Err(_) => {
-                log::debug!("No SDL_DISPLAY_ROTATION set, defaulting to normal");
-                DisplayRotation::Normal
-            }
-        };
-        log::info!("Using display rotation: {:?}", rotation);
-        rotation
-    }
-
-    fn to_degrees(&self) -> f64 {
-        match self {
-            DisplayRotation::Normal => 0.0,
-            DisplayRotation::Right => 90.0,
-            DisplayRotation::Left => 270.0,
-            DisplayRotation::Flipped => 180.0,
-        }
-    }
-}
-
 pub struct SDLManager {
     sdl_context: Arc<sdl2::Sdl>,
     running_apps: DashMap<String, (Child, Window)>,
     window_width: u32,
     window_height: u32,
-    rotation: DisplayRotation,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -85,15 +47,11 @@ impl SDLManager {
             .and_then(|h| h.parse().ok())
             .unwrap_or(DEFAULT_WINDOW_HEIGHT);
 
-        // Get rotation from environment
-        let rotation = DisplayRotation::from_env();
-
         Ok(Self {
             sdl_context: Arc::new(sdl_context),
             running_apps: DashMap::new(),
             window_width,
             window_height,
-            rotation,
         })
     }
 
@@ -125,12 +83,6 @@ impl SDLManager {
         let video_subsystem = self.sdl_context.video()
             .map_err(|e| SDLError::SDLError(e.to_string()))?;
 
-        // Adjust dimensions based on rotation
-        let (width, height) = match self.rotation {
-            DisplayRotation::Right | DisplayRotation::Left => (self.window_height, self.window_width),
-            _ => (self.window_width, self.window_height),
-        };
-
         let window = video_subsystem.window(app_name, width, height)
             .position(WindowPos::Centered)
             .opengl()
@@ -143,13 +95,10 @@ impl SDLManager {
             .build()
             .context("Failed to create canvas")?;
 
-        // Set rotation
+        // Set canvas size
         canvas.set_logical_size(self.window_width, self.window_height)
             .map_err(|e| SDLError::SDLError(e.to_string()))?;
 
-        // Apply rotation
-        let rotation_degrees = self.rotation.to_degrees();
-        log::debug!("Setting canvas rotation to {} degrees", rotation_degrees);
         canvas.set_draw_color(sdl2::pixels::Color::RGB(0, 0, 0));
         canvas.clear();
         canvas.present();
