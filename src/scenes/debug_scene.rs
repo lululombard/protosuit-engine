@@ -10,6 +10,7 @@ use sdl2::{
 use systemstat::{Platform, System};
 use hostname;
 use crate::modules::sdl_manager::TTF_CONTEXT;
+use log;
 
 pub struct DebugScene {
     canvas: Canvas<Window>,
@@ -22,8 +23,10 @@ pub struct DebugScene {
 
 impl DebugScene {
     pub fn new(canvas: Canvas<Window>) -> Result<Self> {
+        log::debug!("Creating new DebugScene");
         let texture_creator = canvas.texture_creator();
 
+        log::debug!("Loading font for DebugScene");
         let font_data = include_bytes!("../../assets/RobotoMono-Regular.ttf");
         let rwops = sdl2::rwops::RWops::from_bytes(font_data)
             .map_err(|e| anyhow::anyhow!("Failed to load font data: {}", e))?;
@@ -32,10 +35,12 @@ impl DebugScene {
             .map_err(|e| anyhow::anyhow!("Failed to load font: {}", e))?;
 
         // Get hostname
+        log::debug!("Getting hostname for DebugScene");
         let hostname = hostname::get()
             .map(|h| h.to_string_lossy().to_string())
             .unwrap_or_else(|_| "unknown".to_string());
 
+        log::debug!("DebugScene created successfully");
         Ok(Self {
             canvas,
             texture_creator,
@@ -47,10 +52,12 @@ impl DebugScene {
     }
 
     pub fn set_mqtt_status(&mut self, connected: bool) {
+        log::debug!("Setting MQTT status to: {}", connected);
         self.mqtt_connected = connected;
     }
 
     pub fn render(&mut self) -> Result<()> {
+        log::trace!("Rendering DebugScene");
         self.canvas.set_draw_color(Color::RGB(0, 0, 0));
         self.canvas.clear();
 

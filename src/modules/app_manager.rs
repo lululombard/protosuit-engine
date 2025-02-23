@@ -46,12 +46,6 @@ impl AppManager {
             .context("Failed to get debug canvas")?;
         let debug_scene = DebugScene::new(debug_canvas)?;
 
-        // Create idle scene window
-        log::debug!("Attempting to launch idle scene");
-        let idle_canvas = (*sdl_manager).launch_app("Protosuit Idle", "true", &[])?
-            .context("Failed to get idle canvas")?;
-        let idle_scene = IdleScene::new(idle_canvas)?;
-
         Ok(Self {
             sdl_manager,
             window_manager,

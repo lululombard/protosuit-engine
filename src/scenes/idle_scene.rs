@@ -8,6 +8,7 @@ use sdl2::{
 };
 use chrono::Local;
 use crate::modules::sdl_manager::TTF_CONTEXT;
+use log;
 
 pub struct IdleScene {
     canvas: Canvas<Window>,
@@ -17,8 +18,10 @@ pub struct IdleScene {
 
 impl IdleScene {
     pub fn new(canvas: Canvas<Window>) -> Result<Self> {
+        log::debug!("Creating new IdleScene");
         let texture_creator = canvas.texture_creator();
 
+        log::debug!("Loading font for IdleScene");
         let font_data = include_bytes!("../../assets/RobotoMono-Regular.ttf");
         let rwops = sdl2::rwops::RWops::from_bytes(font_data)
             .map_err(|e| anyhow::anyhow!("Failed to load font data: {}", e))?;
@@ -26,6 +29,7 @@ impl IdleScene {
         let font = TTF_CONTEXT.load_font_from_rwops(rwops, 24)
             .map_err(|e| anyhow::anyhow!("Failed to load font: {}", e))?;
 
+        log::debug!("IdleScene created successfully");
         Ok(Self {
             canvas,
             texture_creator,
@@ -34,6 +38,7 @@ impl IdleScene {
     }
 
     pub fn render(&mut self) -> Result<()> {
+        log::trace!("Rendering IdleScene");
         self.canvas.set_draw_color(Color::RGB(0, 0, 0));
         self.canvas.clear();
 
