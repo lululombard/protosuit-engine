@@ -4,7 +4,7 @@ LDFLAGS = $(shell sdl2-config --libs) $(shell pkg-config --libs SDL2_ttf) -lm -l
 
 # ARM cross-compilation settings
 ARM_CC = arm-linux-gnueabihf-gcc
-ARM_CFLAGS = -Wall -Wextra
+ARM_CFLAGS = -Wall -Wextra $(shell sdl2-config --cflags) $(shell pkg-config --cflags SDL2_ttf)
 ARM_LDFLAGS = -lSDL2 -lSDL2_ttf -lm -lmosquitto
 ARM_TARGET = $(TARGET)_armhf
 
