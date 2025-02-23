@@ -12,7 +12,7 @@ Environment=MQTT_BROKER=192.168.42.2
 Environment=MQTT_BROKER=192.168.43.2
 {% endif %}
 ExecStart=/usr/bin/startx /usr/local/bin/protosuit-engine-fin -- -nocursor
-Restart=on-failure
+Restart=always
 RestartSec=5
 
 [Install]
