@@ -18,9 +18,9 @@ Section "Monitor"
     Option "DPMS" "false"
 
 {% if inventory_hostname == 'left_fin' %}
-    Option "Rotate" "left"
-{% elif inventory_hostname == 'right_fin' %}
     Option "Rotate" "right"
+{% elif inventory_hostname == 'right_fin' %}
+    Option "Rotate" "left"
 {% endif %}
 EndSection
 
