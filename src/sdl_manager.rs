@@ -101,34 +101,17 @@ impl SDLManager {
         let video_subsystem = self.sdl_context.video()
             .map_err(|e| SDLError::SDLError(e.to_string()))?;
 
-        // Adjust dimensions based on rotation
-        let (width, height) = match self.rotation {
-            DisplayRotation::Right | DisplayRotation::Left => (self.window_height, self.window_width),
-            _ => (self.window_width, self.window_height),
-        };
-
-        let window = video_subsystem.window(title, width, height)
-            .position(WindowPos::Centered)
-            .opengl()
+        let window = video_subsystem.window(title, 800, 600)
+            .position_centered()
             .borderless()
+            .opengl()
             .build()
             .context("Failed to create window")?;
 
-        let mut canvas = window.into_canvas()
+        let canvas = window.into_canvas()
             .present_vsync()
             .build()
             .context("Failed to create canvas")?;
-
-        // Set rotation
-        canvas.set_logical_size(self.window_width, self.window_height)
-            .map_err(|e| SDLError::SDLError(e.to_string()))?;
-
-        // Apply rotation
-        let rotation_degrees = self.rotation.to_degrees();
-        log::debug!("Setting canvas rotation to {} degrees", rotation_degrees);
-        canvas.set_draw_color(sdl2::pixels::Color::RGB(0, 0, 0));
-        canvas.clear();
-        canvas.present();
 
         let window = canvas.window().clone();
         Ok((window, canvas))
@@ -219,6 +202,16 @@ impl SDLManager {
             child.wait().context("Failed to wait for process")?;
         }
         self.running_apps.clear();
+        Ok(())
+    }
+
+    pub fn store_window(&self, app_name: &str, window: Window) -> Result<()> {
+        // Use a dummy process that exits immediately
+        let child = Command::new("true")
+            .spawn()
+            .context("Failed to spawn dummy process")?;
+
+        self.running_apps.insert(app_name.to_string(), (child, window));
         Ok(())
     }
 }

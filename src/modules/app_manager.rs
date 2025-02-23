@@ -7,7 +7,10 @@ use crate::modules::{
     mqtt_handler::{AppCommand, MQTTHandler},
     sdl_manager::SDLManager,
     window_manager::WindowManager,
-    idle_display::IdleDisplay,
+};
+use crate::scenes::{
+    debug_scene::DebugScene,
+    idle_scene::IdleScene,
 };
 
 pub struct AppManager {
@@ -17,7 +20,8 @@ pub struct AppManager {
     command_rx: mpsc::Receiver<AppCommand>,
     mqtt_status_rx: mpsc::Receiver<bool>,
     active_app: Option<String>,
-    idle_display: Option<IdleDisplay>,
+    debug_scene: Option<DebugScene>,
+    idle_scene: Option<IdleScene>,
 }
 
 impl AppManager {
@@ -36,14 +40,17 @@ impl AppManager {
             mqtt_status_tx,
         )?;
 
-        // Create idle display window
-        log::debug!("Attempting to launch idle display");
-        (*sdl_manager).launch_app("Protosuit Idle", "true", &[])?;
+        // Create debug scene window
+        log::debug!("Attempting to launch debug scene");
+        let debug_canvas = (*sdl_manager).launch_app("Protosuit Debug", "true", &[])?
+            .context("Failed to get debug canvas")?;
+        let debug_scene = DebugScene::new(debug_canvas)?;
 
-        // Get the canvas for the idle display window
-        let window_id = self.sdl_manager.get_window("Protosuit Idle")
-            .ok_or_else(|| anyhow::anyhow!("Failed to get window ID for idle display"))?;
-        let idle_display = IdleDisplay::new(window_id)?;
+        // Create idle scene window
+        log::debug!("Attempting to launch idle scene");
+        let idle_canvas = (*sdl_manager).launch_app("Protosuit Idle", "true", &[])?
+            .context("Failed to get idle canvas")?;
+        let idle_scene = IdleScene::new(idle_canvas)?;
 
         Ok(Self {
             sdl_manager,
@@ -52,7 +59,8 @@ impl AppManager {
             command_rx,
             mqtt_status_rx,
             active_app: None,
-            idle_display: Some(idle_display),
+            debug_scene: Some(debug_scene),
+            idle_scene: Some(idle_scene),
         })
     }
 
@@ -116,14 +124,14 @@ impl AppManager {
                     }
                 }
                 Some(mqtt_connected) = self.mqtt_status_rx.recv() => {
-                    if let Some(idle_display) = &mut self.idle_display {
-                        idle_display.set_mqtt_status(mqtt_connected);
+                    if let Some(debug_scene) = &mut self.debug_scene {
+                        debug_scene.set_mqtt_status(mqtt_connected);
                     }
                 }
                 _ = update_interval.tick() => {
                     if self.active_app.is_none() {
-                        if let Some(idle_display) = &mut self.idle_display {
-                            if let Err(e) = idle_display.render() {
+                        if let Some(debug_scene) = &mut self.debug_scene {
+                            if let Err(e) = debug_scene.render() {
                                 break Err(e);
                             }
                         }

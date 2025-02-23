@@ -1,4 +1,5 @@
 mod modules;
+pub mod scenes;
 
 use anyhow::Result;
 use env_logger::Env;

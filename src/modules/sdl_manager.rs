@@ -34,7 +34,7 @@ impl SDLManager {
         })
     }
 
-    pub fn launch_app(&self, app_name: &str, command: &str, args: &[&str]) -> Result<()> {
+    pub fn launch_app(&self, app_name: &str, command: &str, args: &[&str]) -> Result<Option<sdl2::render::Canvas<Window>>> {
         if self.running_apps.contains_key(app_name) {
             return Err(SDLError::AlreadyRunning(app_name.to_string()).into());
         }
@@ -50,14 +50,26 @@ impl SDLManager {
             .build()
             .context("Failed to create window")?;
 
-        // Launch the application process
-        let child = Command::new(command)
-            .args(args)
-            .spawn()
-            .context("Failed to spawn process")?;
+        // For the idle/debug displays, we don't actually launch a process
+        let child = if command == "true" {
+            log::debug!("Creating display canvas for app: {}", app_name);
+            let canvas = window.into_canvas()
+                .present_vsync()
+                .build()
+                .context("Failed to create canvas")?;
+            let window = canvas.window().clone();
+            let child = Command::new("true").spawn().context("Failed to spawn dummy process")?;
+            self.running_apps.insert(app_name.to_string(), (child, window));
+            return Ok(Some(canvas));
+        } else {
+            Command::new(command)
+                .args(args)
+                .spawn()
+                .context("Failed to spawn process")?
+        };
 
         self.running_apps.insert(app_name.to_string(), (child, window));
-        Ok(())
+        Ok(None)
     }
 
     pub fn stop_app(&self, app_name: &str) -> Result<()> {
