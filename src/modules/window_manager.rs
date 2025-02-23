@@ -5,8 +5,8 @@ use {
     anyhow::Context,
     x11rb::connection::Connection,
     x11rb::protocol::xproto::*,
+    x11rb::protocol::xproto::ConnectionExt,
     x11rb::rust_connection::RustConnection,
-    x11rb::wrapper::ConnectionExt,
     std::sync::Arc,
 };
 
@@ -38,7 +38,7 @@ mod unix {
         }
 
         fn get_atom(&self, name: &str) -> Result<Atom> {
-            Ok(self.conn.intern_atom(false, name.as_bytes())?
+            Ok((&*self.conn).intern_atom(false, name.as_bytes())?
                 .reply()
                 .context("Failed to get atom")?
                 .atom)
@@ -56,18 +56,18 @@ mod unix {
 
         pub fn focus_window(&self, window_id: u32) -> Result<()> {
             let window = window_id as Window;
-            self.conn.set_input_focus(InputFocus::PARENT, window, x11rb::CURRENT_TIME)?;
-            self.conn.flush()?;
+            (&*self.conn).set_input_focus(InputFocus::PARENT, window, x11rb::CURRENT_TIME)?;
+            (&*self.conn).flush()?;
             Ok(())
         }
 
         pub fn minimize_window(&self, window_id: u32) -> Result<()> {
             let window = window_id as Window;
-            let atom = self.conn.intern_atom(false, b"_NET_WM_STATE")?;
-            let atom_minimize = self.conn.intern_atom(false, b"_NET_WM_STATE_HIDDEN")?;
+            let atom = (&*self.conn).intern_atom(false, b"_NET_WM_STATE")?;
+            let atom_minimize = (&*self.conn).intern_atom(false, b"_NET_WM_STATE_HIDDEN")?;
 
             if let (Ok(atom_reply), Ok(atom_minimize_reply)) = (atom.reply(), atom_minimize.reply()) {
-                self.conn.change_property(
+                (&*self.conn).change_property(
                     PropMode::REPLACE,
                     window,
                     atom_reply.atom,
@@ -76,15 +76,15 @@ mod unix {
                     1,
                     &atom_minimize_reply.atom.to_ne_bytes(),
                 )?;
-                self.conn.flush()?;
+                (&*self.conn).flush()?;
             }
             Ok(())
         }
 
         pub fn close_window(&self, window_id: u32) -> Result<()> {
             let window = window_id as Window;
-            let wm_protocols = self.conn.intern_atom(false, b"WM_PROTOCOLS")?.reply()?;
-            let wm_delete_window = self.conn.intern_atom(false, b"WM_DELETE_WINDOW")?.reply()?;
+            let wm_protocols = (&*self.conn).intern_atom(false, b"WM_PROTOCOLS")?.reply()?;
+            let wm_delete_window = (&*self.conn).intern_atom(false, b"WM_DELETE_WINDOW")?.reply()?;
 
             let event = ClientMessageEvent::new(
                 32,
@@ -93,14 +93,14 @@ mod unix {
                 [wm_delete_window.atom, 0, 0, 0, 0],
             );
 
-            self.conn.send_event(
+            (&*self.conn).send_event(
                 false,
                 window,
                 EventMask::NO_EVENT,
                 event,
             )?;
 
-            self.conn.flush()?;
+            (&*self.conn).flush()?;
             Ok(())
         }
     }
