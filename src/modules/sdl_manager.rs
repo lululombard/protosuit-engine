@@ -3,6 +3,11 @@ use sdl2::video::Window;
 use std::sync::Arc;
 use dashmap::DashMap;
 use std::process::{Child, Command};
+use lazy_static::lazy_static;
+
+lazy_static! {
+    pub static ref TTF_CONTEXT: Arc<sdl2::ttf::Sdl2TtfContext> = Arc::new(sdl2::ttf::init().unwrap());
+}
 
 pub struct SDLManager {
     sdl_context: Arc<sdl2::Sdl>,
@@ -27,6 +32,9 @@ impl SDLManager {
 
         // Hide cursor globally
         sdl_context.mouse().show_cursor(false);
+
+        // Initialize TTF (will only happen once due to lazy_static)
+        let _ = &*TTF_CONTEXT;
 
         Ok(Self {
             sdl_context: Arc::new(sdl_context),
@@ -109,6 +117,10 @@ impl SDLManager {
         self.running_apps.iter()
             .map(|entry| entry.key().clone())
             .collect()
+    }
+
+    pub fn get_ttf_context(&self) -> Arc<sdl2::ttf::Sdl2TtfContext> {
+        TTF_CONTEXT.clone()
     }
 }
 

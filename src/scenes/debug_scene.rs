@@ -8,16 +8,8 @@ use sdl2::{
     video::{Window, WindowContext},
 };
 use systemstat::{Platform, System};
-use std::sync::Once;
-use lazy_static::lazy_static;
-use std::sync::Arc;
 use hostname;
-
-static TTF_INIT: Once = Once::new();
-
-lazy_static! {
-    static ref TTF_CONTEXT: Arc<sdl2::ttf::Sdl2TtfContext> = Arc::new(sdl2::ttf::init().unwrap());
-}
+use crate::modules::sdl_manager::TTF_CONTEXT;
 
 pub struct DebugScene {
     canvas: Canvas<Window>,
@@ -32,16 +24,10 @@ impl DebugScene {
     pub fn new(canvas: Canvas<Window>) -> Result<Self> {
         let texture_creator = canvas.texture_creator();
 
-        // Initialize TTF only once
-        TTF_INIT.call_once(|| {
-            sdl2::ttf::init().expect("Failed to initialize TTF");
-        });
-
         let font_data = include_bytes!("../../assets/RobotoMono-Regular.ttf");
         let rwops = sdl2::rwops::RWops::from_bytes(font_data)
             .map_err(|e| anyhow::anyhow!("Failed to load font data: {}", e))?;
 
-        // Use the static TTF context
         let font = TTF_CONTEXT.load_font_from_rwops(rwops, 24)
             .map_err(|e| anyhow::anyhow!("Failed to load font: {}", e))?;
 
