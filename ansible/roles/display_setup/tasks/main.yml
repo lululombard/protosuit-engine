@@ -44,3 +44,95 @@
     marker: "# {mark} ANSIBLE MANAGED BLOCK - DISPLAY CONFIG"
   register: config_changes
   when: "'fins' in group_names"
+
+# Install Enlightenment and dependencies
+- name: Install Enlightenment and dependencies
+  apt:
+    name:
+      - efl
+      - enlightenment
+      - terminology
+      - lightdm
+      - xdg-utils
+      - dbus-x11
+      - policykit-1
+    state: present
+    update_cache: yes
+  register: enlightenment_install
+  failed_when: false
+  retries: 3
+  delay: 5
+  until: enlightenment_install is success
+
+# Check if Enlightenment installation was successful
+- name: Verify Enlightenment installation
+  command: dpkg-query -W -f='${Status}' enlightenment
+  register: enlightenment_check
+  changed_when: false
+  failed_when: enlightenment_check.rc != 0 and not "not-installed" in enlightenment_check.stdout
+  ignore_errors: true
+
+# Create user directories
+- name: Create necessary user directories
+  file:
+    path: "{{ enlightenment_home }}/.elementary/config"
+    state: directory
+    owner: "{{ enlightenment_user }}"
+    group: "{{ enlightenment_group }}"
+    mode: "0755"
+    recurse: yes
+  when: enlightenment_check is succeeded or (enlightenment_check is failed and "not-installed" not in enlightenment_check.stdout)
+
+# Copy preconfigured Enlightenment profile
+- name: Copy preconfigured Enlightenment profile
+  template:
+    src: e.cfg.j2
+    dest: "{{ enlightenment_home }}/.elementary/config/profile.cfg"
+    owner: "{{ enlightenment_user }}"
+    group: "{{ enlightenment_group }}"
+    mode: "0644"
+  notify: set enlightenment permissions
+  when: enlightenment_check is succeeded or (enlightenment_check is failed and "not-installed" not in enlightenment_check.stdout)
+
+# Disable unnecessary modules
+- name: Copy pre-configured module settings
+  template:
+    src: e_modules.cfg.j2
+    dest: "{{ enlightenment_home }}/.elementary/config/module.battery.cfg"
+    owner: "{{ enlightenment_user }}"
+    group: "{{ enlightenment_group }}"
+    mode: "0644"
+  notify: set enlightenment permissions
+  when: enlightenment_check is succeeded or (enlightenment_check is failed and "not-installed" not in enlightenment_check.stdout)
+
+# Configure Enlightenment to auto-start
+- name: Create LightDM config directory
+  file:
+    path: /etc/lightdm/lightdm.conf.d
+    state: directory
+    mode: "0755"
+  when: enlightenment_check is succeeded or (enlightenment_check is failed and "not-installed" not in enlightenment_check.stdout)
+
+- name: Configure LightDM to start Enlightenment session
+  copy:
+    dest: /etc/lightdm/lightdm.conf.d/50-autologin.conf
+    content: |
+      [SeatDefaults]
+      autologin-user={{ enlightenment_user }}
+      autologin-user-timeout=0
+      autologin-session=enlightenment
+    mode: "0644"
+  notify: reboot system
+  when: enlightenment_check is succeeded or (enlightenment_check is failed and "not-installed" not in enlightenment_check.stdout)
+  register: lightdm_config
+
+# Disable screen blanking in Enlightenment
+- name: Configure screen blanking for Enlightenment
+  template:
+    src: e_screenblanking.cfg.j2
+    dest: "{{ enlightenment_home }}/.elementary/config/e_screenblanking.cfg"
+    owner: "{{ enlightenment_user }}"
+    group: "{{ enlightenment_group }}"
+    mode: "0644"
+  notify: set enlightenment permissions
+  when: enlightenment_check is succeeded or (enlightenment_check is failed and "not-installed" not in enlightenment_check.stdout)

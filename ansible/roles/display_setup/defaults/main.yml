@@ -1,0 +1,16 @@
+---
+# Enlightenment user configuration
+enlightenment_user: proto
+enlightenment_group: proto
+enlightenment_home: "/home/proto"
+
+# Enlightenment version
+enlightenment_version: "0.24.2"
+
+# Disabled modules (comma-separated list)
+disabled_modules: "bluez4,connman,packagekit,battery,wizard,conf_wallpaper2,conf_menus,gadman,geolocation,shot,teamwork,wl_desktop_shell,wl_drm,wl_text_input,wl_weekeyboard,music-control,tiling"
+
+# Screen settings
+enable_screen_blanking: false
+enable_screensaver: false
+dpms_enabled: false

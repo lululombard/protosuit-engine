@@ -4,6 +4,8 @@ Section "ServerFlags"
     Option "SuspendTime" "0"
     Option "OffTime" "0"
     Option "DontZap" "true"
+    Option "DontVTSwitch" "true"
+    Option "AllowMouseOpenFail" "true"
 EndSection
 
 Section "InputClass"
@@ -21,6 +23,14 @@ Section "Monitor"
 {% elif inventory_hostname == 'right_fin' %}
     Option "Rotate" "left"
 {% endif %}
+EndSection
+
+Section "Device"
+    Identifier "VideoCard"
+    Driver "modesetting"
+    Option "SWCursor" "true"
+    Option "AccelMethod" "glamor"
+    Option "DRI" "2"
 EndSection
 
 Section "ServerLayout"
