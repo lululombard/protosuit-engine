@@ -1,362 +1,216 @@
-# Protosuit Engine
+# Protogen Fursuit Fin Display System
 
-A Protogen fursuit control system combining networked Raspberry Pi devices with SDL-based animation control. Manages two Pi Zero 2W (one per fin) with a round 4" 720x720 display each via a Raspberry Pi 5 which acts as a hub using USB gadget mode networking and MQTT messaging.
+## Project Summary
 
-## Project overview
+A Raspberry Pi-based display management system for Protogen fursuit fin displays (side "ear" panels), featuring synchronized animations, games, and MQTT-based control with ESP32 facial expression integration.
 
-The Protosuit Engine consists of those main components:
+## Hardware Setup
 
-1. **Ansible deployment** (Hub + Fins)
-   - Raspberry Pi 5 hub managing two Pi Zero 2W nodes (one per fin)
-   - USB gadget mode networking for reliable low-latency communication between the hub and the fins
-   - NAT routing between dedicated subnets to allow the fins to access the internet through the hub
-   - MQTT broker for control messages
-   - X11 server for efficient display management on the Pi Zero 2W
-     - Minimal X server installation
-     - Hidden cursor for clean UI
-     - No window decorations
-     - Optimized for embedded displays
-     - Automatic startup via systemd
+- **Device**: Raspberry Pi 5
+- **Displays**: Two 4-inch round 720x720 LCD displays connected via HDMI1 and HDMI2
+- **Purpose**: Fin displays for a Protogen fursuit (the side "ear" panels, not the face visor)
+- **Additional Hardware**: ESP32 running LED matrix animations for facial expressions
+- **Controllers**: Bluetooth controllers (only active during games)
 
-2. **Engine fins** (for the two Pi Zero 2W)
-   - Rust-based SDL application runtime
-   - MQTT-controlled animation/application management
-   - Support for embedded applications (Doom, custom animations, etc)
+## Project Goals
 
-## System architecture
+- Display synchronized animations/shaders on both fin displays
+- Play videos, images, and GIFs on both fins
+- Run games (like Doom 1v1) as a novelty feature
+- Sync fin animations with ESP32 facial expressions
+- Control everything via MQTT commands (no manual controller input for switching modes)
 
-```ascii
-                    [Raspberry Pi 5 Hub]
-                    /                  \
-[Left Fin] USB <-> (192.168.42.0/24)   (192.168.43.0/24) <-> USB [Right Fin]
- 720x720 Display                       720x720 Display
+## Software Architecture
+
+### Core Components
+
+- **Python control script**: Main manager that handles all display switching and process management
+- **MQTT**: All control commands come via MQTT topics
+- **mpv**: For videos, shaders, and animations
+- **feh**: For static images
+- **chocolate-doom**: For running Doom in networked 1v1 mode
+- **mosquitto**: MQTT broker
+
+### Display Management
+
+- Both fin displays always show the same content (synchronized)
+- mpv processes use `DISPLAY` environment variable for display targeting
+- X11 apps (Doom, feh) use `DISPLAY=:0.0` and `DISPLAY=:0.1`
+- Content types: shaders (GLSL), videos, images, GIFs, games
+
+## MQTT Command Structure
+
+```
+protogen/fins/shader → "shader_name.glsl"
+protogen/fins/video → "path/to/video.mp4"
+protogen/fins/image → "path/to/image.png"
+protogen/fins/sync → "happy" | "angry" | "surprised" (syncs with face expressions)
+protogen/fins/game → "doom" | "pong" | etc
+protogen/fins/mode → "idle" | "reactive" | etc
+protogen/fins/status → query current mode
 ```
 
-## System requirements
+## ESP32 Integration
 
-### Hub (Raspberry Pi 5)
-- Raspberry Pi OS Lite (64-bit)
-- 2x USB ports for fin connections (or use a USB hub)
-- Wi-Fi for initial setup
-- 2GB+ RAM recommended
+- ESP32 controls LED matrix face expressions
+- ESP32 publishes face expression changes via MQTT
+- Fin display manager subscribes and reacts with matching animations
+- Two-way communication: fins can notify face when entering game mode
 
-### Fins (Raspberry Pi Zero 2W)
-- Raspberry Pi OS Lite (32-bit)
-- Wi-Fi for initial setup
-- Micro USB OTG connected to the hub via USB cable (or to a USB hub)
-- 4" 720x720 round display (or any other display with the same resolution, or be creative but you're on your own then)
+## Key Implementation Details
 
-## Initial setup
+### Process Management
 
-### 1. Prepare the Hub (Raspberry Pi 5)
+- All display content runs as separate processes
+- When switching modes, old processes are cleanly terminated
+- Game processes are monitored; when they exit, return to idle animation
 
-1. Install Raspberry Pi OS Lite (64-bit) on the hub
-   - Use Raspberry Pi Imager and click the gear icon (⚙️) to pre-configure:
-     - Hostname: `protohub`
-     - SSH (enable and set password or add your key)
-     - Wi-Fi credentials
-2. Boot the Pi and wait for it to connect to your network
+### Controller Handling
 
-### 2. Prepare the Pi Zeros
+- Bluetooth controllers are completely ignored except during games
+- When launching Doom, controllers automatically bind to game instances
+- Left fin = Player 1, Right fin = Player 2 (networked Doom instances)
+- No controller input routing needed - games grab controllers automatically
 
-1. Install Raspberry Pi OS Lite (32-bit) on both Pi Zeros
-   - Use Raspberry Pi Imager and click the gear icon (⚙️) to pre-configure:
-     - Hostname: `protoleftfin` for left Pi Zero, `protorightfin` for right Pi Zero
-     - SSH: enable and set password (or add your key, but you will have to copy the key to the hub manually)
-     - Wi-Fi credentials
-2. Boot the Pi Zeros and wait for them to connect to your network
+### Display Configuration
 
-### 3. Configure SSH access
+- Each display: 720x720 (1:1 aspect ratio, physically round)
+- X11 configured with displays side-by-side (extended desktop)
+- Content should ideally be masked to circular viewport for round displays
 
-1. Connect to the hub via SSH:
-   ```bash
-   ssh proto@protohub
-   ```
+## Installation
 
-2. Generate SSH key on the hub:
-   ```bash
-   ssh-keygen -t ed25519 -N "" -f ~/.ssh/protosuit
-   ```
+### Required Packages
 
-3. Make that key default for SSH:
-   ```bash
-   echo -e "Host *\n    IdentityFile ~/.ssh/protosuit" >> ~/.ssh/config
-   ```
-
-4. Copy SSH key to all devices (including the hub itself):
-   ```bash
-   # Copy to the hub itself (needed for Ansible local connections)
-   ssh-copy-id -i ~/.ssh/protosuit.pub localhost
-
-   # Copy to both Pi Zeros
-   ssh-copy-id -i ~/.ssh/protosuit.pub proto@protoleftfin
-   ssh-copy-id -i ~/.ssh/protosuit.pub proto@protorightfin
-   ```
-
-5. Connect via SSH to all devices to allow the key fingerprint to be added to the known_hosts file:
-   ```bash
-   ssh proto@127.0.0.1
-   ssh proto@protoleftfin
-   ssh proto@protorightfin
-   ```
-
-### 4. Clone the repository
-
-1. Install Ansible and dependencies:
-   ```bash
-   sudo apt update
-   sudo apt install -y ansible git
-   ```
-2. Clone this repository:
-   ```bash
-   git clone https://github.com/lululombard/protosuit-engine.git
-   cd protosuit-engine
-   ```
-
-### 5. Configure Ansible inventory
-
-1. Edit `ansible/inventory/hosts.yml` and replace the placeholder IP addresses with actual Wi-Fi IPs:
-   ```yaml
-   all:
-     children:
-       hub:
-         hosts:
-           hub_pi:
-             ansible_host: "127.0.0.1"
-       fins:
-         hosts:
-           left_fin:
-             ansible_host: "192.168.42.1"  # Replace with protoleftfin's actual Wi-Fi IP
-           right_fin:
-             ansible_host: "192.168.43.1"  # Replace with protorightfin's actual Wi-Fi IP
-   ```
-
-## Running the playbook
-
-Follow these steps in order:
-
-1. Test connectivity to all nodes:
-   ```bash
-   ansible all -i ansible/inventory/hosts.yml -m ping
-   ```
-
-2. Configure networking:
-   ```bash
-   ansible-playbook -i ansible/inventory/hosts.yml ansible/networking.yml
-   ```
-
-3. Disconnect and reconnect to the hub to apply the new shell configuration:
-   ```bash
-   exit
-   ssh proto@protohub
-   cd protosuit-engine
-   ```
-
-4. Once connected to the hub with the new shell, revert `ansible/inventory/hosts.yml` to use the newly created USB network:
-   ```bash
-   git checkout -- ansible/inventory/hosts.yml
-   ```
-
-5. Configure displays:
-   ```bash
-   ansible-playbook -i ansible/inventory/hosts.yml ansible/display.yml
-   ```
-
-6. Configure hub server (MQTT broker):
-   ```bash
-   ansible-playbook -i ansible/inventory/hosts.yml ansible/hub_server.yml
-   ```
-
-7. Build and deploy the Engine Fin application:
-   ```bash
-   ansible-playbook -i ansible/inventory/hosts.yml ansible/engine_fin.yml
-   ```
-
-Note: The Engine Fin deployment step will take approximately 15-30 minutes on the first run as it needs to install the Rust toolchain and compile the application.
-
-### Troubleshooting
-
-If you experience issues with the step-by-step setup, you can try running the complete setup in one go:
 ```bash
-ansible-playbook -i ansible/inventory/hosts.yml ansible/site.yml
-```
-
-Note: The playbooks are idempotent - you can safely run them multiple times. Each run will ensure the configuration is correct without breaking existing setups.
-
-## Network configuration details
-
-### Hub interfaces
-| Interface | IP Address    | MAC Address |
-|-----------|---------------|-------------|
-| usb_left  | 192.168.42.2  | 00:05:69:00:42:02 |
-| usb_right | 192.168.43.2  | 00:05:69:00:43:02 |
-
-### Fin interfaces
-| Device | IP Address    | Gateway     | MAC Address |
-|--------|---------------|-------------|-------------|
-| usb0   | 192.168.42.1  | 192.168.42.2| 00:05:69:00:42:01|
-| usb0   | 192.168.43.1  | 192.168.43.2| 00:05:69:00:43:01|
-
-## Common tools and shell setup
-
-The Ansible playbook automatically installs and configures common tools on all devices:
-
-### Development tools
-- `git` for version control and to clone repositories
-- `htop` for system monitoring
-- `tmux` for terminal multiplexing and persistent sessions
-
-### Shell environment
-- `zsh` as default shell
-- Oh My Zsh configuration
-  - Robbyrussell theme
-  - Git plugin enabled
-  - Custom aliases and improvements
-
-These tools are installed during the networking setup phase to ensure a consistent development environment across all devices.
-
-## Display configuration details (Pi Zero 2W)
-
-The Ansible playbook configures a minimal display environment optimized for the round displays:
-
-### Window manager setup
-  - Minimal memory footprint
-  - No window decorations
-  - Hidden cursor
-  - Automatic startup at boot
-  - Power management disabled
-  - Screen blanking disabled
-
-### X server configuration
-- Minimal X server installation
-  - Only essential input drivers
-  - No unnecessary extensions
-  - Optimized for embedded displays
-  - DPMS (power management) disabled
-  - Automatic startup via systemd
-
-## Engine client development
-
-The Engine Client is a Rust application that runs on the Pi Zeros. It is responsible for managing the SDL-based animation/application and sending control messages to the hub. It will be installed automatically by the Ansible playbook, but if you want to install it manually (for development purposes), here are the dependencies you need to install:
-
-### Cross-platform development setup
-
-The engine client can be developed and tested on different platforms:
-
-#### macOS
-```bash
-# Install dependencies via Homebrew
-brew install sdl2 sdl2_ttf sdl2_gfx mosquitto pkg-config
-
-# Build and run in debug mode
-make dev
-```
-
-#### Linux (Debian/Ubuntu/Raspberry Pi OS)
-```bash
-# Install dependencies
 sudo apt update
-sudo apt install -y \
-    build-essential \
-    libsdl2-dev \
-    libsdl2-ttf-dev \
-    libsdl2-gfx-dev \
-    libx11-dev \
-    mosquitto \
-    mosquitto-clients
-
-# Build
-make
+sudo apt upgrade -y
+sudo apt install -y mosquitto mosquitto-clients python3 python3-pip \
+  mpv feh chocolate-doom retroarch bluetooth bluez python3-evdev \
+  x11-xserver-utils xorg git
 ```
 
-### Feature flags
-- `x11`: Enables X11 window management (required for Linux/Raspberry Pi, not needed for macOS)
+### Python Environment Setup
 
-## Building
-
-1. Build the project:
 ```bash
-make
+mkdir ~/wip
+cd ~/wip
+python3 -m venv env
+source env/bin/activate
+pip install paho-mqtt
 ```
 
-2. The optimized binary will be available at `protosuit-engine-fin`
+## Main Python Script Structure
 
-## Development
+```python
+class FinDisplayManager:
+    def __init__(self):
+        self.displays = [':0.0', ':0.1']  # X11 displays
+        self.current_processes = []
+        self.current_mode = None
 
-For quick development and testing, you can use:
+    def cleanup_processes(self):
+        # Kill all running display processes
+
+    def show_shader(self, shader_name):
+        # Launch mpv with GLSL shader on both displays
+
+    def show_video(self, video_path):
+        # Play video synchronized on both displays
+
+    def show_image(self, image_path):
+        # Display static image on both displays
+
+    def launch_doom(self):
+        # Launch networked Doom: server on display 0, client on display 1
+        # Controllers automatically bind to respective instances
+
+    def sync_with_expression(self, expression):
+        # Map face expressions to fin shaders
+
+    def handle_mqtt(self, client, userdata, msg):
+        # Route MQTT commands to appropriate methods
+
+    def start(self):
+        # Connect to MQTT, subscribe to topics, start main loop
+```
+
+## Typical Workflow
+
+1. System boots → fins start with idle shader animation
+2. ESP32 face changes expression to "happy" → publishes MQTT → fins switch to sparkles shader
+3. User wants to play Doom → publishes `protogen/fins/game = "doom"` via MQTT
+4. Fins launch Doom 1v1, controllers become active, face gets notified
+5. Players finish → Doom exits → fins return to idle animation automatically
+
+## Design Principles
+
+- **Stateless switching**: Can jump between any content type at any time
+- **Clean process management**: Old content is always killed before starting new
+- **MQTT-first**: All commands via MQTT, no local input handling (except in games)
+- **Synchronized displays**: Both fins always show identical content
+- **ESP32 integration**: Bidirectional communication for coordinated effects
+
+## Running the System
+
 ```bash
-# Compile and run in debug mode with logging
-make dev
-
-# Compile for current platform
-make
-
-# Compile for ARMhf (Raspberry Pi 32-bit)
-make armhf
+cd ~/wip
+source env/bin/activate
+python test.py
 ```
 
-These commands combine the build and run steps. The `RUST_LOG` environment variable enables debug logging to help track what's happening in the application.
+The script will:
+- Connect to the local MQTT broker (localhost:1883)
+- Subscribe to `protogen/fins/#` topics
+- Start displaying the idle shader animation
+- Listen for MQTT commands to switch modes
 
-## Configuration
+## Testing MQTT Commands
 
-The application can be configured through environment variables:
-
-- `PROTOSUIT_ENGINE_DEFAULT_SCENE`: Default scene to load at startup ("debug" or "idle", default: "debug")
-- `MQTT_BROKER`: MQTT broker address (default: "localhost")
-- `MQTT_PORT`: MQTT broker port (default: 1883)
-- `DOOM_PATH`: Path to the Doom executable (default: "/usr/games/chocolate-doom")
-- `DOOM_IWAD`: Path to the Doom IWAD file (default: "/usr/share/games/doom/freedoom1.wad")
-
-
-### Scene management
-
-The engine supports two built-in scenes:
-- Debug scene: Displays system information and MQTT connection status
-- Idle scene: Shows current date and time
-
-Scenes can be switched via MQTT commands:
 ```bash
-# Switch to debug scene
-mosquitto_pub -t "app/switch" -m '{"name": "debug"}'
+# Show a shader
+mosquitto_pub -t "protogen/fins/shader" -m "sparkles.glsl"
 
-# Switch to idle scene
-mosquitto_pub -t "app/switch" -m '{"name": "idle"}'
+# Play a video
+mosquitto_pub -t "protogen/fins/video" -m "/path/to/video.mp4"
+
+# Display an image
+mosquitto_pub -t "protogen/fins/image" -m "/path/to/image.png"
+
+# Sync with face expression
+mosquitto_pub -t "protogen/fins/sync" -m "happy"
+
+# Launch Doom
+mosquitto_pub -t "protogen/fins/game" -m "doom"
+
+# Return to idle
+mosquitto_pub -t "protogen/fins/mode" -m "idle"
 ```
 
-## Running
+## Future Expansion Ideas
 
-1. Start the application (if running as root/sudo):
-```bash
-sudo DISPLAY=:0 protosuit-engine-fin
-```
+- Audio-reactive shaders (respond to music/sound)
+- Motion-reactive effects (IMU data from ESP32)
+- More games (Pong, Snake, Tetris)
+- Custom shader library with smooth transitions
+- Web interface for easier control (publishes MQTT commands)
 
-2. Control applications through MQTT messages:
+## Troubleshooting
 
-Start an application:
-```bash
-mosquitto_pub -t "app/start" -m '{
-    "name": "doom",
-    "command": "/usr/games/doom",
-    "args": ["--fullscreen"]
-}'
-```
+### Displays not showing content
+- Check X11 configuration: `xrandr`
+- Verify display connections: both HDMI ports connected
+- Test with: `DISPLAY=:0.0 mpv --fs video.mp4`
 
-Switch to an application:
-```bash
-mosquitto_pub -t "app/switch" -m '{
-    "name": "doom"
-}'
-```
+### MQTT not working
+- Check mosquitto is running: `sudo systemctl status mosquitto`
+- Test connection: `mosquitto_sub -t "protogen/fins/#" -v`
 
-Stop an application:
-```bash
-mosquitto_pub -t "app/stop" -m '{
-    "name": "doom"
-}'
-```
+### Shader files not found
+- Ensure shader directory exists: `/shaders/`
+- Check file paths in MQTT messages
+- Verify mpv supports GLSL shaders
 
-## MQTT topics
+## License
 
-- `app/start`: Start a new application
-- `app/switch`: Switch to a different scene or application
-- `app/stop`: Stop an application
+This is a personal fursuit project. Feel free to adapt for your own use.

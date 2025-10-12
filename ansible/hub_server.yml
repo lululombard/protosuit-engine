@@ -1,6 +1,0 @@
----
-- name: Configure hub server
-  hosts: hub
-  become: true
-  roles:
-    - engine_hub_server_setup

@@ -1,6 +1,0 @@
-# USB gadget network interface configuration
-auto {{ usb_gadget.interface }}
-iface {{ usb_gadget.interface }} inet static
-    address {{ usb_gadget.ip }}
-    netmask {{ usb_gadget.netmask }}
-    gateway {{ usb_gadget.gateway }}

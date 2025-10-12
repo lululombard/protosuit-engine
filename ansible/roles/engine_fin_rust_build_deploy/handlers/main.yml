@@ -1,6 +1,0 @@
----
-- name: restart engine fin
-  systemd:
-    name: engine-fin
-    state: restarted
-    daemon_reload: true

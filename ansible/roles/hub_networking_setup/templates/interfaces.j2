@@ -1,9 +1,0 @@
-# USB network interfaces configuration for systemd-networkd
-{% for interface in interfaces.values() %}
-[Match]
-Name={{ interface.name }}
-
-[Network]
-Address={{ interface.ip }}/24
-
-{% endfor %}

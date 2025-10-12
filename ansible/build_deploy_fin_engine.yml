@@ -1,6 +1,0 @@
----
-- name: Build and deploy engine
-  hosts: hub,fins
-  become: yes
-  roles:
-    - engine_fin_rust_build_deploy
