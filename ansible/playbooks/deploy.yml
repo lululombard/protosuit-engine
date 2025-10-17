@@ -1,0 +1,58 @@
+---
+- name: Complete Protosuit Engine Deployment
+  hosts: protosuit
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Include display configuration tasks
+      include_tasks: display-config.yml
+
+    - name: Include main setup tasks
+      include_tasks: main.yml
+
+    - name: Verify mosquitto is running
+      systemd:
+        name: mosquitto
+        state: started
+        enabled: yes
+
+    - name: Verify protosuit-engine service is running
+      systemd:
+        name: "{{ service_name }}"
+        state: started
+        enabled: yes
+
+    - name: Test MQTT connection
+      shell: |
+        timeout 5 mosquitto_sub -t "protogen/fins/#" -C 1 || true
+      register: mqtt_test
+      failed_when: false
+
+    - name: Display deployment status
+      debug:
+        msg: |
+          Protosuit Engine deployment completed successfully!
+
+          Service Status:
+          - Mosquitto MQTT Broker: Running
+          - Protosuit Engine: Running
+
+          Configuration:
+          - Project Directory: {{ project_dir }}
+          - Display Resolution: {{ display_width }}x{{ display_height }}
+          - MQTT Broker: {{ mqtt_broker }}:{{ mqtt_port }}
+
+          Test Commands:
+          - Check service: sudo systemctl status {{ service_name }}
+          - View logs: sudo journalctl -u {{ service_name }} -f
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: restart mosquitto
+      systemd:
+        name: mosquitto
+        state: restarted

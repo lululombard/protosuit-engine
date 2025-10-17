@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protosuit Engine Control</title>
+    <!-- External CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- MQTT.js library for direct MQTT over WebSockets -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+
+<body>
+    <header>
+        <h1>PROTOSUIT ENGINE</h1>
+        <div class="title-slash">
+            <svg width="560" height="14" xmlns="http://www.w3.org/2000/svg">
+                <!-- Half-filled diagonal hazard stripes (ending diagonally, not squared) -->
+                <g transform="skewX(-45)">
+                    <!-- Amber stripes -->
+                    <rect x="0" y="0" width="320" height="14" fill="#f39c12" />
+                    <rect x="350" y="0" width="30" height="14" fill="#f39c12" />
+                    <rect x="410" y="0" width="30" height="14" fill="#f39c12" />
+                    <rect x="470" y="0" width="30" height="14" fill="#f39c12" />
+                    <rect x="530" y="0" width="30" height="14" fill="#f39c12" />
+                </g>
+            </svg>
+        </div>
+    </header>
+
+    <div class="grid-container">
+        <!-- LEFT COLUMN -->
+        <div class="left-column">
+            <!-- Status -->
+            <section class="panel">
+                <h2>Status</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <span class="label">CONNECTION:</span>
+                        <span id="statusText" class="value">Disconnected</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">ANIMATION:</span>
+                        <span id="currentAnimation" class="value">Unknown</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">RENDERER FPS:</span>
+                        <span id="rendererFps" class="value">--</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">LEFT RES:</span>
+                        <span id="leftRes" class="value">--</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">RIGHT RES:</span>
+                        <span id="rightRes" class="value">--</span>
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button id="connectBtn" onclick="connectMQTT()">Connect</button>
+                    <button id="disconnectBtn" onclick="disconnectMQTT()">Disconnect</button>
+                </div>
+            </section>
+
+            <!-- Animation Control -->
+            <section class="panel">
+                <h2>Animation Control</h2>
+                <div class="button-grid">
+                    {% for key, anim in animations.items() %}
+                    <button onclick="sendExpression('{{ key }}')">{{ anim.emoji }} {{ anim.name }}</button>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <!-- Media Browser -->
+            <section class="panel">
+                <h2>Media Browser</h2>
+                <div class="media-controls">
+                    <div class="button-group">
+                        <button onclick="refreshMedia()">🔄 Refresh</button>
+                        <button onclick="stopMedia()">■ Stop Media</button>
+                    </div>
+                    <div class="media-options">
+                        <label>
+                            <input type="checkbox" id="fadeToBlank">
+                            <span>Fade to blank</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="mediaList" class="media-list">
+                    <p><em>Loading media files...</em></p>
+                </div>
+            </section>
+
+            <!-- Game Control -->
+            <section class="panel">
+                <h2>Game Control</h2>
+                <div class="button-group">
+                    <button onclick="launchDoom()">▶ Launch Doom 1v1</button>
+                    <button onclick="stopGame()">■ Stop Game</button>
+                </div>
+            </section>
+
+            <!-- Custom Command -->
+            <section class="panel">
+                <h2>Custom Command</h2>
+                <div class="input-group">
+                    <input type="text" id="customTopic" placeholder="protogen/fins/media">
+                    <input type="text" id="customPayload" placeholder="rickroll.mp4">
+                    <button onclick="sendCustom()">Send Command</button>
+                </div>
+            </section>
+
+
+            <!-- Message Log -->
+            <section class="panel">
+                <h2>Message Log</h2>
+                <div id="messageLog"></div>
+                <button onclick="clearLog()">Clear Log</button>
+            </section>
+        </div>
+
+        <!-- RIGHT COLUMN -->
+        <div class="right-column">
+            <!-- Display Preview -->
+            <section class="panel">
+                <h2>Display Preview</h2>
+                <div class="preview-controls">
+                    <label>
+                        <input type="checkbox" id="enablePreview" onchange="togglePreview()">
+                        <span>Enable Live Preview</span>
+                    </label>
+                    <span id="previewFps"></span>
+                </div>
+                <div id="previewContainer" style="display: none;">
+                    <img id="previewImage" src="" alt="Display Preview">
+                    <p><small>◢ Left Display | Right Display ◣</small></p>
+                </div>
+            </section>
+
+            <!-- Shader Parameters -->
+            <section class="panel shader-panel">
+                <h2>Shader Parameters</h2>
+                <p class="hint">Select animation to adjust parameters</p>
+
+                <!-- Slider Physics Controls -->
+                <div
+                    style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border: 1px solid var(--border-color);">
+                    <h3 style="margin: 0 0 15px 0; color: var(--accent-primary); font-size: 1.1em;">Slider Physics</h3>
+                    <div class="input-group">
+                        <label>
+                            <input type="checkbox" id="physicsEnabled" checked onchange="togglePhysics(this.checked)">
+                            <span>Enable Slider Physics</span>
+                        </label>
+                        <small>Toggle momentum and damping effects</small>
+                    </div>
+                    <div class="input-group">
+                        <label for="dampingSlider">Damping: <span id="dampingValue">8.0</span></label>
+                        <input type="range" id="dampingSlider" min="0" max="20" step="0.5" value="8"
+                            oninput="updateDamping(this.value)">
+                        <small>Higher values = more resistance to movement</small>
+                    </div>
+                    <div class="input-group">
+                        <label for="springSlider">Spring Force: <span id="springValue">15.0</span></label>
+                        <input type="range" id="springSlider" min="5" max="50" step="1" value="15"
+                            oninput="updateSpring(this.value)">
+                        <small>Higher values = stronger pull toward target</small>
+                    </div>
+                </div>
+
+                <div id="uniformControls">
+                    <p><em>No animation selected...</em></p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- MQTT Rate Monitor -->
+    <div id="mqttRate">MQTT: 0 msg/s</div>
+
+    <!-- JavaScript Modules (loaded in dependency order) -->
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/mqtt.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/animations.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/slider.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/uniforms.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/preview.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/fps-monitor.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/media.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>

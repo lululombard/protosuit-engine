@@ -1,0 +1,27 @@
+#!/bin/sh
+# Protosuit Engine X11 Configuration
+# Dual display setup for fin displays
+
+# Disable screen blanking and power management
+xset s off
+xset -dpms
+xset s noblank
+
+# Allow local connections to X server (needed for fin display manager)
+xhost +local:
+
+# Wait for displays to be ready
+sleep 2
+
+# Configure dual displays
+# HDMI-1: Left fin (rotated right)
+DISPLAY=:0 xrandr --output HDMI-1 --mode {{ display_config.hdmi1.resolution }} --pos {{ display_config.hdmi1.position }} --rotate {{ display_config.hdmi1.rotation }}
+
+# HDMI-2: Right fin (rotated left)
+DISPLAY=:0 xrandr --output HDMI-2 --mode {{ display_config.hdmi2.resolution }} --pos {{ display_config.hdmi2.position }} --rotate {{ display_config.hdmi2.rotation }}
+
+# Set up extended desktop
+DISPLAY=:0 xrandr --output HDMI-1 --primary
+
+# Keep X running
+exec sleep infinity

@@ -1,0 +1,32 @@
+[Unit]
+Description=Protosuit Renderer Service
+After=network.target mosquitto.service xserver.service
+Wants=mosquitto.service xserver.service
+Requires=mosquitto.service xserver.service
+
+[Service]
+Type=simple
+User={{ service_user }}
+Group={{ service_group }}
+WorkingDirectory={{ project_dir }}
+Environment=DISPLAY=:0
+Environment=PYTHONPATH={{ project_dir }}
+ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/renderer/renderer.py
+Restart={{ service_config.restart_policy }}
+RestartSec={{ service_config.restart_sec }}
+TimeoutStopSec={{ service_config.timeout_stop_sec }}
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths={{ project_dir }}
+ReadWritePaths=/home/{{ service_user }}/.config
+ReadWritePaths=/home/{{ service_user }}/.cache
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=graphical.target

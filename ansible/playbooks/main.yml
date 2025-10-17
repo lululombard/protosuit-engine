@@ -1,0 +1,133 @@
+---
+# Main setup tasks for Protosuit Engine
+# This file is included by other playbooks
+
+- name: Update package cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install system packages
+  apt:
+    name: "{{ system_packages }}"
+    state: present
+    update_cache: yes
+
+- name: Configure Mosquitto for WebSocket support
+  copy:
+    dest: /etc/mosquitto/conf.d/websockets.conf
+    content: |
+      # WebSocket support for browser clients (accessible from all interfaces)
+      listener 9001 0.0.0.0
+      protocol websockets
+      allow_anonymous true
+
+      # Standard MQTT port (accessible from all interfaces)
+      listener 1883 0.0.0.0
+      protocol mqtt
+      allow_anonymous true
+    mode: "0644"
+  notify: restart mosquitto
+
+- name: Ensure mosquitto service is enabled and started
+  systemd:
+    name: mosquitto
+    enabled: yes
+    state: started
+
+- name: Create Python virtual environment
+  command: python3 -m venv "{{ project_dir }}/env"
+  become_user: "{{ pi_user }}"
+  args:
+    creates: "{{ project_dir }}/env/bin/python"
+
+- name: Install Python packages in virtual environment
+  command: "env/bin/pip install -r requirements.txt"
+  become_user: "{{ pi_user }}"
+  args:
+    chdir: "{{ project_dir }}"
+
+- name: Set zsh as default shell for pi user
+  user:
+    name: "{{ pi_user }}"
+    shell: /usr/bin/zsh
+
+- name: Check if Oh My Zsh is already installed
+  stat:
+    path: "/home/{{ pi_user }}/.oh-my-zsh"
+  register: ohmyzsh_stat
+
+- name: Install Oh My Zsh
+  shell: |
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+  become_user: "{{ pi_user }}"
+  when: not ohmyzsh_stat.stat.exists
+
+- name: Set Oh My Zsh theme to robbyrussell
+  lineinfile:
+    path: "/home/{{ pi_user }}/.zshrc"
+    regexp: '^ZSH_THEME='
+    line: 'ZSH_THEME="robbyrussell"'
+    owner: "{{ pi_user }}"
+    group: "{{ pi_user }}"
+
+- name: Create protosuit-engine systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-engine.service.j2"
+    dest: /etc/systemd/system/{{ service_name }}.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Create protosuit-renderer systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-renderer.service.j2"
+    dest: /etc/systemd/system/protosuit-renderer.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Create protosuit-web systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-web.service.j2"
+    dest: /etc/systemd/system/protosuit-web.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Create protosuit-system systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-system.service.j2"
+    dest: /etc/systemd/system/protosuit-system.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Set system to boot to graphical target
+  command: systemctl set-default graphical.target
+  become: true
+
+- name: Enable protosuit-renderer service
+  systemd:
+    name: protosuit-renderer
+    enabled: yes
+
+- name: Enable protosuit-engine service
+  systemd:
+    name: "{{ service_name }}"
+    enabled: yes
+
+- name: Enable protosuit-web service
+  systemd:
+    name: protosuit-web
+    enabled: yes
+
+- name: Enable protosuit-system service
+  systemd:
+    name: protosuit-system
+    enabled: yes
+
+- name: Start protosuit-system service (starts all dependent services)
+  systemd:
+    name: protosuit-system
+    state: started

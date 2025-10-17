@@ -1,0 +1,530 @@
+# Default animation to show on startup
+# When launching external programs, engine automatically switches to "blank" for minimal overhead
+default_animation: "aperture"
+
+# System configuration
+system:
+  x_display: ":0"  # X11 display to use
+  window_class: "pygame"  # Window class name for renderer windows
+
+# MQTT configuration
+mqtt:
+  broker: "localhost"
+  port: 1883
+  keepalive: 60
+
+# Web interface configuration
+web:
+  host: "0.0.0.0"  # Bind to all interfaces
+  port: 5000
+  debug: true
+
+# Display configuration
+display:
+  width: 720
+  height: 720
+  left_x: 0    # X position of left display
+  right_x: 720 # X position of right display (left_x + width)
+  y: 0         # Y position of both displays
+
+# Renderer monitoring configuration
+monitoring:
+  fps_publish_interval: 0.1  # Publish FPS data every N seconds
+  fps_smoothing_frames: 3    # Number of frames to average for FPS smoothing
+  enabled: true              # Enable/disable FPS monitoring
+
+animations:
+  # Base animations (persistent, run indefinitely)
+  #
+  # Uniform Configuration:
+  # All shader uniform defaults are defined here under each animation's 'uniforms' section.
+  # These values are applied immediately after shader compilation via MQTT control system.
+  # Format:
+  #   uniform_name: {type: "float|vec2|vec3|vec4", value: <value>, min: <min>, max: <max>, step: <step>}
+  # Per-display configuration:
+  #   uniform_name:
+  #     left: {type: "float", value: 1.0}
+  #     right: {type: "float", value: -1.0}
+  # min/max/step are optional and used for UI controls (sliders)
+
+  blank:
+    type: base
+    name: "Blank"
+    emoji: "⬛"
+    left_shader: "blank.glsl"
+    right_shader: "blank.glsl"
+    rate: 30  # Low framerate since nothing is happening
+    uniforms:
+      backgroundColor: {type: "vec3", value: [0.0, 0.0, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Black
+
+  stars:
+    type: base
+    name: "Stars"
+    emoji: "✨"
+    left_shader: "stars.glsl"
+    right_shader: "stars.glsl"
+    rate: 60
+    uniforms:
+      speed:
+        left: {type: "float", value: 1.0, min: -5.0, max: 5.0, step: 0.1}
+        right: {type: "float", value: -1.0, min: -5.0, max: 5.0, step: 0.1}
+      color1: {type: "vec3", value: [1.0, 1.0, 1.0], min: 0.0, max: 1.0, step: 0.01}    # White
+      color2: {type: "vec3", value: [0.8, 0.8, 0.8], min: 0.0, max: 1.0, step: 0.01}    # Gray
+      accentColor: {type: "vec3", value: [0.0, 0.0, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Black
+      mirrorX:
+        left: {type: "float", value: -1.0, min: -1.0, max: 1.0, step: 2.0}   # Left display: mirrored
+        right: {type: "float", value: 1.0, min: -1.0, max: 1.0, step: 2.0}   # Right display: normal
+  portal:
+    type: base
+    name: "Portal"
+    emoji: "🌀"
+    left_shader: "portal.glsl"
+    right_shader: "portal.glsl"
+    rate: 60
+    render_scale: 0.5  # Render at half resolution (4x performance boost)
+    uniforms:
+      portalOrange:
+        type: vec3
+        value: [1.0, 0.5, 0.0]  # Orange color
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      portalBlue:
+        type: vec3
+        value: [0.0, 0.5, 1.0]  # Blue color
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      portalSpeed:
+        type: float
+        value: 1.0
+        min: 0.1
+        max: 3.0
+        step: 0.1
+      portalIntensity:
+        type: float
+        value: 1.0
+        min: 0.1
+        max: 2.0
+        step: 0.1
+      portalGlow:
+        type: float
+        value: 1.0
+        min: 0.0
+        max: 2.0
+        step: 0.1
+      portalSize:
+        type: float
+        value: 1.0
+        min: 0.5
+        max: 2.0
+        step: 0.1
+  spiral:
+    type: base
+    name: "Spiral"
+    emoji: "🌊"
+    left_shader: "spiral.glsl"
+    right_shader: "spiral.glsl"
+    rate: 60
+    uniforms:
+      spiralColor:
+        type: vec3
+        value: [1.0, 0.5, 0.2]  # Orange/amber color
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      spiralSpeed:
+        type: float
+        value: 1.0
+        min: 0.1
+        max: 5.0
+        step: 0.1
+      spiralDirection:
+        type: float
+        value: 1.0
+        min: -1.0
+        max: 1.0
+        step: 0.1
+      spiralSize:
+        type: float
+        value: 25.0
+        min: 10.0
+        max: 100.0
+        step: 1.0
+      spiralIntensity:
+        type: float
+        value: 1.0
+        min: 0.1
+        max: 2.0
+        step: 0.1
+      spiralFade:
+        type: float
+        value: 1.0
+        min: 0.0
+        max: 2.0
+        step: 0.1
+  aperture:
+    type: base
+    name: "Aperture"
+    emoji: "📷"
+    left_shader: "aperture.glsl"
+    right_shader: "aperture.glsl"
+    rate: 60
+    uniforms:
+      rotationSpeed:
+        left: {type: "float", value: 0.5, min: -2.0, max: 2.0, step: 0.1}    # Clockwise rotation
+        right: {type: "float", value: -0.5, min: -2.0, max: 2.0, step: 0.1}  # Counter-clockwise rotation
+      focusSharpness: {type: "float", value: 360.0, min: 10.0, max: 1000.0, step: 10.0}  # Edge sharpness
+      apertureColor: {type: "vec3", value: [1.0, 0.6, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Orange (RGB sliders)
+  outer_wilds:
+    type: base
+    name: "Outer Wilds"
+    emoji: "🌌"
+    left_shader: "outer_wilds.glsl"
+    right_shader: "outer_wilds.glsl"
+    rate: 30  # Lower framerate target for this heavy shader
+    render_scale: 0.5  # Render at half resolution (4x performance boost)
+    uniforms:
+      cameraX:
+        type: float
+        value: 0.0
+        min: -3.14
+        max: 3.14
+        step: 0.1
+      cameraY:
+        type: float
+        value: 0.0
+        min: -3.14
+        max: 3.14
+        step: 0.1
+      cameraDistance:
+        type: float
+        value: 4.0
+        min: 2.0
+        max: 8.0
+        step: 0.1
+      timeSpeed:
+        type: float
+        value: 1.0
+        min: 0.1
+        max: 3.0
+        step: 0.1
+      sunIntensity:
+        type: float
+        value: 1.0
+        min: 0.1
+        max: 2.0
+        step: 0.1
+      backgroundStars:
+        type: float
+        value: 1.0
+        min: 0.0
+        max: 2.0
+        step: 0.1
+  waves:
+    type: base
+    name: "Waves"
+    emoji: "🌊"
+    left_shader: "waves.glsl"
+    right_shader: "waves.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 5.0, step: 0.1}
+      color1: {type: "vec3", value: [1.0, 0.5, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Orange
+      color2: {type: "vec3", value: [0.0, 0.5, 1.0], min: 0.0, max: 1.0, step: 0.01}  # Blue
+      intensity: {type: "float", value: 1.0, min: 0.0, max: 2.0, step: 0.1}
+      scale: {type: "float", value: 5.0, min: 1.0, max: 500.0, step: 0.5}
+
+  retrowave:
+    type: base
+    name: "Retrowave"
+    emoji: "🌅"
+    left_shader: "retrowave.glsl"
+    right_shader: "retrowave.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      gridIntensity: {type: "float", value: 1.0, min: 0.0, max: 2.0, step: 0.1}
+      sunHeight: {type: "float", value: 0.0, min: -0.5, max: 0.5, step: 0.05}
+      sunColor: {type: "vec3", value: [1.0, 0.4, 0.6], min: 0.0, max: 1.0, step: 0.01}  # Pink/orange
+      gridColor: {type: "vec3", value: [1.0, 0.5, 1.0], min: 0.0, max: 1.0, step: 0.01}  # Pink/purple
+      skyColor: {type: "vec3", value: [0.0, 0.0, 0.2], min: 0.0, max: 1.0, step: 0.01}  # Dark blue
+      mountainColor: {type: "vec3", value: [0.5, 0.0, 0.5], min: 0.0, max: 1.0, step: 0.01}  # Purple
+
+  seascape:
+    type: base
+    name: "Seascape"
+    emoji: "🌊"
+    left_shader: "seascape.glsl"
+    right_shader: "seascape.glsl"
+    rate: 60
+    render_scale: 0.25  # Render at 25% resolution for better performance
+    uniforms:
+      seaSpeed: {type: "float", value: 0.8, min: 0.0, max: 3.0, step: 0.1}
+      seaHeight: {type: "float", value: 0.6, min: 0.1, max: 2.0, step: 0.1}
+      seaChoppy: {type: "float", value: 4.0, min: 1.0, max: 10.0, step: 0.5}
+      seaFreq: {type: "float", value: 0.16, min: 0.05, max: 0.5, step: 0.01}
+      seaBase: {type: "vec3", value: [0.0, 0.09, 0.18], min: 0.0, max: 1.0, step: 0.01}  # Deep water color
+      seaWater: {type: "vec3", value: [0.48, 0.54, 0.36], min: 0.0, max: 1.0, step: 0.01}  # Shallow water color (0.8*0.6, 0.9*0.6, 0.6*0.6)
+      skyColor: {type: "vec3", value: [1.0, 0.8, 0.6], min: 0.0, max: 1.0, step: 0.01}  # Sunset orange/yellow
+      cameraHeight: {type: "float", value: 3.5, min: 1.0, max: 10.0, step: 0.5}
+      timeScale: {type: "float", value: 0.3, min: 0.0, max: 1.0, step: 0.05}
+
+  optical_lens:
+    type: base
+    name: "Optical Lens"
+    emoji: "🔮"
+    left_shader: "optical_lens.glsl"
+    right_shader: "optical_lens.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      intensity: {type: "float", value: 1.0, min: 0.1, max: 2.0, step: 0.1}
+      scale: {type: "float", value: 9.0, min: 1.0, max: 20.0, step: 0.5}
+      lensColor: {type: "vec3", value: [1.0, 1.0, 1.0], min: 0.0, max: 1.0, step: 0.01}  # White (RGB sliders)
+
+  hypnosis_tunnel:
+    type: base
+    name: "Hypnosis Tunnel"
+    emoji: "🌀"
+    left_shader: "hypnosis_tunnel.glsl"
+    right_shader: "hypnosis_tunnel.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      intensity: {type: "float", value: 1.0, min: 0.1, max: 2.0, step: 0.1}
+      darkness: {type: "float", value: 0.0, min: 0.0, max: 1.0, step: 0.05}  # Inverted: 0=bright, 1=dark
+      tunnelColor: {type: "vec3", value: [1.0, 1.0, 1.0], min: 0.0, max: 1.0, step: 0.01}  # White (foreground)
+      backgroundColor: {type: "vec3", value: [0.0, 0.0, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Black (background)
+
+  hypnosis_classic:
+    type: base
+    name: "Hypnosis Classic"
+    emoji: "🌀"
+    left_shader: "hypnosis_classic.glsl"
+    right_shader: "hypnosis_classic.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 2.0, min: 0.0, max: 5.0, step: 0.1}
+      spiralScale: {type: "float", value: 20.0, min: 5.0, max: 50.0, step: 1.0}
+      foregroundColor: {type: "vec3", value: [0.88, 0.0, 0.52], min: 0.0, max: 1.0, step: 0.01}  # Magenta
+      backgroundColor: {type: "vec3", value: [0.0, 0.0, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Black
+
+  chromatic_waves:
+    type: base
+    name: "Chromatic Waves"
+    emoji: "🌊"
+    left_shader: "chromatic_waves.glsl"
+    right_shader: "chromatic_waves.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      waveFrequency: {type: "float", value: 3.1415, min: 1.0, max: 10.0, step: 0.1}
+      rippleSpeed: {type: "float", value: 4.0, min: 1.0, max: 10.0, step: 0.5}
+      rippleScale: {type: "float", value: 8.0, min: 2.0, max: 20.0, step: 0.5}
+      colorIntensity: {type: "float", value: 1.0, min: 0.1, max: 2.0, step: 0.1}
+
+  hex_kaleidoscope:
+    type: base
+    name: "Hex Kaleidoscope"
+    emoji: "⬡"
+    left_shader: "hex_kaleidoscope.glsl"
+    right_shader: "hex_kaleidoscope.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      scale: {type: "float", value: 1.0, min: 0.5, max: 2.0, step: 0.1}
+      colorShift: {type: "float", value: 0.0, min: 0.0, max: 6.28, step: 0.1}
+      brightness: {type: "float", value: 1.0, min: 0.1, max: 2.0, step: 0.1}
+
+  infinite_cube:
+    type: base
+    name: "Infinite Cube"
+    emoji: "🔲"
+    left_shader: "infinite_cube.glsl"
+    right_shader: "infinite_cube.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.1, max: 3.0, step: 0.1}
+      cameraAngle: {type: "float", value: 0.0, min: -3.14, max: 3.14, step: 0.1}
+      cameraHeight: {type: "float", value: 1.5, min: 0.5, max: 3.0, step: 0.1}
+      colorX: {type: "vec3", value: [1.0, 0.0, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Red (X-axis)
+      colorY: {type: "vec3", value: [0.0, 1.0, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Green (Y-axis)
+      colorZ: {type: "vec3", value: [0.0, 0.0, 1.0], min: 0.0, max: 1.0, step: 0.01}  # Blue (Z-axis)
+      backgroundColor: {type: "vec3", value: [0.5, 0.5, 0.5], min: 0.0, max: 1.0, step: 0.01}  # Gray
+
+  echo_signal:
+    type: base
+    name: "Echo Signal"
+    emoji: "📡"
+    left_shader: "echo_signal.glsl"
+    right_shader: "echo_signal.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      radius: {type: "float", value: 0.5, min: 0.1, max: 1.0, step: 0.05}
+      width: {type: "float", value: 0.8, min: 0.1, max: 2.0, step: 0.1}
+      power: {type: "float", value: 0.1, min: 0.01, max: 0.5, step: 0.01}
+      colorHue: {type: "float", value: 0.5, min: 0.0, max: 1.0, step: 0.01}  # Cyan/blue by default
+      colorSaturation: {type: "float", value: 1.0, min: 0.0, max: 1.0, step: 0.01}
+
+  rgb_ring:
+    type: base
+    name: "RGB Ring"
+    emoji: "💍"
+    left_shader: "rgb_ring.glsl"
+    right_shader: "rgb_ring.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      innerRadius: {type: "float", value: 0.6, min: 0.1, max: 0.9, step: 0.05}
+      noiseScale: {type: "float", value: 0.65, min: 0.1, max: 2.0, step: 0.05}
+      glowIntensity: {type: "float", value: 1.0, min: 0.1, max: 3.0, step: 0.1}
+      color1: {type: "vec3", value: [0.611765, 0.262745, 0.996078], min: 0.0, max: 1.0, step: 0.01}  # Purple
+      color2: {type: "vec3", value: [0.298039, 0.760784, 0.913725], min: 0.0, max: 1.0, step: 0.01}  # Cyan
+      color3: {type: "vec3", value: [0.062745, 0.078431, 0.600000], min: 0.0, max: 1.0, step: 0.01}  # Dark blue
+      backgroundColor: {type: "vec3", value: [0.0, 0.0, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Black
+
+  plasma_globe:
+    type: base
+    name: "Plasma Globe"
+    emoji: "⚡"
+    left_shader: "plasma_globe.glsl"
+    right_shader: "plasma_globe.glsl"
+    rate: 60
+    render_scale: 0.25  # Complex volumetric raymarching shader, render at half resolution
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 2.0, step: 0.1}
+      numRays: {type: "float", value: 13.0, min: 5.0, max: 25.0, step: 1.0}
+      squiggliness: {type: "float", value: 0.5, min: 0.0, max: 1.5, step: 0.1}  # Lower = smoother paths
+      rotationSpeed: {type: "float", value: 1.0, min: 0.0, max: 2.0, step: 0.1}
+      plasmaColor1: {type: "vec3", value: [0.2, 0.5, 1.0], min: 0.0, max: 1.0, step: 0.01}  # Cyan/blue
+      plasmaColor2: {type: "vec3", value: [1.0, 0.2, 0.8], min: 0.0, max: 1.0, step: 0.01}  # Magenta/pink
+      brightness: {type: "float", value: 1.0, min: 0.1, max: 2.0, step: 0.1}
+
+  monster:
+    type: base
+    name: "Monster"
+    emoji: "👾"
+    left_shader: "monster.glsl"
+    right_shader: "monster.glsl"
+    rate: 60
+    render_scale: 0.33  # Raymarching shader, render at half resolution for better performance
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      rotationSpeed: {type: "float", value: 1.0, min: 0.0, max: 2.0, step: 0.1}
+      iterations: {type: "float", value: 4.0, min: 1.0, max: 8.0, step: 1.0}
+      tunnelColor: {type: "vec3", value: [0.1, 0.7, 0.7], min: 0.0, max: 1.0, step: 0.01}  # Cyan
+      glowColor: {type: "vec3", value: [0.1, 1.0, 0.1], min: 0.0, max: 1.0, step: 0.01}  # Green
+      glowIntensity: {type: "float", value: 3.0, min: 0.0, max: 10.0, step: 0.5}
+      brightness: {type: "float", value: 1.0, min: 0.1, max: 2.0, step: 0.1}
+
+  sun:
+    type: base
+    name: "Sun"
+    emoji: "☀️"
+    left_shader: "sun.glsl"
+    right_shader: "sun.glsl"
+    rate: 60
+    render_scale: 0.5
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      brightness: {type: "float", value: 0.5, min: 0.0, max: 1.5, step: 0.05}
+      coronaScale: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      turbulence: {type: "float", value: 1.0, min: 0.0, max: 2.0, step: 0.1}
+      sunColor: {type: "vec3", value: [0.8, 0.65, 0.3], min: 0.0, max: 1.0, step: 0.01}  # Orange
+      coronaColor: {type: "vec3", value: [0.8, 0.35, 0.1], min: 0.0, max: 1.0, step: 0.01}  # Orange-red
+
+  fractal_land:
+    type: base
+    name: "Fractal Land"
+    emoji: "🏔️"
+    left_shader: "fractal_land.glsl"
+    right_shader: "fractal_land.glsl"
+    rate: 60
+    render_scale: 0.25  # Complex raymarching shader
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      edgeIntensity: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      sunSize: {type: "float", value: 7.0, min: 3.0, max: 15.0, step: 0.5}
+      skyColor: {type: "vec3", value: [0.5, 0.0, 1.0], min: 0.0, max: 1.0, step: 0.01}  # Purple
+      sunColor: {type: "vec3", value: [1.0, 0.9, 0.5], min: 0.0, max: 1.0, step: 0.01}  # Yellow
+      landColor: {type: "vec3", value: [1.0, 0.9, 0.3], min: 0.0, max: 1.0, step: 0.01}  # Yellow-white
+      brightness: {type: "float", value: 1.2, min: 0.1, max: 2.0, step: 0.1}
+      waves: {type: "float", value: 1.0, min: 0.0, max: 1.0, step: 1.0}  # Toggle waves
+
+  radar:
+    type: base
+    name: "Radar"
+    emoji: "📡"
+    left_shader: "radar.glsl"
+    right_shader: "radar.glsl"
+    rate: 60
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      scanSpeed: {type: "float", value: 1.0, min: 0.0, max: 5.0, step: 0.1}
+      color1: {type: "vec3", value: [0.74, 0.95, 1.0], min: 0.0, max: 1.0, step: 0.01}  # Light blue
+      color2: {type: "vec3", value: [0.87, 0.98, 1.0], min: 0.0, max: 1.0, step: 0.01}  # Pale blue
+      color3: {type: "vec3", value: [0.35, 0.76, 0.83], min: 0.0, max: 1.0, step: 0.01}  # Teal
+      targetColor: {type: "vec3", value: [1.0, 0.38, 0.227], min: 0.0, max: 1.0, step: 0.01}  # Red/orange
+      brightness: {type: "float", value: 1.0, min: 0.1, max: 2.0, step: 0.1}
+
+  mario:
+    type: base
+    name: "Super Mario Bros"
+    emoji: "🍄"
+    left_shader: "mario.glsl"
+    right_shader: "mario.glsl"
+    rate: 60
+    render_scale: 0.75
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      brightness: {type: "float", value: 1.0, min: 0.5, max: 2.0, step: 0.1}
+      crtEffect: {type: "float", value: 0.844, min: 0.0, max: 2.0, step: 0.001}
+
+  protean_clouds:
+    type: base
+    name: "Protean Clouds"
+    emoji: "☁️"
+    left_shader: "protean_clouds.glsl"
+    right_shader: "protean_clouds.glsl"
+    rate: 60
+    render_scale: 0.1
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      density: {type: "float", value: 1.0, min: 0.1, max: 3.0, step: 0.1}
+      turbulence: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      cloudColor1: {type: "vec3", value: [0.2, 0.4, 0.6], min: 0.0, max: 1.0, step: 0.01}
+      cloudColor2: {type: "vec3", value: [0.8, 0.9, 1.0], min: 0.0, max: 1.0, step: 0.01}
+      brightness: {type: "float", value: 1.0, min: 0.1, max: 2.0, step: 0.1}
+
+# Transition settings for smooth shader changes
+transitions:
+  enabled: true
+  duration: 1.0  # Transition duration in seconds (0.5-1.0s recommended)
+  easing: "smoothstep"  # Easing function: linear, smoothstep, ease-in-out
+  blur:
+    enabled: true  # Enable blur effect during transitions
+    strength: 8.0  # Blur intensity (0.0 = no blur, 8.0 = moderate, 16.0 = strong)
+
+media:
+  base_path: "assets/media"
+  fade_to_blank: false  # If true, media fade to blank background. If false, play over current shader.
+
+games:
+  # External programs follow the "base shader + program" pattern:
+  # 1. Engine keeps minimal shader (e.g., 'blank') running
+  # 2. Program windows are positioned over the displays
+  # 3. When program exits, engine returns to base shader
+  # This pattern is reusable for any X11 application
+
+  doom:
+    enabled: true
+    executable: "/usr/games/chocolate-doom"  # Path to Doom executable
+    # Window positions [x, y] for each display (720x720 each)
+    # Adjust Y value to center the window (accounts for title bar)
+    position_left: [0, 90]    # Left fin: x=0, y=90
+    position_right: [720, 90]  # Right fin: x=720, y=90
+
+  # Add more programs here following the same pattern
+  # See engine/launchers/README.md for instructions

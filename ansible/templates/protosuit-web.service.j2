@@ -1,0 +1,28 @@
+[Unit]
+Description=Protosuit Engine Web Interface
+After=network.target mosquitto.service
+Wants=mosquitto.service
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User={{ service_user }}
+Group={{ service_group }}
+WorkingDirectory={{ project_dir }}
+Environment=PYTHONPATH={{ project_dir }}
+ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/web/server.py
+Restart={{ service_config.restart_policy }}
+RestartSec={{ service_config.restart_sec }}
+TimeoutStopSec={{ service_config.timeout_stop_sec }}
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths={{ project_dir }}
+
+[Install]
+WantedBy=multi-user.target

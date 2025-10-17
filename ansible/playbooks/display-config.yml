@@ -1,0 +1,86 @@
+---
+# Display configuration tasks for Protosuit Engine
+# This file is included by other playbooks
+
+- name: Install X11 and display utilities
+  apt:
+    name:
+      - xorg
+      - x11-xserver-utils
+    state: present
+
+- name: Configure X wrapper to allow any user
+  lineinfile:
+    path: /etc/X11/Xwrapper.config
+    regexp: '^allowed_users='
+    line: 'allowed_users=anybody'
+    backup: yes
+
+- name: Create X11 configuration directory
+  file:
+    path: /etc/X11/xorg.conf.d
+    state: directory
+    mode: '0755'
+
+- name: Configure X11 for dual displays
+  template:
+    src: "{{ playbook_dir }}/../templates/99-dual-display.conf.j2"
+    dest: /etc/X11/xorg.conf.d/99-dual-display.conf
+    mode: '0644'
+  notify: restart display manager
+
+- name: Create xinitrc for dual display setup
+  template:
+    src: "{{ playbook_dir }}/../templates/xinitrc.j2"
+    dest: "{{ pi_home }}/.xinitrc"
+    owner: "{{ pi_user }}"
+    group: "{{ pi_user }}"
+    mode: '0755'
+
+- name: Create autostart directory
+  file:
+    path: "{{ pi_home }}/.config/autostart"
+    state: directory
+    owner: "{{ pi_user }}"
+    group: "{{ pi_user }}"
+    mode: '0755'
+
+- name: Set up display environment variables
+  template:
+    src: "{{ playbook_dir }}/../templates/display-env.sh.j2"
+    dest: "{{ pi_home }}/.display-env.sh"
+    owner: "{{ pi_user }}"
+    group: "{{ pi_user }}"
+    mode: '0755'
+
+- name: Add display environment to bashrc
+  lineinfile:
+    path: "{{ pi_home }}/.bashrc"
+    line: "source {{ pi_home }}/.display-env.sh"
+    create: yes
+    owner: "{{ pi_user }}"
+    group: "{{ pi_user }}"
+
+- name: Create X server startup script
+  template:
+    src: "{{ playbook_dir }}/../templates/start-x-server.sh.j2"
+    dest: /usr/local/bin/start-x-server.sh
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Create X server systemd service
+  template:
+    src: "{{ playbook_dir }}/../templates/xserver.service.j2"
+    dest: /etc/systemd/system/xserver.service
+    mode: '0644'
+  notify: reload systemd
+
+- name: Enable and start X server service
+  systemd:
+    name: xserver
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
+# Handlers are defined in the calling playbook

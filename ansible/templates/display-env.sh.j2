@@ -1,0 +1,58 @@
+#!/bin/bash
+# Display environment variables for Protosuit Engine
+
+# Set display variables
+export DISPLAY=:0
+export SDL_VIDEO_FULLSCREEN_HEAD_0=0
+export SDL_VIDEO_FULLSCREEN_HEAD_1=1
+
+# MQTT configuration
+export MQTT_BROKER={{ mqtt_broker }}
+export MQTT_PORT={{ mqtt_port }}
+
+# Project paths
+export PROTOSUIT_DIR={{ project_dir }}
+export SHADER_DIR={{ project_dir }}/shaders
+
+# Display geometry
+export FIN_WIDTH={{ display_width }}
+export FIN_HEIGHT={{ display_height }}
+
+# Add project directory to PATH
+export PATH="{{ project_dir }}/env/bin:$PATH"
+
+# Function to test displays
+test_displays() {
+    echo "Testing dual display setup..."
+    echo "HDMI-1 (Left fin): {{ display_config.hdmi1.resolution }} at {{ display_config.hdmi1.position }}"
+    echo "HDMI-2 (Right fin): {{ display_config.hdmi2.resolution }} at {{ display_config.hdmi2.position }}"
+
+    # Test with simple color fills
+    DISPLAY=:0 xsetroot -solid red &
+    sleep 1
+    DISPLAY=:0 xsetroot -solid blue &
+    sleep 1
+    DISPLAY=:0 xsetroot -solid black
+}
+
+# Function to start protosuit engine
+start_protosuit() {
+    cd {{ project_dir }}
+    source env/bin/activate
+    python protosuit_engine.py
+}
+
+# Function to stop protosuit engine
+stop_protosuit() {
+    sudo systemctl stop {{ service_name }}
+}
+
+# Function to restart protosuit engine
+restart_protosuit() {
+    sudo systemctl restart {{ service_name }}
+}
+
+# Function to check protosuit status
+status_protosuit() {
+    sudo systemctl status {{ service_name }}
+}

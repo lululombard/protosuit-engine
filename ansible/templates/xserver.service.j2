@@ -1,0 +1,14 @@
+[Unit]
+Description=X Server for Protosuit Engine
+After=basic.target multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/start-x-server.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=60
+
+[Install]
+WantedBy=graphical.target

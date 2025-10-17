@@ -1,0 +1,51 @@
+#!/bin/bash
+# X Server startup script for Protosuit Engine
+# This script starts X server and configures dual displays
+
+set -e
+
+# Wait for system to be ready
+sleep 5
+
+# Kill any existing X processes
+pkill -f "X :0" || true
+sleep 2
+
+# Start X server in background
+export DISPLAY=:0
+nohup startx -- :0 > /var/log/xserver.log 2>&1 &
+
+# Wait for X server to start
+for i in {1..30}; do
+    if xset q >/dev/null 2>&1; then
+        echo "X server started successfully"
+        break
+    fi
+    echo "Waiting for X server... ($i/30)"
+    sleep 1
+done
+
+# Configure displays with correct rotation
+echo "Configuring dual displays..."
+
+# HDMI-1: Left fin (rotated right)
+xrandr --output HDMI-1 --mode 720x720 --pos 0x0 --rotate {{ display_config.hdmi1.rotation }} || echo "Failed to configure HDMI-1"
+
+# HDMI-2: Right fin (rotated left)
+xrandr --output HDMI-2 --mode 720x720 --pos 720x0 --rotate {{ display_config.hdmi2.rotation }} || echo "Failed to configure HDMI-2"
+
+# Set HDMI-1 as primary
+xrandr --output HDMI-1 --primary || echo "Failed to set HDMI-1 as primary"
+
+# Disable screen blanking and power management
+xset s off
+xset -dpms
+xset s noblank
+
+# Allow local connections to X server
+xhost +local:
+
+# Hide the mouse cursor
+unclutter -idle 0.1 -root &
+
+echo "Display configuration complete"
