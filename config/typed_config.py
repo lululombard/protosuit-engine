@@ -79,22 +79,6 @@ class TransitionConfig:
 
 
 @dataclass
-class GameConfig:
-    """Game configuration"""
-
-    enabled: bool = False
-    executable: str = ""
-    position_left: List[int] = None
-    position_right: List[int] = None
-
-    def __post_init__(self):
-        if self.position_left is None:
-            self.position_left = [0, 90]
-        if self.position_right is None:
-            self.position_right = [720, 90]
-
-
-@dataclass
 class UniformConfig:
     """Uniform configuration"""
 
@@ -118,17 +102,8 @@ class AnimationConfig:
     uniforms: List[UniformConfig] = None
     duration: Optional[float] = None
     render_scale: Optional[float] = None
-    media: Optional[str] = None
     loop: bool = False
 
     def __post_init__(self):
         if self.uniforms is None:
             self.uniforms = []
-
-
-@dataclass
-class MediaConfig:
-    """Media configuration"""
-
-    base_path: str = "assets/media"
-    fade_to_blank: bool = False

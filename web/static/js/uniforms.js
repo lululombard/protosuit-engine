@@ -333,14 +333,13 @@ function setUniformRealtimeSmooth(uniformName, uniformType) {
 // Send MQTT command for slider (extracted for reuse)
 function sendSliderMQTT(uniformName, value, uniformType) {
     const target = uniformTargets[uniformName] || 'both';
-    let payload;
-    if (target === 'both') {
-        payload = `${uniformName}:${uniformType}:${value}`;
-    } else {
-        const displayIdx = target === 'left' ? 0 : 1;
-        payload = `${displayIdx}:${uniformName}:${uniformType}:${value}`;
-    }
-    sendCommand('protogen/fins/uniform', payload, true); // Silent mode
+    const payload = JSON.stringify({
+        display: target,
+        name: uniformName,
+        type: uniformType,
+        value: value
+    });
+    sendCommand('protogen/fins/renderer/set/shader/uniform', payload, true); // Silent mode
 }
 
 // Set vec3 uniform with momentum-based smoothing
@@ -399,15 +398,13 @@ function setVec3UniformRealtimeSmooth(uniformName) {
 // Send MQTT command for vec3 slider (extracted for reuse)
 function sendVec3MQTT(uniformName, values) {
     const target = uniformTargets[uniformName] || 'both';
-    const value = `${values[0]}, ${values[1]}, ${values[2]}`;
-    let payload;
-    if (target === 'both') {
-        payload = `${uniformName}:vec3:${value}`;
-    } else {
-        const displayIdx = target === 'left' ? 0 : 1;
-        payload = `${displayIdx}:${uniformName}:vec3:${value}`;
-    }
-    sendCommand('protogen/fins/uniform', payload, true); // Silent mode
+    const payload = JSON.stringify({
+        display: target,
+        name: uniformName,
+        type: 'vec3',
+        value: values
+    });
+    sendCommand('protogen/fins/renderer/set/shader/uniform', payload, true); // Silent mode
 }
 
 // Animate vec3 slider with momentum and damping
@@ -492,62 +489,65 @@ function animateVec3Slider(uniformName) {
     }
 }
 
-// Handle uniform state updates from engine
-function handleUniformState(payload) {
+// Handle renderer uniform status updates from MQTT
+function handleRendererUniformStatus(payload) {
     try {
-        const state = JSON.parse(payload);
-        Object.assign(currentUniformValues, state);
-        // Refresh uniform controls with new values
-        if (currentAnimation) {
-            updateUniformControls(currentAnimation);
-        }
-        logMessage(`✓ Received uniform state: ${Object.keys(state).length} values`);
-    } catch (e) {
-        console.error('Failed to parse uniform state:', e);
-    }
-}
+        const status = JSON.parse(payload);
 
-// Handle uniform changes from other clients
-function handleUniformChanged(payload) {
-    try {
-        const change = JSON.parse(payload);
-        const uniformName = change.uniform;
-        const uniformType = change.type;
-        const value = change.value;
+        // Extract uniform values from the status
+        // Status format: { "uniformName": { "type": "float", "value": 1.5 } }
+        for (const [uniformName, uniformInfo] of Object.entries(status)) {
+            const uniformType = uniformInfo.type;
+            const value = uniformInfo.value;
 
-        // Update our tracked value
-        currentUniformValues[uniformName] = value;
-
-        // Update slider UI (if it exists)
-        if (uniformType === 'float') {
-            const slider = document.getElementById(`uniform_${uniformName}`);
-            const valueSpan = document.getElementById(`value_${uniformName}`);
-            if (slider && valueSpan) {
-                slider.value = value;
-                valueSpan.textContent = value.toFixed(3);
+            // Handle both per-display and global values
+            let actualValue = value;
+            if (typeof value === 'object' && 'left' in value && 'right' in value) {
+                // If both displays have same value, use it
+                if (JSON.stringify(value.left) === JSON.stringify(value.right)) {
+                    actualValue = value.left;
+                } else {
+                    // Use left value for now (could be enhanced to show both)
+                    actualValue = value.left;
+                }
             }
-        } else if (uniformType === 'vec3' && Array.isArray(value)) {
-            const sliderR = document.getElementById(`uniform_${uniformName}_r`);
-            const sliderG = document.getElementById(`uniform_${uniformName}_g`);
-            const sliderB = document.getElementById(`uniform_${uniformName}_b`);
-            const valueR = document.getElementById(`value_${uniformName}_r`);
-            const valueG = document.getElementById(`value_${uniformName}_g`);
-            const valueB = document.getElementById(`value_${uniformName}_b`);
-            const preview = document.getElementById(`color_preview_${uniformName}`);
 
-            if (sliderR && sliderG && sliderB) {
-                sliderR.value = value[0];
-                sliderG.value = value[1];
-                sliderB.value = value[2];
-                if (valueR) valueR.textContent = value[0].toFixed(3);
-                if (valueG) valueG.textContent = value[1].toFixed(3);
-                if (valueB) valueB.textContent = value[2].toFixed(3);
-                if (preview) {
-                    preview.style.background = `rgb(${value[0] * 255}, ${value[1] * 255}, ${value[2] * 255})`;
+            // Update our tracked value
+            currentUniformValues[uniformName] = actualValue;
+
+            // Update slider UI (if it exists)
+            if (uniformType === 'float') {
+                const slider = document.getElementById(`uniform_${uniformName}`);
+                const valueSpan = document.getElementById(`value_${uniformName}`);
+                if (slider && valueSpan) {
+                    slider.value = actualValue;
+                    valueSpan.textContent = actualValue.toFixed(3);
+                }
+            } else if (uniformType === 'vec3' && Array.isArray(actualValue)) {
+                const sliderR = document.getElementById(`uniform_${uniformName}_r`);
+                const sliderG = document.getElementById(`uniform_${uniformName}_g`);
+                const sliderB = document.getElementById(`uniform_${uniformName}_b`);
+                const valueR = document.getElementById(`value_${uniformName}_r`);
+                const valueG = document.getElementById(`value_${uniformName}_g`);
+                const valueB = document.getElementById(`value_${uniformName}_b`);
+                const preview = document.getElementById(`color_preview_${uniformName}`);
+
+                if (sliderR && sliderG && sliderB) {
+                    sliderR.value = actualValue[0];
+                    sliderG.value = actualValue[1];
+                    sliderB.value = actualValue[2];
+                    if (valueR) valueR.textContent = actualValue[0].toFixed(3);
+                    if (valueG) valueG.textContent = actualValue[1].toFixed(3);
+                    if (valueB) valueB.textContent = actualValue[2].toFixed(3);
+                    if (preview) {
+                        preview.style.background = `rgb(${actualValue[0] * 255}, ${actualValue[1] * 255}, ${actualValue[2] * 255})`;
+                    }
                 }
             }
         }
+
+        console.log(`✓ Received uniform status: ${Object.keys(status).length} uniforms`);
     } catch (e) {
-        console.error('Failed to parse uniform change:', e);
+        console.error('Failed to parse renderer uniform status:', e);
     }
 }

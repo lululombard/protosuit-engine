@@ -8,10 +8,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Start MQTT rate monitor
     startMQTTRateMonitor();
 
-    // Load animation data from server
-    loadAnimationsData();
-
-    // Connect to MQTT broker
+    // Connect to MQTT broker (animations will be loaded from renderer status)
     connectMQTT();
 
     // Initialize preview (check if checkbox was restored by browser)

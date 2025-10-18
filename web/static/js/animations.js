@@ -2,20 +2,36 @@
 
 let currentAnimation = null;
 let animationsData = {};
+let availableAnimations = [];
 
-// Load animations data with uniform info
-async function loadAnimationsData() {
+// Handle renderer shader status updates from MQTT
+function handleRendererShaderStatus(payload) {
     try {
-        // Add cache-busting parameter
-        const response = await fetch('/api/animations?t=' + Date.now());
-        const data = await response.json();
-        animationsData = {};
-        data.animations.forEach(anim => {
-            animationsData[anim.id] = anim;
-            console.log('Loaded animation:', anim.id, 'uniforms:', anim.uniforms);
-        });
-        logMessage('Loaded ' + data.animations.length + ' animations');
+        const data = JSON.parse(payload);
+        availableAnimations = data.available || [];
+
+        // Load animation metadata (uniforms, etc)
+        if (data.animations) {
+            animationsData = {};
+            data.animations.forEach(anim => {
+                animationsData[anim.id] = anim;
+                console.log('Loaded animation:', anim.id, 'uniforms:', anim.uniforms);
+            });
+            logMessage(`✓ Loaded ${data.animations.length} animations from renderer`);
+        }
+
+        // Update current animation display
+        if (data.current) {
+            const leftAnim = data.current.left;
+            const rightAnim = data.current.right;
+
+            // If both sides show the same animation, display it
+            if (leftAnim === rightAnim && leftAnim) {
+                handleAnimationChange(leftAnim);
+            }
+        }
     } catch (error) {
+        console.error('Error parsing shader status:', error);
         logMessage(`Error loading animations: ${error.message}`);
     }
 }
@@ -25,8 +41,6 @@ function handleAnimationChange(animationId) {
     if (currentAnimSpan.textContent !== animationId) {
         currentAnimSpan.textContent = animationId;
         currentAnimation = animationId;
-        // Request current uniform values from engine
-        requestUniformState();
         updateUniformControls(animationId);
     }
 }
@@ -34,17 +48,15 @@ function handleAnimationChange(animationId) {
 function sendExpression(expression) {
     currentAnimation = expression;
     updateUniformControls(expression);
-    sendCommand('protogen/fins/sync', expression);
-}
 
-function launchDoom() {
-    sendCommand('protogen/fins/game', 'doom');
+    // Send to renderer with new JSON format
+    const payload = JSON.stringify({
+        display: "both",
+        name: expression,
+        transition_duration: 0.75
+    });
+    sendCommand('protogen/fins/renderer/set/shader/file', payload);
 }
-
-function stopGame() {
-    sendCommand('protogen/fins/game', 'stop');
-}
-
 
 function sendCustom() {
     const topic = document.getElementById('customTopic').value;

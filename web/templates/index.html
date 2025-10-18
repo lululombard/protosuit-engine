@@ -73,32 +73,19 @@
                 </div>
             </section>
 
-            <!-- Media Browser -->
+            <!-- File Browser -->
             <section class="panel">
-                <h2>Media Browser</h2>
-                <div class="media-controls">
+                <h2>File Browser</h2>
+                <div class="file-controls">
                     <div class="button-group">
-                        <button onclick="refreshMedia()">🔄 Refresh</button>
-                        <button onclick="stopMedia()">■ Stop Media</button>
-                    </div>
-                    <div class="media-options">
-                        <label>
-                            <input type="checkbox" id="fadeToBlank">
-                            <span>Fade to blank</span>
-                        </label>
+                        <button onclick="refreshFiles()">🔄 Refresh</button>
+                        <button onclick="killAudio()">🔪 Kill Audio</button>
+                        <button onclick="killVideo()">🔪 Kill Video</button>
+                        <button onclick="killExec()">🔪 Kill Exec</button>
                     </div>
                 </div>
-                <div id="mediaList" class="media-list">
-                    <p><em>Loading media files...</em></p>
-                </div>
-            </section>
-
-            <!-- Game Control -->
-            <section class="panel">
-                <h2>Game Control</h2>
-                <div class="button-group">
-                    <button onclick="launchDoom()">▶ Launch Doom 1v1</button>
-                    <button onclick="stopGame()">■ Stop Game</button>
+                <div id="fileList" class="file-list">
+                    <p><em>Waiting for launcher status...</em></p>
                 </div>
             </section>
 
@@ -106,7 +93,7 @@
             <section class="panel">
                 <h2>Custom Command</h2>
                 <div class="input-group">
-                    <input type="text" id="customTopic" placeholder="protogen/fins/media">
+                    <input type="text" id="customTopic" placeholder="protogen/fins/launcher/start/video">
                     <input type="text" id="customPayload" placeholder="rickroll.mp4">
                     <button onclick="sendCustom()">Send Command</button>
                 </div>
@@ -187,7 +174,7 @@
     <script src="{{ url_for('static', filename='js/uniforms.js') }}"></script>
     <script src="{{ url_for('static', filename='js/preview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/fps-monitor.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/media.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/file_browser.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 

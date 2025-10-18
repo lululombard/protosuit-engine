@@ -19,7 +19,7 @@
 
     - name: Verify protosuit-engine service is running
       systemd:
-        name: "{{ service_name }}"
+        name: "protosuit-engine"
         state: started
         enabled: yes
 
@@ -44,8 +44,8 @@
           - MQTT Broker: {{ mqtt_broker }}:{{ mqtt_port }}
 
           Test Commands:
-          - Check service: sudo systemctl status {{ service_name }}
-          - View logs: sudo journalctl -u {{ service_name }} -f
+          - Check service: sudo systemctl status protosuit-engine
+          - View logs: sudo journalctl -u protosuit-engine -f
 
   handlers:
     - name: reload systemd
