@@ -74,7 +74,7 @@
 - name: Create protosuit-engine systemd service file
   template:
     src: "{{ playbook_dir }}/../templates/protosuit-engine.service.j2"
-    dest: /etc/systemd/system/{{ service_name }}.service
+    dest: /etc/systemd/system/protosuit-engine.service
     mode: "0644"
   notify: reload systemd
 
@@ -85,17 +85,17 @@
     mode: "0644"
   notify: reload systemd
 
+- name: Create protosuit-launcher systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-launcher.service.j2"
+    dest: /etc/systemd/system/protosuit-launcher.service
+    mode: "0644"
+  notify: reload systemd
+
 - name: Create protosuit-web systemd service file
   template:
     src: "{{ playbook_dir }}/../templates/protosuit-web.service.j2"
     dest: /etc/systemd/system/protosuit-web.service
-    mode: "0644"
-  notify: reload systemd
-
-- name: Create protosuit-system systemd service file
-  template:
-    src: "{{ playbook_dir }}/../templates/protosuit-system.service.j2"
-    dest: /etc/systemd/system/protosuit-system.service
     mode: "0644"
   notify: reload systemd
 
@@ -114,7 +114,7 @@
 
 - name: Enable protosuit-engine service
   systemd:
-    name: "{{ service_name }}"
+    name: "protosuit-engine"
     enabled: yes
 
 - name: Enable protosuit-web service
@@ -122,12 +122,7 @@
     name: protosuit-web
     enabled: yes
 
-- name: Enable protosuit-system service
+- name: Start protosuit-engine service (starts all dependent services)
   systemd:
-    name: protosuit-system
-    enabled: yes
-
-- name: Start protosuit-system service (starts all dependent services)
-  systemd:
-    name: protosuit-system
+    name: protosuit-engine
     state: started

@@ -506,25 +506,3 @@ transitions:
   blur:
     enabled: true  # Enable blur effect during transitions
     strength: 8.0  # Blur intensity (0.0 = no blur, 8.0 = moderate, 16.0 = strong)
-
-media:
-  base_path: "assets/media"
-  fade_to_blank: false  # If true, media fade to blank background. If false, play over current shader.
-
-games:
-  # External programs follow the "base shader + program" pattern:
-  # 1. Engine keeps minimal shader (e.g., 'blank') running
-  # 2. Program windows are positioned over the displays
-  # 3. When program exits, engine returns to base shader
-  # This pattern is reusable for any X11 application
-
-  doom:
-    enabled: true
-    executable: "/usr/games/chocolate-doom"  # Path to Doom executable
-    # Window positions [x, y] for each display (720x720 each)
-    # Adjust Y value to center the window (accounts for title bar)
-    position_left: [0, 90]    # Left fin: x=0, y=90
-    position_right: [720, 90]  # Right fin: x=720, y=90
-
-  # Add more programs here following the same pattern
-  # See engine/launchers/README.md for instructions

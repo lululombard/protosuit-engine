@@ -724,45 +724,29 @@ small {
     }
 }
 
-/* Media Browser Styles */
-.media-controls {
+/* File Browser Styles */
+.file-controls {
     margin-bottom: 15px;
 }
 
-.media-options {
-    margin-top: 10px;
-    padding: 10px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-}
-
-.media-options label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.9em;
-    cursor: pointer;
-}
-
-.media-list {
-    max-height: 300px;
+.file-list {
+    max-height: 500px;
     overflow-y: auto;
     border: 1px solid var(--border-color);
     border-radius: 4px;
     background: var(--bg-secondary);
 }
 
-.media-section {
+.file-section {
     padding: 10px;
     border-bottom: 1px solid var(--border-color);
 }
 
-.media-section:last-child {
+.file-section:last-child {
     border-bottom: none;
 }
 
-.media-section h4 {
+.file-section h4 {
     margin: 0 0 10px 0;
     color: var(--accent-primary);
     font-size: 0.9em;
@@ -771,7 +755,7 @@ small {
     letter-spacing: 0.5px;
 }
 
-.media-item {
+.file-item {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -785,39 +769,39 @@ small {
     font-size: 0.9em;
 }
 
-.media-item:hover {
+.file-item:hover {
     background: var(--accent-primary);
     color: var(--bg-primary);
     border-color: var(--accent-primary);
     transform: translateX(2px);
 }
 
-.media-icon {
+.file-icon {
     font-size: 1.1em;
     min-width: 20px;
 }
 
-.media-name {
+.file-name {
     flex: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* Scrollbar styling for media list */
-.media-list::-webkit-scrollbar {
+/* Scrollbar styling for file list */
+.file-list::-webkit-scrollbar {
     width: 6px;
 }
 
-.media-list::-webkit-scrollbar-track {
+.file-list::-webkit-scrollbar-track {
     background: var(--bg-secondary);
 }
 
-.media-list::-webkit-scrollbar-thumb {
+.file-list::-webkit-scrollbar-thumb {
     background: var(--accent-primary);
     border-radius: 3px;
 }
 
-.media-list::-webkit-scrollbar-thumb:hover {
+.file-list::-webkit-scrollbar-thumb:hover {
     background: var(--accent-secondary);
 }

@@ -17,7 +17,11 @@ import paho.mqtt.client as mqtt
 import json
 import tempfile
 from utils.mqtt_client import create_mqtt_client
-from renderer.shader_compiler import compile_shader
+from renderer.shader_compiler import (
+    compile_shader,
+    create_blend_shader,
+    create_framebuffers,
+)
 
 
 class Renderer:
@@ -53,7 +57,9 @@ class Renderer:
         self.shaders = {
             "left": {
                 "current": None,
+                "current_name": None,  # Track shader name for status publishing
                 "target": None,
+                "target_name": None,
                 "transition_start": None,
                 "transition_duration": transition_config.duration,
                 "pending": None,
@@ -66,7 +72,9 @@ class Renderer:
             },
             "right": {
                 "current": None,
+                "current_name": None,
                 "target": None,
+                "target_name": None,
                 "transition_start": None,
                 "transition_duration": transition_config.duration,
                 "pending": None,
@@ -101,13 +109,17 @@ class Renderer:
 
         # MQTT
         self.mqtt_client = None
-        self.mqtt_broker = mqtt_config.broker
-        self.mqtt_port = mqtt_config.port
 
         # Command queue for thread-safe OpenGL operations
         from queue import Queue
 
         self.command_queue = Queue()
+
+        # Shader directory and available shaders
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.shader_dir = os.path.join(project_root, "assets", "shaders")
+        self.available_shaders = []
+        self.shader_metadata = {}  # Store animation configs for each shader
 
         print("Renderer initialized")
         print(
@@ -120,25 +132,26 @@ class Renderer:
             self.mqtt_client = create_mqtt_client(self.config_loader)
             self.mqtt_client.on_message = self.on_mqtt_message
 
-            # Subscribe to control topics
-            self.mqtt_client.subscribe("protogen/renderer/shader")
-            self.mqtt_client.subscribe("protogen/renderer/uniform")
-            self.mqtt_client.subscribe("protogen/renderer/command")
+            # Subscribe to NEW control topics
+            self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/file")
+            self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/uniform")
+            self.mqtt_client.subscribe("protogen/fins/renderer/config/reload")
 
             self.mqtt_client.loop_start()
 
-            # Publish initial status
-            self.publish_status("ready")
+            # Scan available shaders
+            self.scan_shaders()
 
-            # Request current state from engine (in case we started after engine)
-            self.mqtt_client.publish("protogen/renderer/request_state", "shader")
+            # Publish initial status
+            self.publish_shader_status()
+            # Note: Uniform status will be published after default shader loads
 
             print("[Renderer] MQTT client initialized")
             print("[Renderer] Subscribed to:")
-            print("  - protogen/renderer/shader")
-            print("  - protogen/renderer/uniform")
-            print("  - protogen/renderer/command")
-            print("[Renderer] Requested current state from engine")
+            print("  - protogen/fins/renderer/set/shader/file")
+            print("  - protogen/fins/renderer/set/shader/uniform")
+            print("  - protogen/fins/renderer/config/reload")
+            print(f"[Renderer] Found {len(self.available_shaders)} shaders")
 
         except Exception as e:
             print(f"[Renderer] Failed to initialize MQTT client: {e}")
@@ -150,12 +163,12 @@ class Renderer:
             topic = msg.topic
             payload = msg.payload.decode("utf-8")
 
-            if topic == "protogen/renderer/shader":
+            if topic == "protogen/fins/renderer/set/shader/file":
                 self.handle_shader_command(payload)
-            elif topic == "protogen/renderer/uniform":
+            elif topic == "protogen/fins/renderer/set/shader/uniform":
                 self.handle_uniform_command(payload)
-            elif topic == "protogen/renderer/command":
-                self.handle_control_command(payload)
+            elif topic == "protogen/fins/renderer/config/reload":
+                self.handle_control_command("reload_config")
 
         except Exception as e:
             print(f"[Renderer] Error handling MQTT message: {e}")
@@ -166,21 +179,76 @@ class Renderer:
     def handle_shader_command(self, payload: str):
         """Handle shader change command (queues for main thread)
 
-        Format: display:duration:scale:shader_source
+        Format: JSON {"display": "left"|"right"|"both", "name": "stars", "transition_duration": 0.75}
         """
         try:
-            parts = payload.split(":", 3)
-            if len(parts) < 4:
-                print(f"[Renderer] Invalid shader command format")
+            data = json.loads(payload)
+            display = data["display"]
+            anim_name = data["name"]
+
+            # Get animation metadata from config
+            if anim_name not in self.shader_metadata:
+                print(f"[Renderer] Animation '{anim_name}' not found in config")
                 return
 
-            display = parts[0]  # 'left', 'right', or 'both'
-            duration = float(parts[1])
-            scale = float(parts[2])
-            shader_source = parts[3]
+            metadata = self.shader_metadata[anim_name]
 
-            # Queue command for main thread (OpenGL operations must be on main thread)
-            self.command_queue.put(("shader", display, shader_source, duration, scale))
+            # Get transition duration
+            duration = data.get(
+                "transition_duration",
+                self.shaders[display if display != "both" else "left"][
+                    "transition_duration"
+                ],
+            )
+
+            # Get render scale from config or data
+            scale = data.get("scale", metadata.get("render_scale", 1.0))
+
+            # Load shader files for left and/or right displays
+            if display == "both":
+                displays_to_load = ["left", "right"]
+            else:
+                displays_to_load = [display]
+
+            for disp in displays_to_load:
+                shader_file = metadata.get(f"{disp}_shader")
+                if not shader_file:
+                    print(f"[Renderer] No {disp} shader defined for '{anim_name}'")
+                    continue
+
+                shader_path = os.path.join(self.shader_dir, shader_file)
+                if not os.path.exists(shader_path):
+                    print(f"[Renderer] Shader file not found: {shader_path}")
+                    continue
+
+                with open(shader_path, "r") as f:
+                    shader_source = f.read()
+
+                # Queue shader load command
+                self.command_queue.put(
+                    ("shader", disp, shader_source, duration, scale, anim_name)
+                )
+                print(f"[Renderer] Loaded shader '{shader_file}' for {disp}")
+
+            # Apply default uniforms from config
+            uniforms = metadata.get("uniforms", {})
+            for uniform_name, uniform_config in uniforms.items():
+                # Check if per-display or both
+                if isinstance(uniform_config, dict) and (
+                    "left" in uniform_config or "right" in uniform_config
+                ):
+                    # Per-display uniforms
+                    for disp in displays_to_load:
+                        if disp in uniform_config:
+                            self._apply_uniform(
+                                disp, uniform_name, uniform_config[disp]
+                            )
+                else:
+                    # Both displays
+                    for disp in displays_to_load:
+                        self._apply_uniform(disp, uniform_name, uniform_config)
+
+            # Note: Status will be published when shader transition completes
 
         except Exception as e:
             print(f"[Renderer] Error handling shader command: {e}")
@@ -188,30 +256,53 @@ class Renderer:
 
             traceback.print_exc()
 
+    def _apply_uniform(self, display: str, uniform_name: str, uniform_config: dict):
+        """Apply a uniform value to a display"""
+        try:
+            uniform_type = uniform_config.get("type")
+            value = uniform_config.get("value")
+
+            if value is None:
+                return
+
+            # Convert list to tuple for OpenGL
+            if isinstance(value, list):
+                value = tuple(value)
+
+            self.shaders[display]["uniforms"][uniform_name] = value
+            print(
+                f"[Renderer] Set default uniform '{uniform_name}' = {value} on {display}"
+            )
+
+        except Exception as e:
+            print(f"[Renderer] Error applying uniform '{uniform_name}': {e}")
+
     def handle_uniform_command(self, payload: str):
         """Handle uniform update command
 
-        Format: display:name:type:value
+        Format: JSON {"display": "left"|"right"|"both", "name": "speed", "type": "float", "value": 2.5}
         """
         try:
-            parts = payload.split(":", 3)
-            if len(parts) < 4:
-                print(f"[Renderer] Invalid uniform command format: {payload}")
-                return
-
-            display = parts[0]  # 'left', 'right', or 'both'
-            uniform_name = parts[1]
-            uniform_type = parts[2]
-            value_str = parts[3]
+            data = json.loads(payload)
+            display = data["display"]
+            uniform_name = data["name"]
+            uniform_type = data["type"]
+            value = data["value"]
 
             # Parse value based on type
             if uniform_type == "float":
-                value = float(value_str)
+                value = float(value)
             elif uniform_type == "int":
-                value = int(value_str)
+                value = int(value)
             elif uniform_type in ["vec2", "vec3", "vec4"]:
-                # Values are space-separated from display_manager
-                value = tuple(float(x.strip()) for x in value_str.split())
+                # Ensure it's a tuple for OpenGL
+                if isinstance(value, list):
+                    value = tuple(value)
+                elif isinstance(value, str):
+                    # Handle space or comma-separated strings
+                    value = tuple(
+                        float(x.strip()) for x in value.replace(",", " ").split()
+                    )
             else:
                 print(f"[Renderer] Unknown uniform type: {uniform_type}")
                 return
@@ -223,6 +314,9 @@ class Renderer:
                 self.shaders["right"]["uniforms"][uniform_name] = value
 
             print(f"[Renderer] Set uniform '{uniform_name}' = {value} on {display}")
+
+            # Publish updated uniform status
+            self.publish_uniform_status()
 
         except Exception as e:
             print(f"[Renderer] Error handling uniform command: {e}")
@@ -251,22 +345,6 @@ class Renderer:
             print("[Renderer] Configuration reloaded")
         except Exception as e:
             print(f"[Renderer] Error reloading config: {e}")
-
-    def publish_status(self, status: str, details: str = None):
-        """Publish renderer status to MQTT"""
-        if not self.mqtt_client:
-            return
-
-        try:
-            status_data = {"status": status, "timestamp": time.time()}
-            if details:
-                status_data["details"] = details
-
-            self.mqtt_client.publish(
-                "protogen/renderer/status", json.dumps(status_data), retain=True
-            )
-        except Exception as e:
-            print(f"[Renderer] Error publishing status: {e}")
 
     def publish_fps_data(self):
         """Publish FPS data to MQTT"""
@@ -319,7 +397,9 @@ class Renderer:
             }
 
             self.mqtt_client.publish(
-                "protogen/renderer/fps", json.dumps(fps_data), retain=True
+                "protogen/fins/renderer/status/performance",
+                json.dumps(fps_data),
+                retain=True,
             )
 
             # Reset counters
@@ -329,6 +409,232 @@ class Renderer:
 
         except Exception as e:
             print(f"[Renderer] Error publishing FPS data: {e}")
+
+    def scan_shaders(self):
+        """Load shaders from config with their metadata"""
+        try:
+            # Get animations from config
+            animations = self.config_loader.config.get("animations", {})
+
+            self.available_shaders = []
+            self.shader_metadata = {}
+
+            for anim_name, anim_config in animations.items():
+                # Store metadata for this animation
+                self.shader_metadata[anim_name] = {
+                    "name": anim_config.get("name", anim_name),
+                    "left_shader": anim_config.get("left_shader"),
+                    "right_shader": anim_config.get("right_shader"),
+                    "uniforms": anim_config.get("uniforms", {}),
+                    "render_scale": anim_config.get("render_scale", 1.0),
+                }
+                self.available_shaders.append(anim_name)
+
+            self.available_shaders.sort()
+            print(
+                f"[Renderer] Loaded {len(self.available_shaders)} animations from config: {', '.join(self.available_shaders)}"
+            )
+
+        except Exception as e:
+            print(f"[Renderer] Error loading animations: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def publish_shader_status(self):
+        """Publish current shader status to MQTT"""
+        if not self.mqtt_client:
+            return
+
+        try:
+            # Build animations list with metadata
+            animations_list = []
+            for shader_name in self.available_shaders:
+                metadata = self.shader_metadata.get(shader_name, {})
+                animation_info = {
+                    "id": shader_name,
+                    "name": shader_name.replace("_", " ").title(),
+                    "uniforms": [],
+                }
+
+                # Add uniform metadata if available
+                if "uniforms" in metadata:
+                    for uniform_name, uniform_config in metadata["uniforms"].items():
+                        # Check if this is a per-display uniform (has left/right keys)
+                        if "left" in uniform_config and "right" in uniform_config:
+                            # Use left side config as the template (web UI will apply to both)
+                            config = uniform_config["left"]
+                            uniform_info = {
+                                "name": uniform_name,
+                                "type": config.get("type", "float"),
+                                "target": "per-display",  # Mark as per-display
+                                "value": {
+                                    "left": config.get("value"),
+                                    "right": uniform_config["right"].get("value"),
+                                },
+                            }
+                        else:
+                            # Simple uniform (applies to both displays)
+                            uniform_info = {
+                                "name": uniform_name,
+                                "type": uniform_config.get("type", "float"),
+                                "target": "both",
+                                "value": uniform_config.get("value"),
+                            }
+                            config = uniform_config
+
+                        # Add range info if available
+                        if "min" in config:
+                            uniform_info["min"] = config["min"]
+                        if "max" in config:
+                            uniform_info["max"] = config["max"]
+                        if "step" in config:
+                            uniform_info["step"] = config["step"]
+
+                        animation_info["uniforms"].append(uniform_info)
+
+                animations_list.append(animation_info)
+
+            status = {
+                "available": self.available_shaders,
+                "animations": animations_list,  # Include full metadata
+                "current": {
+                    "left": self.shaders["left"]["current_name"],
+                    "right": self.shaders["right"]["current_name"],
+                },
+                "transition": {
+                    "left": {
+                        "active": self.shaders["left"]["transition_start"] is not None,
+                        "target": self.shaders["left"]["target_name"],
+                        "queued": self.shaders["left"]["queued"] is not None,
+                    },
+                    "right": {
+                        "active": self.shaders["right"]["transition_start"] is not None,
+                        "target": self.shaders["right"]["target_name"],
+                        "queued": self.shaders["right"]["queued"] is not None,
+                    },
+                },
+            }
+
+            self.mqtt_client.publish(
+                "protogen/fins/renderer/status/shader", json.dumps(status), retain=True
+            )
+
+        except Exception as e:
+            print(f"[Renderer] Error publishing shader status: {e}")
+
+    def publish_uniform_status(self):
+        """Publish current uniform status to MQTT"""
+        if not self.mqtt_client:
+            return
+
+        try:
+            # Only publish uniforms that belong to the current (or transitioning target) shader
+            all_uniforms = {}
+
+            # Get shader names - prefer target if transitioning, otherwise current
+            left_shader_name = self.shaders["left"].get("target_name") or self.shaders[
+                "left"
+            ].get("current_name")
+            right_shader_name = self.shaders["right"].get(
+                "target_name"
+            ) or self.shaders["right"].get("current_name")
+
+            # If no shader is loaded yet, publish empty uniforms
+            if not left_shader_name:
+                self.mqtt_client.publish(
+                    "protogen/fins/renderer/status/uniform", json.dumps({}), retain=True
+                )
+                return
+
+            # Use the left shader's metadata (or right if left doesn't exist)
+            shader_name = left_shader_name or right_shader_name
+            if shader_name not in self.shader_metadata:
+                # No metadata, publish empty
+                self.mqtt_client.publish(
+                    "protogen/fins/renderer/status/uniform", json.dumps({}), retain=True
+                )
+                return
+
+            shader_config = self.shader_metadata[shader_name]
+            uniforms_config = shader_config.get("uniforms", {})
+
+            # Only include uniforms that are defined in the current shader's config
+            for uniform_name, uniform_config in uniforms_config.items():
+                # Check if this is per-display or global
+                if "left" in uniform_config or "right" in uniform_config:
+                    # Per-display uniform
+                    left_config = uniform_config.get("left", {})
+                    right_config = uniform_config.get("right", {})
+
+                    all_uniforms[uniform_name] = {
+                        "type": left_config.get("type", "float"),
+                        "per_display": True,
+                        "left": self.shaders["left"]["uniforms"].get(
+                            uniform_name, left_config.get("value", 0.0)
+                        ),
+                        "right": self.shaders["right"]["uniforms"].get(
+                            uniform_name, right_config.get("value", 0.0)
+                        ),
+                    }
+
+                    # Add metadata if available
+                    if "min" in left_config:
+                        all_uniforms[uniform_name]["min"] = left_config["min"]
+                    if "max" in left_config:
+                        all_uniforms[uniform_name]["max"] = left_config["max"]
+                    if "step" in left_config:
+                        all_uniforms[uniform_name]["step"] = left_config["step"]
+                else:
+                    # Global uniform (both displays)
+                    value = self.shaders["left"]["uniforms"].get(
+                        uniform_name, uniform_config.get("value")
+                    )
+                    if isinstance(value, tuple):
+                        value = list(value)
+
+                    all_uniforms[uniform_name] = {
+                        "value": value,
+                        "type": uniform_config.get(
+                            "type", self._infer_uniform_type(value)
+                        ),
+                    }
+
+                    # Add metadata if available
+                    if "min" in uniform_config:
+                        all_uniforms[uniform_name]["min"] = uniform_config["min"]
+                    if "max" in uniform_config:
+                        all_uniforms[uniform_name]["max"] = uniform_config["max"]
+                    if "step" in uniform_config:
+                        all_uniforms[uniform_name]["step"] = uniform_config["step"]
+
+            self.mqtt_client.publish(
+                "protogen/fins/renderer/status/uniform",
+                json.dumps(all_uniforms),
+                retain=True,
+            )
+
+        except Exception as e:
+            print(f"[Renderer] Error publishing uniform status: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _infer_uniform_type(self, value):
+        """Infer uniform type from value"""
+        if isinstance(value, (int, np.integer)):
+            return "int"
+        elif isinstance(value, (float, np.floating)):
+            return "float"
+        elif isinstance(value, (tuple, list)):
+            length = len(value)
+            if length == 2:
+                return "vec2"
+            elif length == 3:
+                return "vec3"
+            elif length == 4:
+                return "vec4"
+        return "unknown"
 
     def init_gl(self):
         """Initialize OpenGL context and resources"""
@@ -355,114 +661,15 @@ class Renderer:
             render_height = int(
                 self.display_height * self.shaders[display]["render_scale"]
             )
-
-            fbo1 = self.ctx.framebuffer(
-                color_attachments=[self.ctx.texture((render_width, render_height), 4)]
+            self.fbos[display] = create_framebuffers(
+                self.ctx, render_width, render_height
             )
-            fbo2 = self.ctx.framebuffer(
-                color_attachments=[self.ctx.texture((render_width, render_height), 4)]
-            )
-            self.fbos[display] = [fbo1, fbo2]
 
         # Create blend shader
-        self._init_blend_shader()
+        self.blend_program, self.blend_vao = create_blend_shader(self.ctx)
 
         print("[Renderer] OpenGL initialized")
         print(f"[Renderer] Window size: {self.total_width}x{self.total_height}")
-
-    def _init_blend_shader(self):
-        """Initialize shader for blending two framebuffers"""
-        vertex_shader = """
-        #version 300 es
-        precision highp float;
-        in vec2 in_position;
-        out vec2 uv;
-
-        void main() {
-            gl_Position = vec4(in_position, 0.0, 1.0);
-            uv = (in_position + 1.0) * 0.5;
-        }
-        """
-
-        fragment_shader = """
-        #version 300 es
-        precision highp float;
-        uniform sampler2D tex1;
-        uniform sampler2D tex2;
-        uniform float alpha;
-        uniform vec2 resolution;
-        uniform float blurEnabled;
-        uniform float blurStrengthMax;
-        in vec2 uv;
-        out vec4 fragColor;
-
-        // Gaussian blur function
-        vec4 blur(sampler2D tex, vec2 uv, float strength) {
-            if (strength <= 0.0) {
-                return texture(tex, uv);
-            }
-
-            vec2 texelSize = 1.0 / resolution;
-            vec4 result = vec4(0.0);
-            float total = 0.0;
-
-            // 9-tap gaussian blur kernel
-            float kernel[9];
-            kernel[0] = 1.0; kernel[1] = 2.0; kernel[2] = 1.0;
-            kernel[3] = 2.0; kernel[4] = 4.0; kernel[5] = 2.0;
-            kernel[6] = 1.0; kernel[7] = 2.0; kernel[8] = 1.0;
-
-            int index = 0;
-            for (int y = -1; y <= 1; y++) {
-                for (int x = -1; x <= 1; x++) {
-                    vec2 offset = vec2(float(x), float(y)) * texelSize * strength;
-                    result += texture(tex, uv + offset) * kernel[index];
-                    total += kernel[index];
-                    index++;
-                }
-            }
-
-            return result / total;
-        }
-
-        void main() {
-            // Smoothstep easing
-            float t = alpha * alpha * (3.0 - 2.0 * alpha);
-
-            // Blur strength peaks at middle of transition (alpha = 0.5)
-            float blurStrength = blurEnabled * 4.0 * alpha * (1.0 - alpha) * blurStrengthMax;
-
-            // Apply blur to both textures
-            vec4 col1 = blur(tex1, uv, blurStrength);
-            vec4 col2 = blur(tex2, uv, blurStrength);
-
-            fragColor = mix(col1, col2, t);
-        }
-        """
-
-        self.blend_program = self.ctx.program(
-            vertex_shader=vertex_shader, fragment_shader=fragment_shader
-        )
-
-        # Create fullscreen quad
-        vertices = np.array(
-            [
-                -1.0,
-                -1.0,
-                1.0,
-                -1.0,
-                -1.0,
-                1.0,
-                1.0,
-                1.0,
-            ],
-            dtype="f4",
-        )
-
-        vbo = self.ctx.buffer(vertices.tobytes())
-        self.blend_vao = self.ctx.simple_vertex_array(
-            self.blend_program, vbo, "in_position"
-        )
 
     def _recreate_fbos(self, display: str):
         """Recreate framebuffers for a display at current render scale"""
@@ -483,14 +690,10 @@ class Renderer:
                 f"[Renderer] Recreating FBOs for {display} at {render_width}x{render_height} (scale: {self.shaders[display]['render_scale']})"
             )
 
-            # Create new textures
-            tex1 = self.ctx.texture((render_width, render_height), 4)
-            tex2 = self.ctx.texture((render_width, render_height), 4)
-
-            # Create framebuffers
-            fbo1 = self.ctx.framebuffer(color_attachments=[tex1])
-            fbo2 = self.ctx.framebuffer(color_attachments=[tex2])
-            self.fbos[display] = [fbo1, fbo2]
+            # Create new framebuffers
+            self.fbos[display] = create_framebuffers(
+                self.ctx, render_width, render_height
+            )
 
             print(f"[Renderer] FBOs created successfully for {display}")
         except Exception as e:
@@ -569,6 +772,7 @@ class Renderer:
         shader_source: str,
         transition_duration: float,
         target_scale: float = None,
+        shader_name: str = None,
     ):
         """Set a new shader for a display with transition"""
         state = self.shaders[display]
@@ -578,7 +782,12 @@ class Renderer:
             print(
                 f"[Renderer] Transition in progress for {display}, queueing shader change"
             )
-            state["queued"] = (shader_source, transition_duration, target_scale)
+            state["queued"] = (
+                shader_source,
+                transition_duration,
+                target_scale,
+                shader_name,
+            )
             return
 
         # If scale is changing, defer this shader load
@@ -586,7 +795,12 @@ class Renderer:
             print(
                 f"[Renderer] Deferring shader load for {display} until scale change completes"
             )
-            state["pending"] = (shader_source, transition_duration, target_scale)
+            state["pending"] = (
+                shader_source,
+                transition_duration,
+                target_scale,
+                shader_name,
+            )
             return
 
         # Handle scale change logic
@@ -618,19 +832,33 @@ class Renderer:
         if state["current"] is None:
             # First shader, no transition
             state["current"] = new_shader
+            state["current_name"] = shader_name
             # If there's a pending scale, apply it now
             if state["pending_scale"] is not None:
                 self._apply_scale_change(display, state["pending_scale"])
                 state["pending_scale"] = None
+
+            # Publish status for first shader load (check if both displays are set)
+            if display == "both" or (
+                self.shaders["left"]["current"] and self.shaders["right"]["current"]
+            ):
+                self.publish_shader_status()
+                self.publish_uniform_status()
         else:
             # Start transition
             state["target"] = new_shader
+            state["target_name"] = shader_name
             state["transition_start"] = time.time()
             state["transition_duration"] = transition_duration
 
-        print(
-            f"[Renderer] Shader set for {display} (transition: {transition_duration}s)"
-        )
+            print(
+                f"[Renderer] Shader set for {display} (transition: {transition_duration}s)"
+            )
+
+            # Publish updated shader and uniform status immediately
+            # This allows adjusting uniforms for the incoming shader while it transitions
+            self.publish_shader_status()
+            self.publish_uniform_status()
 
     def render_shader(self, display: str, shader_obj, target_fbo=None):
         """Render a shader to a framebuffer"""
@@ -679,13 +907,21 @@ class Renderer:
                 print(f"[Renderer] Scale change complete for {display}")
                 # Load pending shader if any
                 if state["pending"]:
-                    if len(state["pending"]) == 3:
+                    if len(state["pending"]) == 4:
+                        shader_source, duration, target_scale, shader_name = state[
+                            "pending"
+                        ]
+                    elif len(state["pending"]) == 3:
                         shader_source, duration, target_scale = state["pending"]
+                        shader_name = None
                     else:
                         shader_source, duration = state["pending"]
                         target_scale = None
+                        shader_name = None
                     state["pending"] = None
-                    self.set_shader(display, shader_source, duration, target_scale)
+                    self.set_shader(
+                        display, shader_source, duration, target_scale, shader_name
+                    )
 
         # Render
         if state["transition_start"] is not None and state["target"] is not None:
@@ -721,7 +957,9 @@ class Renderer:
                     state["current"]["vao"].release()
                     state["current"]["program"].release()
                 state["current"] = state["target"]
+                state["current_name"] = state["target_name"]
                 state["target"] = None
+                state["target_name"] = None
                 state["transition_start"] = None
 
                 # Apply pending scale change
@@ -732,14 +970,31 @@ class Renderer:
                     self._apply_scale_change(display, state["pending_scale"])
                     state["pending_scale"] = None
 
+                # Publish updated status after transition completes
+                self.publish_shader_status()
+                self.publish_uniform_status()
+
                 # Start queued transition if one exists
                 if state["queued"] is not None:
-                    queued_shader, queued_duration, queued_scale = state["queued"]
+                    if len(state["queued"]) == 4:
+                        queued_shader, queued_duration, queued_scale, queued_name = (
+                            state["queued"]
+                        )
+                    else:
+                        queued_shader, queued_duration, queued_scale = state["queued"]
+                        queued_name = None
                     state["queued"] = None
                     print(f"[Renderer] Starting queued transition for {display}")
                     self.set_shader(
-                        display, queued_shader, queued_duration, queued_scale
+                        display,
+                        queued_shader,
+                        queued_duration,
+                        queued_scale,
+                        queued_name,
                     )
+
+                # Publish updated shader status
+                self.publish_shader_status()
         else:
             # No transition - render current shader
             if state["current"]:
@@ -774,7 +1029,29 @@ class Renderer:
         clock = pygame.time.Clock()
 
         print("[Renderer] Starting main loop")
-        self.publish_status("running")
+
+        # Load default animation from config
+        try:
+            default_anim = self.config_loader.config.get(
+                "default_animation", "aperture"
+            )
+            if default_anim in self.available_shaders:
+                print(f"[Renderer] Loading default animation: {default_anim}")
+                # Queue the default shader load
+                shader_cmd = json.dumps(
+                    {
+                        "display": "both",
+                        "name": default_anim,
+                        "transition_duration": 0.0,
+                    }
+                )
+                self.handle_shader_command(shader_cmd)
+            else:
+                print(
+                    f"[Renderer] Default animation '{default_anim}' not found in config"
+                )
+        except Exception as e:
+            print(f"[Renderer] Error loading default animation: {e}")
 
         while self.running:
             try:
@@ -789,12 +1066,20 @@ class Renderer:
                     try:
                         cmd = self.command_queue.get_nowait()
                         if cmd[0] == "shader":
-                            _, display, shader_source, duration, scale = cmd
+                            _, display, shader_source, duration, scale, shader_name = (
+                                cmd
+                            )
                             if display in ["left", "right"]:
-                                self.set_shader(display, shader_source, duration, scale)
+                                self.set_shader(
+                                    display, shader_source, duration, scale, shader_name
+                                )
                             elif display == "both":
-                                self.set_shader("left", shader_source, duration, scale)
-                                self.set_shader("right", shader_source, duration, scale)
+                                self.set_shader(
+                                    "left", shader_source, duration, scale, shader_name
+                                )
+                                self.set_shader(
+                                    "right", shader_source, duration, scale, shader_name
+                                )
                     except Exception as cmd_error:
                         print(f"[Renderer] Error processing command: {cmd_error}")
 
@@ -821,7 +1106,6 @@ class Renderer:
                 time.sleep(0.1)
 
         print("[Renderer] Shutting down")
-        self.publish_status("stopped")
 
         # Cleanup
         if self.mqtt_client:

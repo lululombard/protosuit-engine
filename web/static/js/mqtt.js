@@ -34,19 +34,9 @@ function connectMQTT() {
                 logMessage('✓ Subscribed to protogen/fins/#');
             }
         });
-        mqttClient.subscribe('protogen/renderer/#', (err) => {
-            if (!err) {
-                logMessage('✓ Subscribed to protogen/renderer/#');
-            }
-        });
-        mqttClient.subscribe('protogen/face/#', (err) => {
-            if (!err) {
-                logMessage('✓ Subscribed to protogen/face/#');
-            }
-        });
 
-        // Request current status
-        mqttClient.publish('protogen/fins/status', 'request');
+        // Request current status from renderer
+        // (No request needed - renderer publishes retained status on startup)
     });
 
     mqttClient.on('message', (topic, message) => {
@@ -55,18 +45,24 @@ function connectMQTT() {
         trackMessageReceived();
 
         // Update UI based on messages
-        if (topic === 'protogen/fins/current_animation') {
-            handleAnimationChange(payload);
-        } else if (topic === 'protogen/fins/uniform/state') {
-            handleUniformState(payload);
+        if (topic === 'protogen/fins/renderer/status/shader') {
+            handleRendererShaderStatus(payload);
             return; // Don't log the full JSON payload
-        } else if (topic === 'protogen/fins/uniform/changed') {
-            handleUniformChanged(payload);
+        } else if (topic === 'protogen/fins/renderer/status/uniform') {
+            handleRendererUniformStatus(payload);
             return; // Don't log the full JSON payload
-        } else if (topic === 'protogen/renderer/fps' || (topic.startsWith('protogen/fins/renderer/') && topic.endsWith('/fps'))) {
-            // Handle both unified renderer (protogen/renderer/fps) and old per-display format
+        } else if (topic === 'protogen/fins/renderer/status/performance') {
             handleFpsMessage(topic, payload);
             return; // Don't log the full JSON payload
+        } else if (topic === 'protogen/fins/launcher/status/audio') {
+            handleLauncherAudioStatus(payload);
+            return;
+        } else if (topic === 'protogen/fins/launcher/status/video') {
+            handleLauncherVideoStatus(payload);
+            return;
+        } else if (topic === 'protogen/fins/launcher/status/exec') {
+            handleLauncherExecStatus(payload);
+            return;
         }
 
         logMessage(`← ${topic}: ${payload}`);

@@ -44,15 +44,15 @@ start_protosuit() {
 
 # Function to stop protosuit engine
 stop_protosuit() {
-    sudo systemctl stop {{ service_name }}
+    sudo systemctl stop protosuit-engine
 }
 
 # Function to restart protosuit engine
 restart_protosuit() {
-    sudo systemctl restart {{ service_name }}
+    sudo systemctl restart protosuit-engine
 }
 
 # Function to check protosuit status
 status_protosuit() {
-    sudo systemctl status {{ service_name }}
+    sudo systemctl status protosuit-engine
 }

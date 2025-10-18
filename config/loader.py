@@ -43,8 +43,6 @@ class ConfigLoader:
             "default_animation": "stars",
             "animations": {},
             "transitions": {"enabled": True, "duration": 0.75},
-            "games": {},
-            "media": {},
         }
 
     def _parse_typed_config(self, config_dict: Dict[str, Any], config_class) -> Any:
@@ -127,13 +125,6 @@ class ConfigLoader:
         config_dict = self.config.get("transitions", {})
         return self._parse_typed_config(config_dict, TransitionConfig)
 
-    def get_game_config(self, game_name: str) -> Optional[GameConfig]:
-        """Get game configuration by name"""
-        config_dict = self.config.get("games", {}).get(game_name)
-        if not config_dict:
-            return None
-        return self._parse_typed_config(config_dict, GameConfig)
-
     def get_mqtt_config(self) -> MQTTConfig:
         """Get MQTT configuration"""
         config_dict = self.config.get("mqtt", {})
@@ -163,11 +154,6 @@ class ConfigLoader:
         """Get monitoring configuration"""
         config_dict = self.config.get("monitoring", {})
         return self._parse_typed_config(config_dict, MonitoringConfig)
-
-    def get_media_config(self) -> Dict[str, Any]:
-        """Get media configuration"""
-        config_dict = self.config.get("media", {})
-        return self._parse_typed_config(config_dict, MediaConfig)
 
     def validate(self) -> bool:
         """
@@ -201,11 +187,6 @@ class ConfigLoader:
                     # Base animations need shaders
                     if "left_shader" not in anim or "right_shader" not in anim:
                         print(f"Base animation '{name}' missing shader fields")
-                        return False
-                elif anim_type == "overlay":
-                    # Overlay animations need media
-                    if "media" not in anim:
-                        print(f"Overlay animation '{name}' missing media field")
                         return False
 
             return True
