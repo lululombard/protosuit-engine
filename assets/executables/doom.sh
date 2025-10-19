@@ -9,7 +9,7 @@ DISPLAY_WIDTH="${PROTOSUIT_DISPLAY_WIDTH:-720}"
 DISPLAY_HEIGHT="${PROTOSUIT_DISPLAY_HEIGHT:-720}"
 LEFT_X="${PROTOSUIT_LEFT_X:-0}"
 RIGHT_X="${PROTOSUIT_RIGHT_X:-720}"
-POS_Y="${PROTOSUIT_Y:-0}"
+POS_Y="${PROTOSUIT_DOOM_Y:-90}"
 
 echo "[doom.sh] Starting Doom launcher"
 echo "[doom.sh] Display: ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}"
@@ -32,79 +32,109 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT
 
-# Launch server (left display)
-echo "[doom.sh] Launching server..."
+# Create temporary config files with window positions
+SERVER_CONFIG="/tmp/doom_server.cfg"
+CLIENT_CONFIG="/tmp/doom_client.cfg"
+
+cat > "$SERVER_CONFIG" << EOF
+window_position                 "${LEFT_X},${POS_Y}"
+EOF
+
+cat > "$CLIENT_CONFIG" << EOF
+window_position                 "${RIGHT_X},${POS_Y}"
+EOF
+
+echo "[doom.sh] Created config files with window positions"
+
+# Launch server (left display) with custom config
+echo "[doom.sh] Launching server at ${LEFT_X},${POS_Y}..."
+echo "[doom.sh] ===== SERVER OUTPUT ====="
 $DOOM_PATH \
+    -config "$SERVER_CONFIG" \
     -width $DISPLAY_WIDTH \
     -height $DISPLAY_HEIGHT \
     -server \
     -deathmatch \
+    -nodes 2 \
     -nosound \
     -window \
-    -nograbmouse \
-    >/dev/null 2>&1 &
+    -nograbmouse &
 
 SERVER_PID=$!
-sleep 0.1
+echo "[doom.sh] Server started (PID: $SERVER_PID)"
+sleep 2
 
-# Launch client (right display)
-echo "[doom.sh] Launching client..."
+# Launch client (right display) with custom config
+echo "[doom.sh] Launching client at ${RIGHT_X},${POS_Y}..."
+echo "[doom.sh] ===== CLIENT OUTPUT ====="
 $DOOM_PATH \
+    -config "$CLIENT_CONFIG" \
     -width $DISPLAY_WIDTH \
     -height $DISPLAY_HEIGHT \
     -connect localhost \
     -nosound \
     -window \
-    -nograbmouse \
-    >/dev/null 2>&1 &
+    -nograbmouse &
 
 CLIENT_PID=$!
-sleep 0.2
+echo "[doom.sh] Client started (PID: $CLIENT_PID)"
 
-# Find and position windows
-echo "[doom.sh] Positioning windows..."
-WINDOWS=$(xdotool search --name "Chocolate Doom" 2>/dev/null || true)
-WINDOW_ARRAY=($WINDOWS)
-
-if [ ${#WINDOW_ARRAY[@]} -ge 2 ]; then
-    # Position server window (left)
-    xdotool windowmove ${WINDOW_ARRAY[0]} $LEFT_X $POS_Y
-    xdotool windowsize ${WINDOW_ARRAY[0]} $DISPLAY_WIDTH $DISPLAY_HEIGHT
-    echo "[doom.sh] Positioned server window ${WINDOW_ARRAY[0]} at ${LEFT_X},${POS_Y}"
-
-    # Position client window (right)
-    xdotool windowmove ${WINDOW_ARRAY[1]} $RIGHT_X $POS_Y
-    xdotool windowsize ${WINDOW_ARRAY[1]} $DISPLAY_WIDTH $DISPLAY_HEIGHT
-    echo "[doom.sh] Positioned client window ${WINDOW_ARRAY[1]} at ${RIGHT_X},${POS_Y}"
-elif [ ${#WINDOW_ARRAY[@]} -eq 1 ]; then
-    # Only one window found, position on left
-    xdotool windowmove ${WINDOW_ARRAY[0]} $LEFT_X $POS_Y
-    xdotool windowsize ${WINDOW_ARRAY[0]} $DISPLAY_WIDTH $DISPLAY_HEIGHT
-    echo "[doom.sh] Positioned single window ${WINDOW_ARRAY[0]} at ${LEFT_X},${POS_Y}"
+# Check if both processes are running
+sleep 1
+if ! kill -0 $SERVER_PID 2>/dev/null; then
+    echo "[doom.sh] ERROR: Server process died!"
+    exit 1
 fi
 
-# Auto-start game by sending Space to server
-echo "[doom.sh] Auto-starting game..."
-sleep 2
-if [ ${#WINDOW_ARRAY[@]} -ge 1 ]; then
-    xdotool windowactivate --sync ${WINDOW_ARRAY[0]}
-    sleep 0.5
-    xdotool key --window ${WINDOW_ARRAY[0]} space
-    echo "[doom.sh] Sent Space to server window"
+if ! kill -0 $CLIENT_PID 2>/dev/null; then
+    echo "[doom.sh] ERROR: Client process died!"
+    exit 1
 fi
 
-# Keep repositioning windows for stability
-echo "[doom.sh] Ensuring windows stay visible..."
-for i in {1..10}; do
-    sleep 0.5
+# Find the windows and position them with xdotool as fallback
+echo "[doom.sh] Finding and positioning windows..."
+sleep 1
+
+WINDOW_ARRAY=()
+for attempt in {1..100}; do
+    WINDOWS=$(xdotool search --name "Chocolate Doom" 2>/dev/null || true)
+    WINDOW_ARRAY=($WINDOWS)
+
     if [ ${#WINDOW_ARRAY[@]} -ge 2 ]; then
-        xdotool windowmove ${WINDOW_ARRAY[0]} $LEFT_X $POS_Y 2>/dev/null || true
-        xdotool windowmove ${WINDOW_ARRAY[1]} $RIGHT_X $POS_Y 2>/dev/null || true
+        echo "[doom.sh] Found ${#WINDOW_ARRAY[@]} windows"
+        break
     fi
+
+    echo "[doom.sh] Found ${#WINDOW_ARRAY[@]} window(s), waiting for both... (attempt $attempt/10)"
+    sleep 0.1
 done
 
-# Wait for processes to exit
-echo "[doom.sh] Doom is running (PIDs: $SERVER_PID, $CLIENT_PID)"
-wait $SERVER_PID $CLIENT_PID 2>/dev/null || true
+if [ ${#WINDOW_ARRAY[@]} -ge 2 ]; then
+    echo "[doom.sh] Positioning server window at ${LEFT_X},${POS_Y}"
+    echo "[doom.sh] Positioning client window at ${RIGHT_X},${POS_Y}"
+elif [ ${#WINDOW_ARRAY[@]} -eq 1 ]; then
+    echo "[doom.sh] WARNING: Only found 1 window, both might be stacked"
+else
+    echo "[doom.sh] WARNING: No windows found via xdotool"
+fi
+
+# Game will auto-start when both players connect (thanks to -nodes 2)
+echo "[doom.sh] Doom is running (PIDs: Server=$SERVER_PID, Client=$CLIENT_PID)"
+echo "[doom.sh] Continuously repositioning windows to keep them on displays..."
+
+# Function to check if processes are still running
+processes_running() {
+    kill -0 $SERVER_PID 2>/dev/null || kill -0 $CLIENT_PID 2>/dev/null
+}
+
+xdotool windowmove ${WINDOW_ARRAY[0]} $LEFT_X $POS_Y 2>/dev/null || true
+xdotool windowmove ${WINDOW_ARRAY[1]} $RIGHT_X $POS_Y 2>/dev/null || true
+
+# Continuously reposition windows while processes are running
+while processes_running; do
+    sleep 1
+done
+
+echo "[doom.sh] Processes exited"
 
 cleanup

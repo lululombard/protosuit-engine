@@ -329,7 +329,7 @@ class Launcher:
 
     def handle_kill_exec(self, payload: str = ""):
         """Force kill executable"""
-        # Same as stop for now (doom launcher uses pkill -9)
+        # Same as stop for now
         self.handle_stop_exec()
 
     def handle_config_reload(self):

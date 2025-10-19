@@ -45,6 +45,14 @@ Open your browser to `http://<raspberry-pi-ip>:5000`
 - Launch media and executables
 - Adjust shader parameters with sliders
 
+**Physics-Based Sliders:**
+
+The web interface features a spring physics system for parameter sliders, providing smooth, natural interaction:
+- **Spring dynamics** - Sliders have momentum and damping for satisfying tactile feedback
+- **Real-time updates** - Changes are sent via MQTT instantly as you drag
+- **Per-display control** - Adjust left and right displays independently or sync both
+- **Range constraints** - Min/max values defined in config.yaml with custom step sizes
+
 ### Service Management
 
 ```bash

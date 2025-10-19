@@ -141,18 +141,5 @@ class ExecLauncher(BaseLauncher):
         # Terminate processes using helper
         ProgramHelper.cleanup_processes(self.processes)
 
-        # Force kill any processes spawned by the script
-        # For doom.sh, this kills chocolate-doom processes
-        # For other scripts, kills based on common process names
-        try:
-            # Kill chocolate-doom specifically (common case)
-            subprocess.run(
-                ["pkill", "-9", "chocolate-doom"],
-                stderr=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-            )
-        except:
-            pass
-
         self.processes = []
         self.window_ids = []
