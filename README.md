@@ -28,6 +28,7 @@ That's it! The system will auto-configure and start on boot.
 - **GLSL Shader Animations** - Smooth cross-fade transitions with blur effects and real-time parameter control
 - **Media Playback** - Videos (exclusive), audio (stackable), synchronized playback
 - **Executables** - Run shell scripts (like Doom) positioned across both displays
+- **MQTT Input Control** - Send keyboard inputs to running games via MQTT (ready for ESP32 or custom input devices)
 - **Web Control Interface** - Browser-based control with live preview and performance monitoring
 - **MQTT Integration** - Remote control and automation from external devices
 
@@ -44,6 +45,24 @@ Open your browser to `http://<raspberry-pi-ip>:5000`
 - Monitor FPS and resolution
 - Launch media and executables
 - Adjust shader parameters with sliders
+
+### Virtual Controller
+
+Access the virtual controller at `http://<raspberry-pi-ip>:5000/controller`
+
+Optional URL parameters:
+- `?display=left` - Start with left display selected (default)
+- `?display=right` - Start with right display selected
+
+Mobile-friendly gamepad interface for testing MQTT inputs:
+- **D-Pad**: Arrow keys for movement (Up/Down/Left/Right)
+- **Action Buttons**: Space (A), Return (B), Tab (X), Escape (Y)
+- **Fire Button**: Control key for shooting (center of action buttons)
+- **Display Selector**: Target left or right display
+- Matches industrial protogen UI aesthetic
+- Works on phones, tablets, and desktop browsers
+- Touch-optimized with press/release events
+- Responsive: side-by-side in landscape, stacked in portrait
 
 **Physics-Based Sliders:**
 
@@ -144,6 +163,7 @@ mosquitto_sub -t "protogen/fins/renderer/status/#" -v
 | `protogen/fins/launcher/start/audio` | `"file.mp3"` or JSON | Play audio (stackable) |
 | `protogen/fins/launcher/start/video` | `"file.mp4"` or JSON | Play video (exclusive) |
 | `protogen/fins/launcher/start/exec` | `"script.sh"` | Run executable script |
+| `protogen/fins/launcher/input/exec` | JSON (see below) | Send keyboard input to running executable |
 | `protogen/fins/launcher/stop/audio` | `"file.mp3"` or `"all"` | Stop audio gracefully |
 | `protogen/fins/launcher/stop/video` | - | Stop video gracefully |
 | `protogen/fins/launcher/stop/exec` | - | Stop executable gracefully |
@@ -172,6 +192,21 @@ mosquitto_pub -t "protogen/fins/launcher/start/video" -m "animation.mp4"
 # Launch executable
 mosquitto_pub -t "protogen/fins/launcher/start/exec" -m "doom.sh"
 
+# Send input to running executable (press space on left display)
+mosquitto_pub -t "protogen/fins/launcher/input/exec" \
+  -m '{"key": "space", "action": "key", "display": "left"}'
+
+# Hold and release a key (for timing-based games)
+mosquitto_pub -t "protogen/fins/launcher/input/exec" \
+  -m '{"key": "Left", "action": "keydown", "display": "left"}'
+# ... wait ...
+mosquitto_pub -t "protogen/fins/launcher/input/exec" \
+  -m '{"key": "Left", "action": "keyup", "display": "left"}'
+
+# Send input to specific window in multi-window games (like Doom)
+mosquitto_pub -t "protogen/fins/launcher/input/exec" \
+  -m '{"key": "w", "action": "keydown", "display": "right"}'
+
 # Stop gracefully
 mosquitto_pub -t "protogen/fins/launcher/stop/video" -m ""
 
@@ -181,6 +216,26 @@ mosquitto_pub -t "protogen/fins/launcher/kill/audio" -m "all"
 # Get current status
 mosquitto_sub -t "protogen/fins/launcher/status/#" -v
 ```
+
+**Input message format:**
+
+```json
+{
+  "key": "space",      // xdotool key name (space, Left, Right, w, a, s, d, Return, etc.)
+  "action": "key",     // "key" (press+release), "keydown" (press), "keyup" (release)
+  "display": "left"    // "left", "right", or "both"
+}
+```
+
+**Input routing behavior:**
+- **Single-window games** (Ring Ding, Super Haxagon): Inputs sent to focused window regardless of display parameter
+- **Multi-window games** (Doom): Inputs targeted to specific window based on display parameter
+- Automatic window discovery via process PID tree (handles script wrappers)
+
+**Future integration options:**
+- ESP32 microcontrollers sending MQTT messages
+- Custom input devices publishing to MQTT
+- Bluetooth controllers via MQTT bridge (not yet implemented)
 
 ---
 
@@ -266,6 +321,25 @@ animations:
 ```
 
 Control via MQTT (see [MQTT API](#mqtt-api) section above for examples).
+
+---
+
+## Testing
+
+### MQTT Input Test Script
+
+A comprehensive test script is available to verify MQTT input handling across all games:
+
+```bash
+./tests/test_mqtt_inputs.sh
+```
+
+This script automatically tests:
+- **Doom**: Multi-window targeting with independent left/right controls
+- **Super Haxagon**: Single-window focused mode with timed inputs
+- **Ring Ding**: Single-window focused mode with simple key presses
+
+The script restarts the launcher, launches each game, sends MQTT inputs, and verifies behavior. Watch the displays to confirm inputs are working correctly.
 
 ---
 

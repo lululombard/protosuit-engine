@@ -27,7 +27,6 @@
     src: "{{ playbook_dir }}/../templates/99-dual-display.conf.j2"
     dest: /etc/X11/xorg.conf.d/99-dual-display.conf
     mode: '0644'
-  notify: restart display manager
 
 - name: Create xinitrc for dual display setup
   template:

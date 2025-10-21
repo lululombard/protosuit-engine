@@ -17,9 +17,16 @@ echo "[doom.sh] Left: ${LEFT_X},${POS_Y} | Right: ${RIGHT_X},${POS_Y}"
 
 # Doom executable path
 DOOM_PATH="/usr/games/chocolate-doom"
+CUSTOM_WAD="/usr/share/games/doom/duelpack.wad"
 
 if [ ! -f "$DOOM_PATH" ]; then
     echo "[doom.sh] ERROR: Chocolate Doom not found at $DOOM_PATH"
+    exit 1
+fi
+
+if [ ! -f "$CUSTOM_WAD" ]; then
+    echo "[doom.sh] ERROR: Custom WAD not found at $CUSTOM_WAD"
+    echo "[doom.sh] Please run the Ansible playbook to download the WAD"
     exit 1
 fi
 
@@ -53,10 +60,13 @@ $DOOM_PATH \
     -config "$SERVER_CONFIG" \
     -width $DISPLAY_WIDTH \
     -height $DISPLAY_HEIGHT \
+    -file "$CUSTOM_WAD" \
+    -warp 02 \
     -server \
     -deathmatch \
+    -nomonsters \
+    -privateserver \
     -nodes 2 \
-    -nosound \
     -window \
     -nograbmouse &
 
@@ -71,8 +81,9 @@ $DOOM_PATH \
     -config "$CLIENT_CONFIG" \
     -width $DISPLAY_WIDTH \
     -height $DISPLAY_HEIGHT \
+    -file "$CUSTOM_WAD" \
     -connect localhost \
-    -nosound \
+    -nomusic \
     -window \
     -nograbmouse &
 
@@ -130,9 +141,15 @@ processes_running() {
 xdotool windowmove ${WINDOW_ARRAY[0]} $LEFT_X $POS_Y 2>/dev/null || true
 xdotool windowmove ${WINDOW_ARRAY[1]} $RIGHT_X $POS_Y 2>/dev/null || true
 
-# Continuously reposition windows while processes are running
+# Move cursor off-screen permanently (more reliable than unclutter)
+echo "[doom.sh] Hiding cursor by moving it off-screen..."
+xdotool mousemove 2000 2000 2>/dev/null || true
+
+# Wait for processes to exit
 while processes_running; do
     sleep 1
+    # Keep cursor off-screen (in case it reappears)
+    xdotool mousemove 2000 2000 2>/dev/null || true
 done
 
 echo "[doom.sh] Processes exited"

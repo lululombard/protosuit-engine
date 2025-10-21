@@ -14,8 +14,5 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initialize preview (check if checkbox was restored by browser)
     initPreview();
 
-    // Initialize FPS monitoring
-    initFpsMonitoring();
-
     console.log('✓ Initialization complete');
 });

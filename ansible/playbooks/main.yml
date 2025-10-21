@@ -47,6 +47,33 @@
   args:
     chdir: "{{ project_dir }}"
 
+# Include Super Haxagon tasks
+- name: Include Super Haxagon installation tasks
+  include_tasks: superhaxagon_tasks.yml
+
+# Download custom Doom WAD for deathmatch
+- name: Create WAD directory
+  file:
+    path: /usr/share/games/doom/wads
+    state: directory
+    mode: '0755'
+
+- name: Download custom deathmatch WAD
+  get_url:
+    url: "https://archive.org/download/wadarchive/DATA/a4.zip/a4%2F52e5e6b94a19a1e88e3f991ac5803333fd75b6%2Fa452e5e6b94a19a1e88e3f991ac5803333fd75b6.wad.gz"
+    dest: /usr/share/games/doom/duelpack.wad.gz
+    mode: '0644'
+
+- name: Extract WAD file
+  shell: gunzip -c /usr/share/games/doom/duelpack.wad.gz > /usr/share/games/doom/duelpack.wad
+  args:
+    creates: /usr/share/games/doom/wads/duelpack.wad
+
+- name: Remove compressed WAD file
+  file:
+    path: /usr/share/games/doom/duelpack.wad.gz
+    state: absent
+
 - name: Set zsh as default shell for pi user
   user:
     name: "{{ pi_user }}"

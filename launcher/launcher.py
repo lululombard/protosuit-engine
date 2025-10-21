@@ -89,11 +89,13 @@ class Launcher:
                 client.subscribe("protogen/fins/launcher/kill/video")
                 client.subscribe("protogen/fins/launcher/kill/exec")
                 client.subscribe("protogen/fins/launcher/config/reload")
+                client.subscribe("protogen/fins/launcher/input/exec")
                 print("[Launcher] Subscribed to topics:")
                 print("  - protogen/fins/launcher/start/*")
                 print("  - protogen/fins/launcher/stop/*")
                 print("  - protogen/fins/launcher/kill/*")
                 print("  - protogen/fins/launcher/config/reload")
+                print("  - protogen/fins/launcher/input/exec")
             else:
                 print(f"[Launcher] Failed to connect to MQTT broker: {rc}")
 
@@ -143,6 +145,11 @@ class Launcher:
             # Config reload
             elif topic == "protogen/fins/launcher/config/reload":
                 self.handle_config_reload()
+
+            # Input handling for exec
+            elif topic == "protogen/fins/launcher/input/exec":
+                if self.exec_launcher:
+                    self.exec_launcher.handle_input_message(payload)
 
         except Exception as e:
             print(f"[Launcher] Error handling message on {topic}: {e}")
@@ -272,6 +279,7 @@ class Launcher:
                 display_config,
                 system_config,
                 on_exit_callback=self._on_exec_exit,
+                mqtt_client=self.mqtt_client,
             )
 
             if launcher.launch():

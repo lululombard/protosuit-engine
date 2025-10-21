@@ -31,6 +31,12 @@ def index():
     return render_template("index.html", animations=all_animations)
 
 
+@app.route("/controller")
+def controller():
+    """Virtual controller interface for MQTT input"""
+    return render_template("controller.html")
+
+
 @app.route("/api/stream")
 def api_stream():
     """
@@ -120,6 +126,15 @@ def api_stream():
                         + b"\r\n"
                     )
 
+        except GeneratorExit:
+            # Client disconnected - clean up immediately
+            if proc and proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
         finally:
             # Always cleanup FFmpeg process
             if proc and proc.poll() is None:

@@ -8,41 +8,6 @@ let fpsData = {
     timestamp: 0
 };
 
-function initFpsMonitoring() {
-    console.log('Initializing FPS monitoring...');
-
-    // Subscribe to FPS topics when MQTT connects
-    if (window.mqttClient && window.mqttClient.connected) {
-        subscribeToFpsTopics();
-    } else {
-        // Wait for MQTT connection
-        const checkConnection = setInterval(() => {
-            if (window.mqttClient && window.mqttClient.connected) {
-                subscribeToFpsTopics();
-                clearInterval(checkConnection);
-            }
-        }, 100);
-    }
-}
-
-function subscribeToFpsTopics() {
-    if (!window.mqttClient || !window.mqttClient.connected) {
-        console.log('MQTT not connected, cannot subscribe to FPS topics');
-        return;
-    }
-
-    console.log('Subscribing to FPS monitoring topics...');
-
-    // Subscribe to renderer FPS topic
-    window.mqttClient.subscribe('protogen/renderer/fps', (err) => {
-        if (err) {
-            console.error('Failed to subscribe to renderer FPS:', err);
-        } else {
-            console.log('✓ Subscribed to renderer FPS');
-        }
-    });
-}
-
 function handleFpsMessage(topic, message) {
     try {
         const data = JSON.parse(message);
@@ -96,5 +61,4 @@ function getFpsClass(fps) {
 }
 
 // Export functions for global access
-window.initFpsMonitoring = initFpsMonitoring;
 window.handleFpsMessage = handleFpsMessage;

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Protosuit Controller{% endblock %}
+
+{% set touch_optimized = true %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/controller.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div class="header-content">
+        <a href="/">
+            <h1>Protosuit Controller</h1>
+        </a>
+        <div class="display-selector">
+            <button class="display-btn" data-display="left">Left</button>
+            <button class="display-btn" data-display="right">Right</button>
+        </div>
+    </div>
+    <div class="status" id="status">Connecting...</div>
+</div>
+
+<div class="controller-container">
+    <div class="controls-row">
+        <!-- D-Pad (Arrow Keys) -->
+        <div class="control-section">
+            <h3 class="section-label">MOVEMENT</h3>
+            <div class="dpad">
+                <button class="ctrl-btn dpad-btn up" data-key="Up">▲</button>
+                <button class="ctrl-btn dpad-btn left" data-key="Left">◄</button>
+                <button class="dpad-btn center"></button>
+                <button class="ctrl-btn dpad-btn right" data-key="Right">►</button>
+                <button class="ctrl-btn dpad-btn down" data-key="Down">▼</button>
+            </div>
+        </div>
+
+        <!-- Action Buttons with Fire in Center -->
+        <div class="control-section">
+            <h3 class="section-label">ACTIONS</h3>
+            <div class="action-buttons">
+                <button class="ctrl-btn action-btn b" data-key="Return">
+                    <span class="btn-letter">B</span>
+                    <span class="key-indicator">ENTER</span>
+                </button>
+                <button class="ctrl-btn action-btn y" data-key="Escape">
+                    <span class="btn-letter">Y</span>
+                    <span class="key-indicator">ESC</span>
+                </button>
+                <!-- Fire Button in Center -->
+                <button class="ctrl-btn fire-button" data-key="Control_L">
+                    <span class="fire-label">FIRE</span>
+                    <span class="key-indicator">CTRL</span>
+                </button>
+                <button class="ctrl-btn action-btn a" data-key="space">
+                    <span class="btn-letter">A</span>
+                    <span class="key-indicator">SPACE</span>
+                </button>
+                <button class="ctrl-btn action-btn x" data-key="Tab">
+                    <span class="btn-letter">X</span>
+                    <span class="key-indicator">TAB</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/controller.js') }}"></script>
+{% endblock %}

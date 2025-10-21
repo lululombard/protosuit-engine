@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0{% if touch_optimized %}, user-scalable=no{% endif %}">
+    <title>{% block title %}Protosuit Engine{% endblock %}</title>
+
+    <!-- MQTT.js library -->
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+
+    {% block extra_head %}{% endblock %}
+
+    {% block styles %}{% endblock %}
+</head>
+
+<body>
+    {% block content %}{% endblock %}
+
+    <!-- Shared MQTT connection utility -->
+    <script src="{{ url_for('static', filename='js/mqtt.js') }}"></script>
+
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

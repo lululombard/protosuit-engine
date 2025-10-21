@@ -1,0 +1,91 @@
+---
+# Super Haxagon installation tasks
+# A cross-platform Super Hexagon clone that uses SFML
+
+- name: Create PipeWire configuration directory
+  file:
+    path: "{{ pi_home }}/.config/pipewire"
+    state: directory
+    owner: "{{ pi_user }}"
+    group: "{{ pi_user }}"
+    mode: '0755'
+
+- name: Create PipeWire client config to suppress warnings
+  copy:
+    dest: "{{ pi_home }}/.config/pipewire/client.conf"
+    owner: "{{ pi_user }}"
+    group: "{{ pi_user }}"
+    mode: '0644'
+    content: |
+      # PipeWire client configuration
+      context.properties = {
+          link.max-buffers = 16
+          log.level = 0
+      }
+
+- name: Remove old SFML 3.x installation from /usr/local (conflicts with Super Haxagon)
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/include/SFML
+    - /usr/local/lib/libsfml-system.a
+    - /usr/local/lib/libsfml-window.a
+    - /usr/local/lib/libsfml-graphics.a
+    - /usr/local/lib/libsfml-audio.a
+    - /usr/local/lib/libsfml-network.a
+    - /usr/local/lib/cmake/SFML
+    - /opt/SFML
+    - /opt/SFML-a4a28a035b7ff60199588592aa1835014bfc2c57
+    - /opt/imgui
+    - /opt/imgui-1.90.9
+    - /opt/imgui-sfml
+    - /opt/imgui-sfml-2.6.x
+  become: yes
+
+- name: Check if Super Haxagon is already cloned
+  stat:
+    path: /opt/superhaxagon
+  register: superhaxagon_stat
+
+- name: Remove existing Super Haxagon directory if it exists
+  file:
+    path: /opt/superhaxagon
+    state: absent
+  when: superhaxagon_stat.stat.exists
+
+- name: Clone Super Haxagon repository
+  git:
+    repo: https://github.com/RedTopper/Super-Haxagon.git
+    dest: /opt/superhaxagon
+    version: master
+
+- name: Create build directory
+  file:
+    path: /opt/superhaxagon/build
+    state: directory
+    mode: '0755'
+
+- name: Configure Super Haxagon with CMake
+  command: cmake ..
+  args:
+    chdir: /opt/superhaxagon/build
+
+- name: Build Super Haxagon
+  command: make -j4
+  args:
+    chdir: /opt/superhaxagon/build
+
+- name: Create desktop entry for Super Haxagon
+  copy:
+    dest: /usr/share/applications/superhaxagon.desktop
+    content: |
+      [Desktop Entry]
+      Name=Super Haxagon
+      Comment=A Super Hexagon Clone
+      Exec=/opt/superhaxagon/build/SuperHaxagon
+      Terminal=false
+      Type=Application
+      Categories=Game;
+    mode: '0644'
+  become: yes
