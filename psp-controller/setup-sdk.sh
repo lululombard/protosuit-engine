@@ -1,24 +1,20 @@
 #!/bin/bash
-# PSP SDK Setup Script for Raspberry Pi
+# PSP SDK Setup Script
 # Installs the open-source PSPSDK toolchain
 
 set -e
 
 echo "=========================================="
-echo "PSP SDK Setup for Raspberry Pi"
+echo "PSP SDK Setup"
 echo "=========================================="
 echo ""
 
-# Check if running on ARM
-ARCH=$(uname -m)
-if [[ ! "$ARCH" =~ ^(arm|aarch64) ]]; then
-    echo "Warning: This script is designed for Raspberry Pi (ARM architecture)"
-    echo "Current architecture: $ARCH"
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
+echo "Warning: This script takes a lot of time to run, over an hour on a Raspberry Pi 5"
+echo "It installs the complete PSP development environment, including the toolchain, libraries, and headers in your home directory."
+read -p "Continue anyway? (y/n) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    exit 1
 fi
 
 # Installation directory
@@ -49,7 +45,10 @@ sudo apt-get install -y \
     libtool-bin \
     libusb-dev \
     pkg-config \
-    python3
+    python3 \
+    libgpg-error-dev \
+    libarchive-dev \
+    libgpgme-dev
 
 echo "✓ Dependencies installed"
 echo ""
@@ -61,28 +60,28 @@ sudo chown -R $(whoami):$(whoami) "$PSPDEV"
 echo "✓ Directory created: $PSPDEV"
 echo ""
 
-# Clone psptoolchain
-echo "[3/4] Cloning psptoolchain repository..."
-TOOLCHAIN_DIR="$HOME/psptoolchain"
+# Clone pspdev (complete SDK)
+echo "[3/4] Cloning pspdev repository..."
+TOOLCHAIN_DIR="$HOME/pspdev"
 if [ -d "$TOOLCHAIN_DIR" ]; then
-    echo "Toolchain directory already exists, pulling latest..."
+    echo "pspdev directory already exists, pulling latest..."
     cd "$TOOLCHAIN_DIR"
     git pull
 else
-    git clone https://github.com/pspdev/psptoolchain.git "$TOOLCHAIN_DIR"
+    git clone https://github.com/pspdev/pspdev.git "$TOOLCHAIN_DIR"
     cd "$TOOLCHAIN_DIR"
 fi
 echo "✓ Repository ready"
 echo ""
 
-# Build toolchain
-echo "[4/4] Building PSP toolchain (this will take a while)..."
+# Build complete PSP development environment
+echo "[4/4] Building complete PSP development environment (this will take a while)..."
 echo "Building in: $(pwd)"
 export PSPDEV="$PSPDEV"
 export PATH="$PATH:$PSPDEV/bin"
 
-# Run the toolchain build script
-./toolchain.sh
+# Run the pspdev build script
+./build-all.sh
 
 echo ""
 echo "=========================================="
@@ -98,4 +97,3 @@ echo "Then run: source ~/.bashrc  (or ~/.zshrc)"
 echo ""
 echo "To verify installation, run: psp-gcc --version"
 echo ""
-
