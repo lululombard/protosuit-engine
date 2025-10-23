@@ -1,5 +1,5 @@
 /*
- * PSP MQTT Controller - Minimal MQTT Client Implementation
+ * Protosuit Remote Control - Minimal MQTT Client Implementation
  * Supports MQTT 3.1.1 protocol (CONNECT, PUBLISH, PINGREQ only)
  */
 
@@ -10,6 +10,9 @@
 #include <pspnet_inet.h>
 #include <psputility.h>
 #include <psprtc.h>
+#include <pspthreadman.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 // MQTT packet types
 #define MQTT_CONNECT     0x10
@@ -73,27 +76,27 @@ int mqtt_connect(mqtt_context_t *ctx) {
         return -1;
     }
 
-    // Set non-blocking mode
-    int val = 1;
-    sceNetInetSetsockopt(ctx->socket, SOL_SOCKET, SO_NONBLOCK, &val, sizeof(val));
+    // Set socket timeout (2 seconds)
+    struct timeval tv;
+    tv.tv_sec = 2;
+    tv.tv_usec = 0;
+    sceNetInetSetsockopt(ctx->socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    sceNetInetSetsockopt(ctx->socket, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
     // Connect to broker
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = sceNetHtons(ctx->broker_port);
-    sceNetInetInetAton(ctx->broker_ip, &addr.sin_addr);
+    addr.sin_port = htons(ctx->broker_port);
+    inet_aton(ctx->broker_ip, &addr.sin_addr);
 
     int result = sceNetInetConnect(ctx->socket, (struct sockaddr *)&addr, sizeof(addr));
-    if (result < 0 && result != 0x80410709) { // EINPROGRESS is ok
+    if (result < 0) {
         sceNetInetClose(ctx->socket);
         ctx->socket = -1;
         ctx->state = MQTT_ERROR;
         return -1;
     }
-
-    // Wait for connection (with timeout)
-    sceKernelDelayThread(100000); // 100ms
 
     // Build CONNECT packet
     uint8_t packet[256];
@@ -121,16 +124,15 @@ int mqtt_connect(mqtt_context_t *ctx) {
 
     // Send CONNECT packet
     int sent = sceNetInetSend(ctx->socket, packet, pos, 0);
-    if (sent != pos) {
+    if (sent <= 0) {
         sceNetInetClose(ctx->socket);
         ctx->socket = -1;
         ctx->state = MQTT_ERROR;
         return -1;
     }
 
-    // Wait for CONNACK
+    // Wait for CONNACK (blocking with timeout set above)
     uint8_t response[4];
-    sceKernelDelayThread(200000); // 200ms
     int received = sceNetInetRecv(ctx->socket, response, sizeof(response), 0);
 
     if (received >= 4 && response[0] == MQTT_CONNACK && response[3] == 0x00) {
@@ -149,9 +151,13 @@ int mqtt_connect(mqtt_context_t *ctx) {
 
 void mqtt_disconnect(mqtt_context_t *ctx) {
     if (ctx->socket >= 0) {
-        // Send DISCONNECT packet
+        // Send DISCONNECT packet (don't wait for response)
         uint8_t packet[2] = {MQTT_DISCONNECT, 0x00};
         sceNetInetSend(ctx->socket, packet, 2, 0);
+
+        // Close socket immediately without lingering
+        int opt = 1;
+        sceNetInetSetsockopt(ctx->socket, SOL_SOCKET, SO_LINGER, &opt, sizeof(opt));
         sceNetInetClose(ctx->socket);
         ctx->socket = -1;
     }
@@ -221,4 +227,3 @@ bool mqtt_is_connected(mqtt_context_t *ctx) {
 mqtt_state_t mqtt_get_state(mqtt_context_t *ctx) {
     return ctx->state;
 }
-

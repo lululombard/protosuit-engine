@@ -1,5 +1,5 @@
 /*
- * PSP MQTT Controller - WiFi Manager Implementation
+ * Protosuit Remote Control - WiFi Manager Implementation
  */
 
 #include "wifi.h"
@@ -12,10 +12,9 @@
 #include <psputility.h>
 #include <pspkernel.h>
 
-int wifi_init(wifi_context_t *ctx, const char *ssid, const char *password) {
+int wifi_init(wifi_context_t *ctx, int profile) {
     memset(ctx, 0, sizeof(wifi_context_t));
-    strncpy(ctx->ssid, ssid, sizeof(ctx->ssid) - 1);
-    strncpy(ctx->password, password, sizeof(ctx->password) - 1);
+    ctx->profile_index = (profile > 0 && profile <= 10) ? profile : 1; // Default to profile 1
     ctx->state = WIFI_DISCONNECTED;
 
     // Load network modules
@@ -45,46 +44,28 @@ int wifi_init(wifi_context_t *ctx, const char *ssid, const char *password) {
 }
 
 int wifi_connect(wifi_context_t *ctx) {
-    if (ctx->state == WIFI_CONNECTED) {
-        return 0; // Already connected
+    // Don't try to connect if already connected
+    int state = 0;
+    sceNetApctlGetState(&state);
+    if (state == PSP_NET_APCTL_STATE_GOT_IP) {
+        ctx->state = WIFI_CONNECTED;
+        return 0;  // Already connected
     }
 
     ctx->state = WIFI_CONNECTING;
 
-    // Try to use first available network profile
-    // In a production app, you'd want to scan and match SSID
-    int ret = sceNetApctlConnect(1); // Profile 1
+    // Connect using the configured PSP network profile (1-based index)
+    // NOTE: Don't disconnect first - PSP-FTPD doesn't do this
+    int ret = sceNetApctlConnect(ctx->profile_index);
     if (ret < 0) {
-        ctx->state = WIFI_ERROR;
+        // Only set error if not already connecting (error code 0x80410a0b)
+        if (ret != 0x80410a0b) {
+            ctx->state = WIFI_ERROR;
+        }
         return ret;
     }
 
-    // Wait for connection (up to 10 seconds)
-    int timeout = 100; // 10 seconds (100 * 100ms)
-    while (timeout-- > 0) {
-        int state;
-        ret = sceNetApctlGetState(&state);
-        if (ret < 0) {
-            ctx->state = WIFI_ERROR;
-            return ret;
-        }
-
-        if (state == PSP_NET_APCTL_STATE_GOT_IP) {
-            // Get IP address
-            union SceNetApctlInfo info;
-            ret = sceNetApctlGetInfo(PSP_NET_APCTL_INFO_IP, &info);
-            if (ret == 0) {
-                strncpy(ctx->ip_address, info.ip, sizeof(ctx->ip_address) - 1);
-            }
-            ctx->state = WIFI_CONNECTED;
-            return 0;
-        }
-
-        sceKernelDelayThread(100000); // 100ms
-    }
-
-    ctx->state = WIFI_ERROR;
-    return -1;
+    return 0; // Return immediately, let caller poll for connection
 }
 
 void wifi_disconnect(wifi_context_t *ctx) {
@@ -95,19 +76,37 @@ void wifi_disconnect(wifi_context_t *ctx) {
 }
 
 bool wifi_is_connected(wifi_context_t *ctx) {
-    if (ctx->state != WIFI_CONNECTED) {
-        return false;
-    }
-
-    // Verify we're still connected
-    int state;
+    // Always check actual network state
+    int state = 0;
     int ret = sceNetApctlGetState(&state);
-    if (ret < 0 || state != PSP_NET_APCTL_STATE_GOT_IP) {
-        ctx->state = WIFI_DISCONNECTED;
+
+    if (ret < 0) {
+        ctx->state = WIFI_ERROR;
         return false;
     }
 
-    return true;
+    if (state == PSP_NET_APCTL_STATE_GOT_IP) {
+        // Update context state and IP if connected
+        ctx->state = WIFI_CONNECTED;
+
+        // Get IP address if we don't have it yet
+        if (ctx->ip_address[0] == 0) {
+            union SceNetApctlInfo info;
+            if (sceNetApctlGetInfo(PSP_NET_APCTL_INFO_IP, &info) == 0) {
+                strncpy(ctx->ip_address, info.ip, sizeof(ctx->ip_address) - 1);
+            }
+        }
+        return true;
+    }
+
+    // Update state based on actual connection state
+    if (state == PSP_NET_APCTL_STATE_DISCONNECTED) {
+        ctx->state = WIFI_DISCONNECTED;
+    } else if (state > PSP_NET_APCTL_STATE_DISCONNECTED && state < PSP_NET_APCTL_STATE_GOT_IP) {
+        ctx->state = WIFI_CONNECTING;
+    }
+
+    return false;
 }
 
 wifi_state_t wifi_get_state(wifi_context_t *ctx) {
@@ -122,11 +121,16 @@ const char* wifi_get_ip(wifi_context_t *ctx) {
 }
 
 void wifi_shutdown(wifi_context_t *ctx) {
-    wifi_disconnect(ctx);
+    // Quick disconnect without waiting
+    sceNetApctlDisconnect();
+    ctx->state = WIFI_DISCONNECTED;
+
+    // Terminate network stack (don't wait for clean shutdown)
     sceNetApctlTerm();
     sceNetInetTerm();
     sceNetTerm();
+
+    // Unload modules
     sceUtilityUnloadNetModule(PSP_NET_MODULE_INET);
     sceUtilityUnloadNetModule(PSP_NET_MODULE_COMMON);
 }
-

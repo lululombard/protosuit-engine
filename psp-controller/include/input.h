@@ -1,5 +1,5 @@
 /*
- * PSP MQTT Controller - Input Handler Header
+ * Protosuit Remote Control - Input Handler Header
  */
 
 #ifndef INPUT_H
@@ -45,4 +45,3 @@ const char* input_get_display(input_context_t *ctx);
 const char* input_display_to_string(display_t display);
 
 #endif // INPUT_H
-

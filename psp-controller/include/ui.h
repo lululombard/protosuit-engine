@@ -1,5 +1,5 @@
 /*
- * PSP MQTT Controller - UI Header
+ * Protosuit Remote Control - UI Header
  */
 
 #ifndef UI_H
@@ -24,4 +24,3 @@ void ui_draw(ui_context_t *ctx, wifi_context_t *wifi, mqtt_context_t *mqtt, inpu
 void ui_shutdown(ui_context_t *ctx);
 
 #endif // UI_H
-

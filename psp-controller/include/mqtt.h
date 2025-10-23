@@ -1,5 +1,5 @@
 /*
- * PSP MQTT Controller - MQTT Client Header
+ * Protosuit Remote Control - MQTT Client Header
  */
 
 #ifndef MQTT_H
@@ -51,4 +51,3 @@ bool mqtt_is_connected(mqtt_context_t *ctx);
 mqtt_state_t mqtt_get_state(mqtt_context_t *ctx);
 
 #endif // MQTT_H
-

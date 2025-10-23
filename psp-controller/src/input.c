@@ -1,5 +1,5 @@
 /*
- * PSP MQTT Controller - Input Handler Implementation
+ * Protosuit Remote Control - Input Handler Implementation
  */
 
 #include "input.h"
@@ -97,4 +97,3 @@ const char* input_get_display(input_context_t *ctx) {
 const char* input_display_to_string(display_t display) {
     return (display == DISPLAY_LEFT) ? "left" : "right";
 }
-

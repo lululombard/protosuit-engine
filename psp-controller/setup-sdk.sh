@@ -39,6 +39,7 @@ sudo apt-get install -y \
     libelf-dev \
     libncurses5-dev \
     libreadline-dev \
+    libssl-dev \
     texinfo \
     wget \
     zlib1g-dev \

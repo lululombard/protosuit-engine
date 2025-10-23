@@ -1,5 +1,5 @@
 /*
- * PSP MQTT Controller - Main Application
+ * Protosuit Remote Control - Main Application
  *
  * A PSP homebrew app that sends MQTT commands to control protosuit-engine
  */
@@ -13,12 +13,14 @@
 #include <string.h>
 
 #include "wifi.h"
+#include "wifi_menu.h"
 #include "mqtt.h"
 #include "input.h"
 #include "ui.h"
+#include "config_loader.h"
 #include "../config.h"
 
-PSP_MODULE_INFO("PSP_MQTT_Controller", 0, 1, 0);
+PSP_MODULE_INFO("Protosuit_Remote", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
 // Global contexts
@@ -53,9 +55,12 @@ int setup_callbacks(void) {
     return thid;
 }
 
+// Global config for callback
+static app_config_t *g_app_config = NULL;
+
 // Input event callback - sends MQTT message
 void input_event_callback(const char *key, const char *action, const char *display) {
-    if (!mqtt_is_connected(&mqtt_ctx)) {
+    if (!mqtt_is_connected(&mqtt_ctx) || !g_app_config) {
         return;
     }
 
@@ -66,7 +71,7 @@ void input_event_callback(const char *key, const char *action, const char *displ
              key, action, display);
 
     // Publish to MQTT
-    mqtt_publish(&mqtt_ctx, MQTT_TOPIC, payload);
+    mqtt_publish(&mqtt_ctx, g_app_config->mqtt_topic, payload);
 }
 
 int main(int argc, char *argv[]) {
@@ -82,21 +87,51 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    // Load configuration
+    app_config_t app_config;
+    int config_loaded = load_config(&app_config);
+    g_app_config = &app_config;
+
+    if (!config_loaded) {
+        // No config file found, create a default one
+        pspDebugScreenPrintf("Creating default config.txt...\n");
+        save_default_config();
+        pspDebugScreenPrintf("Edit ms0:/PSP/GAME/ProtosuitRemote/config.txt\n");
+        pspDebugScreenPrintf("Using default settings for now...\n");
+        sceKernelDelayThread(2000000);
+    }
+
     // Initialize input
     input_init(&input_ctx);
 
-    // Initialize WiFi
-    pspDebugScreenPrintf("Initializing WiFi...\n");
-    if (wifi_init(&wifi_ctx, WIFI_SSID, WIFI_PASSWORD) < 0) {
+    // Always show WiFi profile selection menu (like PSP ftpd)
+    int selected_profile = 1;
+    if (wifi_menu_select_profile(&selected_profile) < 0) {
+        pspDebugScreenPrintf("WiFi setup cancelled\n");
+        sceKernelDelayThread(2000000);
+        sceKernelExitGame();
+        return -1;
+    }
+
+    // Initialize WiFi with selected profile
+    if (wifi_init(&wifi_ctx, selected_profile) < 0) {
         pspDebugScreenPrintf("Failed to initialize WiFi\n");
         sceKernelDelayThread(3000000);
         sceKernelExitGame();
         return -1;
     }
 
+    // Connect and wait for WiFi (with progress display)
+    if (wifi_menu_wait_for_connection(&wifi_ctx) < 0) {
+        pspDebugScreenPrintf("WiFi connection cancelled\n");
+        sceKernelDelayThread(2000000);
+        sceKernelExitGame();
+        return -1;
+    }
+
     // Initialize MQTT
-    mqtt_init(&mqtt_ctx, MQTT_BROKER_IP, MQTT_BROKER_PORT,
-              MQTT_CLIENT_ID, MQTT_KEEPALIVE);
+    mqtt_init(&mqtt_ctx, app_config.mqtt_broker_ip, app_config.mqtt_broker_port,
+              app_config.mqtt_client_id, app_config.mqtt_keepalive);
 
     // Connection state tracking
     bool wifi_connected = false;
@@ -160,4 +195,3 @@ int main(int argc, char *argv[]) {
     sceKernelExitGame();
     return 0;
 }
-

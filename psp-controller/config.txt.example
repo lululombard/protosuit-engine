@@ -1,0 +1,13 @@
+# Protosuit Remote Control Configuration
+# Edit these values to match your setup
+
+# Note: WiFi profile is selected on startup
+
+# MQTT Broker Settings
+mqtt_broker_ip=192.168.1.100
+mqtt_broker_port=1883
+mqtt_client_id=psp-controller
+mqtt_topic=protogen/fins/launcher/input/exec
+mqtt_keepalive=60
+
+# Note: Restart the app after editing this file

@@ -1,5 +1,5 @@
 /*
- * PSP MQTT Controller - WiFi Manager Header
+ * Protosuit Remote Control - WiFi Manager Header
  */
 
 #ifndef WIFI_H
@@ -18,13 +18,13 @@ typedef enum {
 // WiFi context
 typedef struct {
     wifi_state_t state;
-    char ssid[64];
-    char password[64];
+    int profile_index;     // PSP network profile to use (1-10)
     char ip_address[16];
 } wifi_context_t;
 
 // Initialize WiFi subsystem
-int wifi_init(wifi_context_t *ctx, const char *ssid, const char *password);
+// profile: PSP network configuration profile index (1-10, or 0 for first available)
+int wifi_init(wifi_context_t *ctx, int profile);
 
 // Connect to WiFi network
 int wifi_connect(wifi_context_t *ctx);
@@ -45,4 +45,3 @@ const char* wifi_get_ip(wifi_context_t *ctx);
 void wifi_shutdown(wifi_context_t *ctx);
 
 #endif // WIFI_H
-
