@@ -23,6 +23,14 @@ A PSP homebrew application that sends button inputs to a MQTT broker for control
 
 This will take over an hour to complete. It installs the complete PSP development environment.
 
+It is normal if you install ends with, just ignore it, it will wortk:
+```
+warning: no 'XferCommand' configured
+:: Synchronizing package databases...
+error: failed to synchronize all databases (error invoking external downloader)
+../scripts/003-psp-packages.sh: Failed.
+```
+
 After installation, add these to your `~/.bashrc` or `~/.zshrc`:
 
 ```bash
