@@ -8,6 +8,8 @@ import signal
 import json
 import os
 import glob
+import subprocess
+import re
 from typing import Optional, Dict, List
 import sys
 import os
@@ -69,6 +71,14 @@ class Launcher:
         self.video_dir = os.path.join(project_root, "assets", "video")
         self.exec_dir = os.path.join(project_root, "assets", "executables")
 
+        # Volume configuration
+        launcher_config = self.config_loader.config.get("launcher", {})
+        volume_config = launcher_config.get("volume", {})
+        self.speaker_entity = volume_config.get("speaker_entity", "Speaker")
+        self.default_volume = volume_config.get("default", 50)
+        self.volume_min = volume_config.get("min", 0)
+        self.volume_max = volume_config.get("max", 100)
+
         print("[Launcher] Initialized")
 
     def init_mqtt(self):
@@ -90,12 +100,14 @@ class Launcher:
                 client.subscribe("protogen/fins/launcher/kill/exec")
                 client.subscribe("protogen/fins/launcher/config/reload")
                 client.subscribe("protogen/fins/launcher/input/exec")
+                client.subscribe("protogen/fins/launcher/volume/set")
                 print("[Launcher] Subscribed to topics:")
                 print("  - protogen/fins/launcher/start/*")
                 print("  - protogen/fins/launcher/stop/*")
                 print("  - protogen/fins/launcher/kill/*")
                 print("  - protogen/fins/launcher/config/reload")
                 print("  - protogen/fins/launcher/input/exec")
+                print("  - protogen/fins/launcher/volume/set")
             else:
                 print(f"[Launcher] Failed to connect to MQTT broker: {rc}")
 
@@ -114,6 +126,7 @@ class Launcher:
         self.publish_audio_status()
         self.publish_video_status()
         self.publish_exec_status()
+        self.publish_volume_status()
 
     def on_mqtt_message(self, topic: str, payload: str):
         """Handle incoming MQTT messages"""
@@ -150,6 +163,10 @@ class Launcher:
             elif topic == "protogen/fins/launcher/input/exec":
                 if self.exec_launcher:
                     self.exec_launcher.handle_input_message(payload)
+
+            # Volume control
+            elif topic == "protogen/fins/launcher/volume/set":
+                self.handle_volume_set(payload)
 
         except Exception as e:
             print(f"[Launcher] Error handling message on {topic}: {e}")
@@ -476,6 +493,105 @@ class Launcher:
             )
         except Exception as e:
             print(f"[Launcher] Error publishing exec status: {e}")
+
+    def get_current_volume(self) -> int:
+        """Get current volume from amixer"""
+        try:
+            # Run amixer to get current volume
+            result = subprocess.run(
+                ["amixer", "sget", self.speaker_entity],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+
+            if result.returncode == 0:
+                # Parse output for percentage: [XX%]
+                match = re.search(r'\[(\d+)%\]', result.stdout)
+                if match:
+                    volume = int(match.group(1))
+                    print(f"[Launcher] Current volume: {volume}%")
+                    return volume
+
+            print(f"[Launcher] Could not get current volume, using default: {self.default_volume}%")
+            return self.default_volume
+
+        except Exception as e:
+            print(f"[Launcher] Error getting volume: {e}")
+            return self.default_volume
+
+    def set_volume(self, percentage: int):
+        """Set volume using amixer"""
+        try:
+            # Clamp volume to configured range
+            percentage = max(self.volume_min, min(self.volume_max, percentage))
+
+            # Run amixer to set volume
+            result = subprocess.run(
+                ["amixer", "sset", self.speaker_entity, f"{percentage}%"],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+
+            if result.returncode == 0:
+                print(f"[Launcher] Volume set to {percentage}%")
+                return True
+            else:
+                print(f"[Launcher] Failed to set volume: {result.stderr}")
+                return False
+
+        except Exception as e:
+            print(f"[Launcher] Error setting volume: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def publish_volume_status(self):
+        """Publish volume status to MQTT"""
+        if not self.mqtt_client:
+            return
+
+        try:
+            volume = self.get_current_volume()
+            status = {
+                "volume": volume,
+                "min": self.volume_min,
+                "max": self.volume_max
+            }
+
+            self.mqtt_client.publish(
+                "protogen/fins/launcher/status/volume",
+                json.dumps(status),
+                retain=True
+            )
+            print(f"[Launcher] Published volume status: {volume}%")
+        except Exception as e:
+            print(f"[Launcher] Error publishing volume status: {e}")
+
+    def handle_volume_set(self, payload: str):
+        """Handle volume set command"""
+        try:
+            # Parse JSON payload
+            if payload.startswith("{"):
+                data = json.loads(payload)
+                volume = data.get("volume")
+            else:
+                # Accept plain number as well
+                volume = int(payload)
+
+            if volume is not None:
+                print(f"[Launcher] Setting volume to {volume}%")
+                if self.set_volume(volume):
+                    # Publish updated status
+                    self.publish_volume_status()
+            else:
+                print("[Launcher] Invalid volume value in payload")
+
+        except Exception as e:
+            print(f"[Launcher] Error handling volume set: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _on_audio_exit(self):
         """Callback when audio exits"""

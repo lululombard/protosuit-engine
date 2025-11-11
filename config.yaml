@@ -33,6 +33,14 @@ monitoring:
   fps_smoothing_frames: 3    # Number of frames to average for FPS smoothing
   enabled: true              # Enable/disable FPS monitoring
 
+# Launcher configuration
+launcher:
+  volume:
+    default: 50  # Default volume percentage (0-100)
+    speaker_entity: "Speaker"  # ALSA mixer entity name
+    min: 0
+    max: 100
+
 animations:
   # Base animations (persistent, run indefinitely)
   #

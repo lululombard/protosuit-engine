@@ -63,6 +63,9 @@ function connectMQTT() {
         } else if (topic === 'protogen/fins/launcher/status/exec') {
             handleLauncherExecStatus(payload);
             return;
+        } else if (topic === 'protogen/fins/launcher/status/volume') {
+            handleLauncherVolumeStatus(payload);
+            return;
         }
 
         logMessage(`← ${topic}: ${payload}`);

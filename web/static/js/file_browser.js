@@ -6,6 +6,8 @@
 let audioFiles = [];
 let videoFiles = [];
 let execFiles = [];
+let isVolumeSliderDragging = false;
+let latestVolumeFromMQTT = null;
 
 /**
  * Handle launcher audio status from MQTT
@@ -46,6 +48,27 @@ function handleLauncherExecStatus(payload) {
         console.log(`✓ Loaded ${execFiles.length} executables from launcher`);
     } catch (error) {
         console.error('Error parsing launcher exec status:', error);
+    }
+}
+
+/**
+ * Handle launcher volume status from MQTT
+ */
+function handleLauncherVolumeStatus(payload) {
+    try {
+        const data = JSON.parse(payload);
+        const volume = data.volume || 50;
+        const min = data.min !== undefined ? data.min : 0;
+        const max = data.max !== undefined ? data.max : 100;
+
+        // Always store the latest MQTT volume value
+        latestVolumeFromMQTT = { volume: volume, min: min, max: max };
+
+        // Update the slider (will be skipped if currently dragging)
+        updateVolumeSlider(volume, min, max);
+        console.log(`✓ Volume updated: ${volume}% (range: ${min}-${max}%)`);
+    } catch (error) {
+        console.error('Error parsing volume status:', error);
     }
 }
 
@@ -110,6 +133,7 @@ function renderFileList() {
 function playAudio(filename) {
     if (mqttClient && mqttClient.connected) {
         mqttClient.publish('protogen/fins/launcher/start/audio', filename);
+        trackMessageSent();
         logMessage(`Playing audio: ${filename}`);
     } else {
         logMessage('Error: Not connected to MQTT');
@@ -125,6 +149,7 @@ function playVideo(filename) {
             file: filename
         });
         mqttClient.publish('protogen/fins/launcher/start/video', payload);
+        trackMessageSent();
         logMessage(`Playing video: ${filename}`);
     } else {
         logMessage('Error: Not connected to MQTT');
@@ -137,6 +162,7 @@ function playVideo(filename) {
 function launchExec(filename) {
     if (mqttClient && mqttClient.connected) {
         mqttClient.publish('protogen/fins/launcher/start/exec', filename);
+        trackMessageSent();
         logMessage(`Launching executable: ${filename}`);
     } else {
         logMessage('Error: Not connected to MQTT');
@@ -149,6 +175,7 @@ function launchExec(filename) {
 function killAudio() {
     if (mqttClient && mqttClient.connected) {
         mqttClient.publish('protogen/fins/launcher/kill/audio', 'all');
+        trackMessageSent();
         logMessage('Killed all audio playback');
     } else {
         logMessage('Error: Not connected to MQTT');
@@ -161,6 +188,7 @@ function killAudio() {
 function killVideo() {
     if (mqttClient && mqttClient.connected) {
         mqttClient.publish('protogen/fins/launcher/kill/video', '');
+        trackMessageSent();
         logMessage('Killed video playback');
     } else {
         logMessage('Error: Not connected to MQTT');
@@ -173,6 +201,7 @@ function killVideo() {
 function killExec() {
     if (mqttClient && mqttClient.connected) {
         mqttClient.publish('protogen/fins/launcher/kill/exec', '');
+        trackMessageSent();
         logMessage('Killed executable');
     } else {
         logMessage('Error: Not connected to MQTT');
@@ -187,6 +216,62 @@ function refreshFiles() {
     // Files will be loaded automatically when MQTT status messages arrive
     if (mqttClient && mqttClient.connected) {
         mqttClient.publish('protogen/fins/launcher/config/reload', '');
+        trackMessageSent();
+    }
+}
+
+/**
+ * Set volume via MQTT
+ */
+function setVolume(value) {
+    const volume = parseInt(value);
+    document.getElementById('volumeValue').textContent = volume;
+
+    if (mqttClient && mqttClient.connected) {
+        const payload = JSON.stringify({ volume: volume });
+        mqttClient.publish('protogen/fins/launcher/volume/set', payload);
+        trackMessageSent();
+    }
+}
+
+/**
+ * Update volume slider from MQTT status
+ */
+function updateVolumeSlider(volume, min, max) {
+    const slider = document.getElementById('volumeSlider');
+    const display = document.getElementById('volumeValue');
+
+    // Don't update slider value if user is currently dragging it
+    // This prevents rubber-banding effect
+    if (slider && !isVolumeSliderDragging) {
+        slider.value = volume;
+        if (min !== undefined) slider.min = min;
+        if (max !== undefined) slider.max = max;
+    } else if (slider) {
+        // Still update min/max even while dragging
+        if (min !== undefined) slider.min = min;
+        if (max !== undefined) slider.max = max;
+    }
+
+    // Always update the display value (even while dragging, it shows what user selected)
+    if (display && !isVolumeSliderDragging) {
+        display.textContent = volume;
+    }
+}
+
+/**
+ * Handle volume slider release - sync to latest MQTT value
+ */
+function onVolumeSliderRelease() {
+    isVolumeSliderDragging = false;
+
+    // Sync slider to the latest MQTT value received
+    if (latestVolumeFromMQTT !== null) {
+        updateVolumeSlider(
+            latestVolumeFromMQTT.volume,
+            latestVolumeFromMQTT.min,
+            latestVolumeFromMQTT.max
+        );
     }
 }
 

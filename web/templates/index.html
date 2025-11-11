@@ -85,6 +85,16 @@
                         <button onclick="killExec()">🔪 Kill Exec</button>
                     </div>
                 </div>
+                <div class="volume-control"
+                    style="margin: 10px 0; padding: 10px; border: 1px solid #444; border-radius: 5px;">
+                    <label for="volumeSlider" style="display: block; margin-bottom: 5px;">
+                        🔊 Volume: <span id="volumeValue">50</span>%
+                    </label>
+                    <input type="range" id="volumeSlider" min="0" max="100" step="1" value="50" style="width: 100%;"
+                        oninput="setVolume(this.value)" onmousedown="isVolumeSliderDragging = true"
+                        onmouseup="onVolumeSliderRelease()" ontouchstart="isVolumeSliderDragging = true"
+                        ontouchend="onVolumeSliderRelease()">
+                </div>
                 <div id="fileList" class="file-list">
                     <p><em>Waiting for launcher status...</em></p>
                 </div>
