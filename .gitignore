@@ -8,3 +8,5 @@ __pycache__/
 *.pywz
 *.pyzw
 *.pyz
+.DS_Store
+*.lck
