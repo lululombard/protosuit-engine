@@ -1,4 +1,4 @@
-27126330829839708
+27131637851703755
 Aliexpress
 DC_DC_5V_5A_TPS54X60
 
@@ -20,6 +20,13 @@ ESP32_MIN132_V_1_0_0
 0
 40
 40
+Aliexpress
+GYRO_MPU6050
+
+
+0
+8
+8
 Aliexpress
 LEVEL_SHIFTER_TXS0108E
 
@@ -6903,6 +6910,13 @@ pin header 3-pin CPU fan
 3
 Connector
 FanPinHeader_1x04_P2.54mm_Vertical
+4-pin CPU fan Through hole pin header, e.g. for Wieson part number 2366C888-007 Molex 47053-1000, Foxconn HF27040-M1, Tyco 1470947-1 or equivalent, see http://www.formfactors.org/developer%5Cspecs%5Crev1_2_public.pdf
+pin header 4-pin CPU fan
+0
+4
+4
+Connector
+FanPinHeader_1x04_P2.54mm_Vertical_No_Via
 4-pin CPU fan Through hole pin header, e.g. for Wieson part number 2366C888-007 Molex 47053-1000, Foxconn HF27040-M1, Tyco 1470947-1 or equivalent, see http://www.formfactors.org/developer%5Cspecs%5Crev1_2_public.pdf
 pin header 4-pin CPU fan
 0
@@ -107428,6 +107442,13 @@ Teensy40_SMT
 0
 54
 54
+teensy
+Teensy40_minimal_pins
+
+
+0
+28
+28
 teensy
 Teensy41
 
