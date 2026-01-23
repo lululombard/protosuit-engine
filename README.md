@@ -56,8 +56,7 @@ Optional URL parameters:
 
 Mobile-friendly gamepad interface for testing MQTT inputs:
 - **D-Pad**: Arrow keys for movement (Up/Down/Left/Right)
-- **Action Buttons**: Space (A), Return (B), Tab (X), Escape (Y)
-- **Fire Button**: Control key for shooting (center of action buttons)
+- **Action Buttons**: A and B buttons
 - **Display Selector**: Target left or right display
 - Matches industrial protogen UI aesthetic
 - Works on phones, tablets, and desktop browsers
@@ -192,9 +191,9 @@ mosquitto_pub -t "protogen/fins/launcher/start/video" -m "animation.mp4"
 # Launch executable
 mosquitto_pub -t "protogen/fins/launcher/start/exec" -m "doom.sh"
 
-# Send input to running executable (press space on left display)
+# Send input to running executable (press A button on left display)
 mosquitto_pub -t "protogen/fins/launcher/input/exec" \
-  -m '{"key": "space", "action": "key", "display": "left"}'
+  -m '{"key": "a", "action": "key", "display": "left"}'
 
 # Hold and release a key (for timing-based games)
 mosquitto_pub -t "protogen/fins/launcher/input/exec" \
@@ -221,7 +220,7 @@ mosquitto_sub -t "protogen/fins/launcher/status/#" -v
 
 ```json
 {
-  "key": "space",      // xdotool key name (space, Left, Right, w, a, s, d, Return, etc.)
+  "key": "a",          // xdotool key name (a, b, Left, Right, Up, Down, etc.)
   "action": "key",     // "key" (press+release), "keydown" (press), "keyup" (release)
   "display": "left"    // "left", "right", or "both"
 }
