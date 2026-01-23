@@ -126,6 +126,19 @@
     mode: "0644"
   notify: reload systemd
 
+- name: Create protosuit-controllerbridge systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-controllerbridge.service.j2"
+    dest: /etc/systemd/system/protosuit-controllerbridge.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Add user to bluetooth and input groups
+  user:
+    name: "{{ pi_user }}"
+    groups: bluetooth,input
+    append: yes
+
 - name: Reload systemd daemon
   systemd:
     daemon_reload: yes
@@ -147,6 +160,11 @@
 - name: Enable protosuit-web service
   systemd:
     name: protosuit-web
+    enabled: yes
+
+- name: Enable protosuit-controllerbridge service
+  systemd:
+    name: protosuit-controllerbridge
     enabled: yes
 
 - name: Start protosuit-engine service (starts all dependent services)

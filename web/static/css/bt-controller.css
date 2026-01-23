@@ -1,0 +1,408 @@
+/* BT Controller Manager Styles */
+
+.header {
+    position: relative;
+    padding: 20px;
+    border-bottom: 2px solid var(--accent-primary);
+    background: var(--bg-panel);
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header-content a {
+    text-decoration: none;
+}
+
+.header h1 {
+    font-size: 2em;
+    margin: 0;
+    cursor: pointer;
+    transition: opacity 0.3s ease;
+}
+
+.header-content a:hover h1 {
+    opacity: 0.8;
+}
+
+.status {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.status.connected {
+    color: var(--success);
+}
+
+.bt-container {
+    padding: 40px 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+}
+
+.section {
+    background: var(--bg-panel);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 30px;
+}
+
+.section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin: 0 0 20px 0;
+}
+
+/* Scan Controls */
+.scan-controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 14px 32px;
+    border: 2px solid var(--accent-primary);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    transition: all 0.3s ease;
+    font-family: 'Rajdhani', sans-serif;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn:hover {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    box-shadow: 0 0 20px rgba(243, 156, 18, 0.3);
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn.primary-btn.scanning {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(243, 156, 18, 0.3); }
+    50% { box-shadow: 0 0 30px rgba(243, 156, 18, 0.6); }
+}
+
+.spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.scan-status {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* Devices List */
+.devices-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.device-card {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    transition: border-color 0.3s ease;
+}
+
+.device-card.connected {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 10px rgba(243, 156, 18, 0.2);
+}
+
+.device-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.device-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 5px;
+}
+
+.device-mac {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-family: 'Courier New', monospace;
+}
+
+.device-badges {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.badge {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.badge.paired {
+    background: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+    border: 1px solid #3498db;
+}
+
+.badge.connected {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+    border: 1px solid #2ecc71;
+}
+
+.device-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-small {
+    padding: 8px 16px;
+    font-size: 12px;
+    min-width: 100px;
+}
+
+.btn-small.connect-btn {
+    border-color: var(--success);
+}
+
+.btn-small.connect-btn:hover {
+    background: var(--success);
+    box-shadow: 0 0 15px rgba(46, 204, 113, 0.3);
+}
+
+.btn-small.disconnect-btn {
+    border-color: var(--error);
+    color: var(--error);
+}
+
+.btn-small.disconnect-btn:hover {
+    background: var(--error);
+    color: var(--text-primary);
+    box-shadow: 0 0 15px rgba(231, 76, 60, 0.3);
+}
+
+.btn-small.unpair-btn {
+    border-color: #95a5a6;
+    color: #95a5a6;
+}
+
+.btn-small.unpair-btn:hover {
+    background: #95a5a6;
+    color: var(--text-primary);
+    box-shadow: 0 0 15px rgba(149, 165, 166, 0.3);
+}
+
+/* Assignments */
+.assignments {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px;
+}
+
+.assignment-panel {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    padding: 20px;
+    transition: border-color 0.3s ease;
+}
+
+.assignment-panel.active {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 15px rgba(243, 156, 18, 0.2);
+}
+
+.panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin: 0 0 15px 0;
+}
+
+.assignment-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.controller-display {
+    background: var(--bg-primary);
+    border: 2px dashed var(--border-color);
+    border-radius: 6px;
+    padding: 30px 20px;
+    text-align: center;
+    min-height: 100px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.controller-display.assigned {
+    border-style: solid;
+    border-color: var(--accent-primary);
+    background: rgba(243, 156, 18, 0.05);
+}
+
+.controller-display.assigned.disconnected {
+    border-color: var(--text-dim);
+    background: rgba(149, 165, 166, 0.05);
+    opacity: 0.6;
+}
+
+.controller-display.input-active {
+    animation: input-flash 0.3s ease;
+}
+
+@keyframes input-flash {
+    0%, 100% { background: rgba(243, 156, 18, 0.05); }
+    50% { background: rgba(243, 156, 18, 0.2); }
+}
+
+.no-assignment {
+    color: var(--text-dim);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.controller-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.controller-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.controller-mac {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'Courier New', monospace;
+}
+
+.controller-select {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: 'Rajdhani', sans-serif;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+}
+
+.controller-select:hover {
+    border-color: var(--accent-primary);
+}
+
+.controller-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 10px rgba(243, 156, 18, 0.2);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .bt-container {
+        padding: 20px 15px;
+        gap: 30px;
+    }
+
+    .section {
+        padding: 20px;
+    }
+
+    .section-title {
+        font-size: 16px;
+    }
+
+    .device-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .device-actions {
+        width: 100%;
+    }
+
+    .btn-small {
+        flex: 1;
+    }
+
+    .assignments {
+        grid-template-columns: 1fr;
+    }
+}

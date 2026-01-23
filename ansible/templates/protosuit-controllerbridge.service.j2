@@ -1,0 +1,35 @@
+[Unit]
+Description=Protosuit Engine Controller Bridge
+After=network.target mosquitto.service bluetooth.service
+Wants=mosquitto.service bluetooth.service
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User={{ service_user }}
+Group={{ service_group }}
+WorkingDirectory={{ project_dir }}
+Environment=PYTHONPATH={{ project_dir }}
+ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/controllerbridge/controllerbridge.py
+Restart={{ service_config.restart_policy }}
+RestartSec={{ service_config.restart_sec }}
+TimeoutStopSec={{ service_config.timeout_stop_sec }}
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths={{ project_dir }}
+ReadWritePaths=/home/{{ service_user }}/.config
+ReadWritePaths=/home/{{ service_user }}/.cache
+ReadWritePaths=/tmp
+ReadWritePaths=/dev/input
+
+# Allow access to Bluetooth and input devices
+SupplementaryGroups=bluetooth input
+
+[Install]
+WantedBy=graphical.target

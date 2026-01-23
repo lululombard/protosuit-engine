@@ -29,6 +29,7 @@ That's it! The system will auto-configure and start on boot.
 - **Media Playback** - Videos (exclusive), audio (stackable), synchronized playback
 - **Executables** - Run shell scripts (like Doom) positioned across both displays
 - **MQTT Input Control** - Send keyboard inputs to running games via MQTT (ready for ESP32 or custom input devices)
+- **Bluetooth Gamepad Support** - Pair Bluetooth controllers and assign one per display for independent control
 - **Web Control Interface** - Browser-based control with live preview and performance monitoring
 - **MQTT Integration** - Remote control and automation from external devices
 
@@ -71,6 +72,30 @@ The web interface features a spring physics system for parameter sliders, provid
 - **Per-display control** - Adjust left and right displays independently or sync both
 - **Range constraints** - Min/max values defined in config.yaml with custom step sizes
 
+### Bluetooth Controller Manager
+
+Access the Bluetooth controller manager at `http://<raspberry-pi-ip>:5000/bt-controller`
+
+Pair and manage Bluetooth gamepads for physical game control:
+- **Scan for devices** - Discover nearby Bluetooth controllers
+- **Connect controllers** - Pair and connect up to 2 gamepads
+- **Assign displays** - Assign one controller to left display, one to right (persists across restarts)
+- **Independent control** - Each player controls their own game instance
+- **Real-time status** - See connection status and device information
+- **Button mapping** - D-pad, A, and B buttons automatically mapped to game controls
+
+**Supported Controllers:**
+- Xbox controllers (all generations)
+- PlayStation controllers (DualShock 4, DualSense)
+- Nintendo Switch Pro Controller
+- 8BitDo controllers
+- Most generic Bluetooth gamepads
+
+**Button Mapping:**
+- **D-Pad**: Up, Down, Left, Right
+- **A Button**: A key (confirm/jump)
+- **B Button**: B key (back/action)
+
 ### Service Management
 
 ```bash
@@ -78,15 +103,18 @@ The web interface features a spring physics system for parameter sliders, provid
 sudo systemctl status protosuit-renderer
 sudo systemctl status protosuit-launcher
 sudo systemctl status protosuit-web
+sudo systemctl status protosuit-controllerbridge
 
 # View logs
 sudo journalctl -u protosuit-renderer -f
 sudo journalctl -u protosuit-launcher -f
 sudo journalctl -u protosuit-web -f
+sudo journalctl -u protosuit-controllerbridge -f
 
 # Restart services
 sudo systemctl restart protosuit-renderer
 sudo systemctl restart protosuit-launcher
+sudo systemctl restart protosuit-controllerbridge
 ```
 
 ---
@@ -95,10 +123,11 @@ sudo systemctl restart protosuit-launcher
 
 ### Components
 
-**Three independent services:**
+**Four independent services:**
 - `protosuit-renderer` - OpenGL shader renderer (ModernGL + Pygame)
 - `protosuit-launcher` - Audio/video/executable launcher (mpv, ffplay, shell scripts)
 - `protosuit-web` - Flask web interface with live preview
+- `protosuit-controllerbridge` - Bluetooth gamepad manager and input forwarder
 
 **Supporting services:**
 - `xserver` - X11 server for dual display management
@@ -231,10 +260,88 @@ mosquitto_sub -t "protogen/fins/launcher/status/#" -v
 - **Multi-window games** (Doom): Inputs targeted to specific window based on display parameter
 - Automatic window discovery via process PID tree (handles script wrappers)
 
-**Future integration options:**
+**Input device options:**
+- Bluetooth gamepads via controllerbridge service
 - ESP32 microcontrollers sending MQTT messages
+- PSP controllers via psp-controller homebrew app
 - Custom input devices publishing to MQTT
-- Bluetooth controllers via MQTT bridge (not yet implemented)
+
+---
+
+### Controllerbridge Topics
+
+**Commands (subscribe):**
+
+| Topic | Payload | Description |
+|-------|---------|-------------|
+| `protogen/fins/controllerbridge/scan/start` | - | Start Bluetooth scanning |
+| `protogen/fins/controllerbridge/scan/stop` | - | Stop Bluetooth scanning |
+| `protogen/fins/controllerbridge/connect` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Connect to device |
+| `protogen/fins/controllerbridge/disconnect` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Disconnect device |
+| `protogen/fins/controllerbridge/unpair` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Unpair/remove device |
+| `protogen/fins/controllerbridge/assign` | `{"mac":"AA:BB:CC:DD:EE:FF","display":"left"}` or `{"mac":null,"display":"left"}` | Assign controller to display or remove assignment (persists via retained message) |
+
+**Status (publish, retained):**
+
+| Topic | Content |
+|-------|---------|
+| `protogen/fins/controllerbridge/status/scanning` | `true` or `false` - Scanning state |
+| `protogen/fins/controllerbridge/status/devices` | JSON array of discovered devices |
+| `protogen/fins/controllerbridge/status/assignments` | JSON object with left/right assignments |
+
+**Examples:**
+
+```bash
+# Start scanning for Bluetooth devices
+mosquitto_pub -t "protogen/fins/controllerbridge/scan/start" -m ""
+
+# Stop scanning
+mosquitto_pub -t "protogen/fins/controllerbridge/scan/stop" -m ""
+
+# Connect to a controller
+mosquitto_pub -t "protogen/fins/controllerbridge/connect" \
+  -m '{"mac":"AA:BB:CC:DD:EE:FF"}'
+
+# Assign controller to left display
+mosquitto_pub -t "protogen/fins/controllerbridge/assign" \
+  -m '{"mac":"AA:BB:CC:DD:EE:FF","display":"left"}'
+
+# Remove assignment from left display
+mosquitto_pub -t "protogen/fins/controllerbridge/assign" \
+  -m '{"mac":null,"display":"left"}'
+
+# Unpair a device
+mosquitto_pub -t "protogen/fins/controllerbridge/unpair" \
+  -m '{"mac":"AA:BB:CC:DD:EE:FF"}'
+
+# Monitor status
+mosquitto_sub -t "protogen/fins/controllerbridge/status/#" -v
+```
+
+**Device status format:**
+
+```json
+[
+  {
+    "mac": "AA:BB:CC:DD:EE:FF",
+    "name": "Xbox Wireless Controller",
+    "paired": true,
+    "connected": true
+  }
+]
+```
+
+**Assignment status format:**
+
+```json
+{
+  "left": {
+    "mac": "AA:BB:CC:DD:EE:FF",
+    "name": "Xbox Wireless Controller"
+  },
+  "right": null
+}
+```
 
 ---
 

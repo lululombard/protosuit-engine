@@ -41,6 +41,16 @@ launcher:
     min: 0
     max: 100
 
+# Controllerbridge configuration
+controllerbridge:
+  enabled: true
+  button_mapping:
+    BTN_SOUTH: "a"      # A button (PlayStation X, Xbox A)
+    BTN_EAST: "b"       # B button (PlayStation Circle, Xbox B)
+    ABS_HAT0X: "dpad_x" # D-pad X axis
+    ABS_HAT0Y: "dpad_y" # D-pad Y axis
+  dead_zone: 0.2        # Analog stick dead zone
+
 animations:
   # Base animations (persistent, run indefinitely)
   #

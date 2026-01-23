@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Bluetooth Controller Manager{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bt-controller.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div class="header-content">
+        <a href="/">
+            <h1>BT Controller Manager</h1>
+        </a>
+    </div>
+    <div class="status" id="status">Connecting...</div>
+</div>
+
+<div class="bt-container">
+    <!-- Scan Section -->
+    <div class="section">
+        <h2 class="section-title">SCAN FOR DEVICES</h2>
+        <div class="scan-controls">
+            <button id="scan-btn" class="btn primary-btn">
+                <span id="scan-text">Start Scan</span>
+                <span id="scan-spinner" class="spinner" style="display: none;"></span>
+            </button>
+            <div id="scan-status" class="scan-status"></div>
+        </div>
+    </div>
+
+    <!-- Discovered Devices -->
+    <div class="section">
+        <h2 class="section-title">DISCOVERED DEVICES</h2>
+        <div id="devices-list" class="devices-list">
+            <div class="empty-state">No devices discovered yet. Click "Start Scan" to begin.</div>
+        </div>
+    </div>
+
+    <!-- Assignment Section -->
+    <div class="section">
+        <h2 class="section-title">DISPLAY ASSIGNMENTS</h2>
+        <div class="assignments">
+            <div class="assignment-panel" id="left-assignment">
+                <h3 class="panel-title">LEFT DISPLAY</h3>
+                <div class="assignment-content">
+                    <div class="controller-display" id="left-controller">
+                        <div class="no-assignment">No controller assigned</div>
+                    </div>
+                    <select id="left-select" class="controller-select">
+                        <option value="">Select Controller...</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="assignment-panel" id="right-assignment">
+                <h3 class="panel-title">RIGHT DISPLAY</h3>
+                <div class="assignment-content">
+                    <div class="controller-display" id="right-controller">
+                        <div class="no-assignment">No controller assigned</div>
+                    </div>
+                    <select id="right-select" class="controller-select">
+                        <option value="">Select Controller...</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/bt-controller.js') }}"></script>
+{% endblock %}
