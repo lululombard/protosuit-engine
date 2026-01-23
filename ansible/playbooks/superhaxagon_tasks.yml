@@ -60,6 +60,12 @@
     dest: /opt/superhaxagon
     version: master
 
+- name: Apply custom keybindings patch (A/B buttons)
+  patch:
+    src: "{{ playbook_dir }}/../patches/superhaxagon_keybinds.patch"
+    basedir: /opt/superhaxagon
+    strip: 1
+
 - name: Create build directory
   file:
     path: /opt/superhaxagon/build

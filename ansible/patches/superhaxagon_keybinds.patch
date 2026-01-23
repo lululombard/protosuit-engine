@@ -1,0 +1,31 @@
+--- a/driver/SFML/source/PlatformSFML.cpp	2026-01-22 21:51:47.969242718 -0500
++++ b/driver/SFML/source/PlatformSFML.cpp	2026-01-22 21:53:59.565404662 -0500
+@@ -155,10 +155,10 @@
+ 
+ 	std::string Platform::getButtonName(ButtonName buttonName) {
+ 		switch (buttonName) {
+-			case ButtonName::BACK: return "ESC";
+-			case ButtonName::SELECT: return "ENTER";
+-			case ButtonName::LEFT: return "LEFT | A";
+-			case ButtonName::RIGHT: return "RIGHT | D";
++			case ButtonName::BACK: return "B";
++			case ButtonName::SELECT: return "A";
++			case ButtonName::LEFT: return "LEFT";
++			case ButtonName::RIGHT: return "RIGHT";
+ 			case ButtonName::QUIT: return "DEL";
+ 			default: return "?";
+ 		}
+@@ -167,10 +167,10 @@
+ 	Buttons Platform::getPressed() const {
+ 		Buttons buttons{};
+ 		if (!_impl->focus) return buttons;
+-		buttons.select = sf::Keyboard::isKeyPressed(sf::Keyboard::Enter);
+-		buttons.back = sf::Keyboard::isKeyPressed(sf::Keyboard::Escape);
++		buttons.select = sf::Keyboard::isKeyPressed(sf::Keyboard::Enter) || sf::Keyboard::isKeyPressed(sf::Keyboard::A);
++		buttons.back = sf::Keyboard::isKeyPressed(sf::Keyboard::Escape) || sf::Keyboard::isKeyPressed(sf::Keyboard::B);
+ 		buttons.quit = sf::Keyboard::isKeyPressed(sf::Keyboard::Delete);
+-		buttons.left = sf::Keyboard::isKeyPressed(sf::Keyboard::Left) || sf::Keyboard::isKeyPressed(sf::Keyboard::A);
++		buttons.left = sf::Keyboard::isKeyPressed(sf::Keyboard::Left);
+ 		buttons.right = sf::Keyboard::isKeyPressed(sf::Keyboard::Right) || sf::Keyboard::isKeyPressed(sf::Keyboard::D);
+ 		return buttons;
+ 	}

@@ -45,10 +45,14 @@ CLIENT_CONFIG="/tmp/doom_client.cfg"
 
 cat > "$SERVER_CONFIG" << EOF
 window_position                 "${LEFT_X},${POS_Y}"
+key_fire                        30
+key_use                         48
 EOF
 
 cat > "$CLIENT_CONFIG" << EOF
 window_position                 "${RIGHT_X},${POS_Y}"
+key_fire                        30
+key_use                         48
 EOF
 
 echo "[doom.sh] Created config files with window positions"

@@ -10,11 +10,8 @@ const keyboardMapping = {
     'ArrowDown': 'Down',
     'ArrowLeft': 'Left',
     'ArrowRight': 'Right',
-    'Enter': 'Return',
-    'Escape': 'Escape',
-    'Control': 'Control_L',
-    ' ': 'space',  // Space key
-    'Tab': 'Tab'
+    'a': 'a',  // A button
+    'b': 'b'   // B button
 };
 
 // Initialize on page load

@@ -13,12 +13,8 @@ static button_map_t default_button_map[] = {
     {PSP_CTRL_DOWN,     "Down",      false},
     {PSP_CTRL_LEFT,     "Left",      false},
     {PSP_CTRL_RIGHT,    "Right",     false},
-    {PSP_CTRL_CROSS,    "Return",    false},  // Enter
-    {PSP_CTRL_CIRCLE,   "Escape",    false},
-    {PSP_CTRL_TRIANGLE, "space",     false},
-    {PSP_CTRL_SQUARE,   "Control_L", false},
-    {PSP_CTRL_START,    "Return",    false},  // Also Enter
-    {PSP_CTRL_SELECT,   "Tab",       false},
+    {PSP_CTRL_CROSS,    "A",         false},
+    {PSP_CTRL_CIRCLE,   "B",         false},
 };
 
 void input_init(input_context_t *ctx) {

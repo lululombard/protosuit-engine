@@ -271,7 +271,7 @@ class RingDingGame:
 
         if self.state == GameState.IDLE:
             title = self.font_large.render("RING DING", True, COLOR_TEXT)
-            start_text = self.font_small.render("Press SPACE to start", True, COLOR_TEXT)
+            start_text = self.font_small.render("Press A to start", True, COLOR_TEXT)
             credit_text_1 = self.font_small.render("Ported by lululombard", True, COLOR_TEXT)
             credit_text_2 = self.font_small.render("original ESP32 LED Game by", True, COLOR_TEXT)
             credit_text_3 = self.font_small.render("Miggy and Dharsi", True, COLOR_TEXT)
@@ -295,7 +295,7 @@ class RingDingGame:
         elif self.state == GameState.WIN:
             self.screen.fill(COLOR_WIN)
             win_text = self.font_large.render("YOU WIN!", True, COLOR_BG)
-            restart_text = self.font_small.render("Press SPACE to play again", True, COLOR_BG)
+            restart_text = self.font_small.render("Press A to play again", True, COLOR_BG)
 
             for x_offset in [self.half_width // 2, self.half_width + self.half_width // 2]:
                 win_rect = win_text.get_rect(center=(x_offset, self.height // 2 - 50))
@@ -306,7 +306,7 @@ class RingDingGame:
         elif self.state == GameState.LOSE:
             self.screen.fill(COLOR_LOSE)
             lose_text = self.font_large.render("GAME OVER", True, COLOR_BG)
-            restart_text = self.font_small.render("Press SPACE to try again", True, COLOR_BG)
+            restart_text = self.font_small.render("Press A to try again", True, COLOR_BG)
 
             for x_offset in [self.half_width // 2, self.half_width + self.half_width // 2]:
                 lose_rect = lose_text.get_rect(center=(x_offset, self.height // 2 - 50))
@@ -323,14 +323,14 @@ class RingDingGame:
             print("[RingDing] Auto-starting game...")
             self.start_game()
         else:
-            print("[RingDing] Game started. Press SPACE to begin!")
+            print("[RingDing] Game started. Press A to begin!")
 
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_SPACE:
+                    if event.key == pygame.K_a:
                         self.handle_hit()
                     elif event.key == pygame.K_ESCAPE:
                         running = False
