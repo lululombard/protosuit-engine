@@ -61,10 +61,10 @@ echo "Starting Super Haxagon..."
 mosquitto_pub -t "protogen/fins/launcher/start/exec" -m 'superhaxagon.sh'
 sleep 6
 
-echo "Pressing Return to start..."
-mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "Return", "action": "keydown", "display": "left"}'
+echo "Pressing A to start..."
+mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "a", "action": "keydown", "display": "left"}'
 sleep 0.1
-mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "Return", "action": "keyup", "display": "left"}'
+mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "a", "action": "keyup", "display": "left"}'
 sleep 1
 
 echo "Selecting level with Right arrow..."
@@ -73,10 +73,10 @@ sleep 0.1
 mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "Right", "action": "keyup", "display": "left"}'
 sleep 1
 
-echo "Starting game with Return..."
-mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "Return", "action": "keydown", "display": "left"}'
+echo "Starting game with A..."
+mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "a", "action": "keydown", "display": "left"}'
 sleep 0.1
-mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "Return", "action": "keyup", "display": "left"}'
+mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "a", "action": "keyup", "display": "left"}'
 sleep 0.5
 
 echo "Holding Left for 3 seconds..."
@@ -97,25 +97,25 @@ echo "Starting Ring Ding..."
 mosquitto_pub -t "protogen/fins/launcher/start/exec" -m 'ring_ding.sh'
 sleep 5
 
-echo "Pressing space to start (attempt 1)..."
-mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "space", "action": "keydown", "display": "left"}'
+echo "Pressing A to start (attempt 1)..."
+mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "a", "action": "keydown", "display": "left"}'
 sleep 0.5
-mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "space", "action": "keyup", "display": "left"}'
+mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "a", "action": "keyup", "display": "left"}'
 sleep 2
 
-echo "Pressing space (attempt 2)..."
-mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "space", "action": "keydown", "display": "left"}'
+echo "Pressing A (attempt 2)..."
+mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "a", "action": "keydown", "display": "left"}'
 sleep 0.5
-mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "space", "action": "keyup", "display": "left"}'
+mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "a", "action": "keyup", "display": "left"}'
 sleep 2
 
-echo "Pressing space (attempt 3)..."
-mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "space", "action": "keydown", "display": "left"}'
+echo "Pressing A (attempt 3)..."
+mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "a", "action": "keydown", "display": "left"}'
 sleep 0.5
-mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "space", "action": "keyup", "display": "left"}'
+mosquitto_pub -t "protogen/fins/launcher/input/exec" -m '{"key": "a", "action": "keyup", "display": "left"}'
 sleep 2
 
-echo "✓ Ring Ding test complete (should have registered 3 space presses)"
+echo "✓ Ring Ding test complete (should have registered 3 A button presses)"
 echo ""
 
 mosquitto_pub -t "protogen/fins/launcher/kill/exec" -m ''

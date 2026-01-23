@@ -169,22 +169,10 @@ void ui_draw(ui_context_t *ctx, wifi_context_t *wifi, mqtt_context_t *mqtt, inpu
         pspDebugScreenPrintf("  D-Pad      = Arrow Keys");
 
         pspDebugScreenSetXY(0, 11);
-        pspDebugScreenPrintf("  Cross (X)  = Enter");
+        pspDebugScreenPrintf("  Cross (X)  = A");
 
         pspDebugScreenSetXY(0, 12);
-        pspDebugScreenPrintf("  Circle (O) = Escape");
-
-        pspDebugScreenSetXY(0, 13);
-        pspDebugScreenPrintf("  Triangle   = Space");
-
-        pspDebugScreenSetXY(0, 14);
-        pspDebugScreenPrintf("  Square     = Control");
-
-        pspDebugScreenSetXY(0, 15);
-        pspDebugScreenPrintf("  Start      = Enter");
-
-        pspDebugScreenSetXY(0, 16);
-        pspDebugScreenPrintf("  Select     = Tab");
+        pspDebugScreenPrintf("  Circle (O) = B");
 
         pspDebugScreenSetXY(0, 32);
         pspDebugScreenSetTextColor(COLOR_GRAY);
@@ -223,22 +211,6 @@ void ui_draw(ui_context_t *ctx, wifi_context_t *wifi, mqtt_context_t *mqtt, inpu
     }
     if (input->pad.Buttons & PSP_CTRL_CIRCLE) {
         strcat(button_str, "O ");
-        any_pressed = true;
-    }
-    if (input->pad.Buttons & PSP_CTRL_TRIANGLE) {
-        strcat(button_str, "TRI ");
-        any_pressed = true;
-    }
-    if (input->pad.Buttons & PSP_CTRL_SQUARE) {
-        strcat(button_str, "SQ ");
-        any_pressed = true;
-    }
-    if (input->pad.Buttons & PSP_CTRL_START) {
-        strcat(button_str, "START ");
-        any_pressed = true;
-    }
-    if (input->pad.Buttons & PSP_CTRL_SELECT) {
-        strcat(button_str, "SELECT ");
         any_pressed = true;
     }
 
