@@ -10,6 +10,7 @@ import os
 import glob
 import subprocess
 import re
+import threading
 from typing import Optional, Dict, List
 import sys
 import os
@@ -99,29 +100,37 @@ class Launcher:
         print("[Launcher] Setting up PulseAudio...")
         
         try:
-            # Kill any existing PulseAudio instances
-            print("[Launcher] Restarting PulseAudio for clean state...")
-            subprocess.run(["pulseaudio", "-k"], check=False, capture_output=True)
-            
-            # Wait a moment
             import time
-            time.sleep(0.5)
             
-            # Start PulseAudio
-            result = subprocess.run(
-                ["pulseaudio", "--start"],
+            # Check if PulseAudio is already running
+            check_result = subprocess.run(
+                ["pactl", "info"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=2
             )
             
-            if result.returncode == 0 or "already running" in result.stdout.lower():
-                print("[Launcher] ✓ PulseAudio is running")
+            if check_result.returncode == 0:
+                print("[Launcher] ✓ PulseAudio is already running (keeping existing instance)")
+                # Don't kill it - this preserves existing Bluetooth connections
             else:
-                print(f"[Launcher] ⚠ PulseAudio start warning: {result.stderr}")
-            
-            # Wait for PulseAudio to initialize
-            time.sleep(1)
+                # Start PulseAudio if not running
+                print("[Launcher] Starting PulseAudio...")
+                result = subprocess.run(
+                    ["pulseaudio", "--start"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                
+                if result.returncode == 0 or "already running" in result.stdout.lower():
+                    print("[Launcher] ✓ PulseAudio started")
+                else:
+                    print(f"[Launcher] ⚠ PulseAudio start warning: {result.stderr}")
+                
+                # Wait for PulseAudio to initialize and load Bluetooth modules
+                print("[Launcher] Waiting for PulseAudio to load Bluetooth modules...")
+                time.sleep(3)  # Give PulseAudio time to discover Bluetooth devices
             
             # Check current default device
             current = self.audio_device_manager.get_current_device()
@@ -722,11 +731,13 @@ class Launcher:
             for device in bt_audio_devices:
                 mac = device.get("mac")
                 connected = device.get("connected", False)
+                sink_name = None  # Initialize at the start of each loop iteration
                 
                 if connected:
                     # Wait a moment for PulseAudio to detect the device
                     import time
-                    time.sleep(1)
+                    print(f"[Launcher] Waiting for PulseAudio to create Bluetooth sink...")
+                    time.sleep(2)
                     
                     # Check and set A2DP profile for high-quality audio
                     current_profile = self.audio_device_manager.get_bluetooth_card_profile(mac)
@@ -735,13 +746,21 @@ class Launcher:
                             print(f"[Launcher] ⚠ BT device using low-quality profile: {current_profile}")
                             print(f"[Launcher] Switching to A2DP for better audio quality...")
                             self.audio_device_manager.set_bluetooth_profile_a2dp(mac)
-                            # Wait for profile change
-                            time.sleep(0.5)
+                            # Wait for profile change and sink creation
+                            time.sleep(2)
                         else:
                             print(f"[Launcher] ✓ BT device already using A2DP profile")
                     
-                    # Device connected - find its sink and potentially auto-switch
-                    sink_name = self.audio_device_manager.find_bluetooth_sink_by_mac(mac)
+                    # Device connected - find its sink with retries (longer waits)
+                    sink_name = None
+                    for attempt in range(5):  # More retries
+                        sink_name = self.audio_device_manager.find_bluetooth_sink_by_mac(mac)
+                        if sink_name:
+                            break
+                        if attempt < 4:  # Don't log on last attempt
+                            print(f"[Launcher] Sink not found yet, retrying... (attempt {attempt + 1}/5)")
+                            time.sleep(2)  # Longer wait between retries
+                    
                     if sink_name:
                         self.bt_device_mac_to_sink[mac] = sink_name
                         print(f"[Launcher] BT audio device connected: {mac} -> {sink_name}")
@@ -751,6 +770,10 @@ class Launcher:
                             print(f"[Launcher] Auto-reconnecting to last used BT speaker: {sink_name}")
                             if self.audio_device_manager.set_default_device(sink_name):
                                 self.publish_current_audio_device()
+                    else:
+                        print(f"[Launcher] ⚠ Could not find PulseAudio sink for {mac} after 5 attempts")
+                        print(f"[Launcher]   The device may not be fully connected to PulseAudio yet")
+                        print(f"[Launcher]   Try restarting the launcher service if the speaker doesn't appear")
                 else:
                     # Device disconnected - fallback logic
                     if mac in self.bt_device_mac_to_sink:
@@ -770,8 +793,14 @@ class Launcher:
                         
                         del self.bt_device_mac_to_sink[mac]
             
-            # Refresh device list
+            # Always refresh device list after processing BT device changes
             self.publish_audio_devices_status()
+            
+            # If we didn't find the sink yet but device is connected, schedule a delayed refresh
+            # This catches the case where PulseAudio creates the sink after our retries
+            if connected and not sink_name:
+                print("[Launcher] Scheduling delayed device list refresh (sink may appear later)...")
+                threading.Timer(5.0, self.publish_audio_devices_status).start()
 
         except Exception as e:
             print(f"[Launcher] Error handling BT audio device update: {e}")
@@ -802,9 +831,19 @@ class Launcher:
         try:
             devices = self.audio_device_manager.list_devices()
             
+            # If we got no devices, PulseAudio might not be ready yet
+            if not devices:
+                print("[Launcher] ⚠ No audio devices found - PulseAudio may not be ready yet")
+                return
+            
             # Filter out HDMI devices if configured
             if self.exclude_hdmi:
                 devices = [d for d in devices if not self.audio_device_manager.is_hdmi_device(d["name"])]
+            
+            # Don't publish if filtering removed everything
+            if not devices:
+                print("[Launcher] ⚠ All devices filtered out (only HDMI found)")
+                # Still publish empty list so web UI knows
             
             self.mqtt_client.publish(
                 "protogen/fins/launcher/status/audio_devices",

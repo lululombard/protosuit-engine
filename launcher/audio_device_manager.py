@@ -64,7 +64,9 @@ class AudioDeviceManager:
                 devices.append(current_sink)
 
             self.cached_devices = devices
-            print(f"[AudioDeviceManager] Found {len(devices)} audio devices")
+            print(f"[AudioDeviceManager] Found {len(devices)} audio devices:")
+            for d in devices:
+                print(f"[AudioDeviceManager]   - {d['name']} ({d['type']}) - {d.get('description', 'N/A')}")
             return devices
 
         except Exception as e:
