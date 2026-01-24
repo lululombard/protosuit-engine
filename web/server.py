@@ -37,10 +37,10 @@ def controller():
     return render_template("controller.html")
 
 
-@app.route("/bt-controller")
-def bt_controller():
+@app.route("/bluetooth")
+def bluetooth():
     """Bluetooth controller management interface"""
-    return render_template("bt-controller.html")
+    return render_template("bluetooth.html")
 
 
 @app.route("/api/stream")

@@ -1,5 +1,5 @@
 [Unit]
-Description=Protosuit Engine Controller Bridge
+Description=Protosuit Engine Bluetooth Bridge
 After=network.target mosquitto.service bluetooth.service
 Wants=mosquitto.service bluetooth.service
 Requires=mosquitto.service
@@ -10,7 +10,7 @@ User={{ service_user }}
 Group={{ service_group }}
 WorkingDirectory={{ project_dir }}
 Environment=PYTHONPATH={{ project_dir }}
-ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/controllerbridge/controllerbridge.py
+ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/bluetoothbridge/bluetoothbridge.py
 Restart={{ service_config.restart_policy }}
 RestartSec={{ service_config.restart_sec }}
 TimeoutStopSec={{ service_config.timeout_stop_sec }}

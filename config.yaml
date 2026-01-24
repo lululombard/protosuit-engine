@@ -41,8 +41,8 @@ launcher:
     min: 0
     max: 100
 
-# Controllerbridge configuration
-controllerbridge:
+# Bluetoothbridge configuration
+bluetoothbridge:
   enabled: true
   button_mapping:
     BTN_SOUTH: "a"      # A button (PlayStation X, Xbox A)

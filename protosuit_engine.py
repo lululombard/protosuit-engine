@@ -23,7 +23,7 @@ COLORS = {
     "renderer": "\033[94m",  # Blue
     "launcher": "\033[92m",  # Green
     "web": "\033[93m",  # Yellow
-    "controllerbridge": "\033[95m",  # Magenta
+    "bluetoothbridge": "\033[95m",  # Magenta
     "reset": "\033[0m",
 }
 
@@ -61,8 +61,8 @@ def main():
             text=True,
             bufsize=1,
         ),
-        "controllerbridge": subprocess.Popen(
-            [str(python_bin), str(project_root / "controllerbridge" / "controllerbridge.py")],
+        "bluetoothbridge": subprocess.Popen(
+            [str(python_bin), str(project_root / "bluetoothbridge" / "bluetoothbridge.py")],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

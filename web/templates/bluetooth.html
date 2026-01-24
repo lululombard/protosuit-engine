@@ -4,14 +4,14 @@
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/bt-controller.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bluetooth.css') }}">
 {% endblock %}
 
 {% block content %}
 <div class="header">
     <div class="header-content">
         <a href="/">
-            <h1>BT Controller Manager</h1>
+            <h1>Bluetooth Settings</h1>
         </a>
     </div>
     <div class="status" id="status">Connecting...</div>
@@ -74,5 +74,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/bt-controller.js') }}"></script>
+<script src="{{ url_for('static', filename='js/bluetooth.js') }}"></script>
 {% endblock %}

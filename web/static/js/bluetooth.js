@@ -1,17 +1,17 @@
-// Bluetooth Controller Manager - MQTT Interface
+// Bluetooth Manager - MQTT Interface
 
-let btMqttClient = null;
-let btIsConnected = false;
+let bluetoothMqttClient = null;
+let bluetoothIsConnected = false;
 
 // State
-let btScanning = false;
-let btDevices = [];
-let btAssignments = { left: null, right: null };
-let btConnectedDevices = new Set();
+let bluetoothScanning = false;
+let bluetoothDevices = [];
+let bluetoothAssignments = { left: null, right: null };
+let bluetoothConnectedDevices = new Set();
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    initBTController();
+    initBluetooth();
     connectToMQTT();
 });
 
@@ -22,39 +22,39 @@ function connectToMQTT() {
 
     updateStatus('Connecting...', false);
 
-    btMqttClient = mqtt.connect(mqttUrl, {
-        clientId: 'protosuit-bt-controller-' + Math.random().toString(16).substr(2, 8),
+    bluetoothMqttClient = mqtt.connect(mqttUrl, {
+        clientId: 'protosuit-bluetooth-' + Math.random().toString(16).substr(2, 8),
         clean: true,
         reconnectPeriod: 1000
     });
 
-    btMqttClient.on('connect', () => {
-        btIsConnected = true;
+    bluetoothMqttClient.on('connect', () => {
+        bluetoothIsConnected = true;
         updateStatus('Connected ✓', true);
 
         // Subscribe to status topics
-        btMqttClient.subscribe('protogen/fins/controllerbridge/status/scanning');
-        btMqttClient.subscribe('protogen/fins/controllerbridge/status/devices');
-        btMqttClient.subscribe('protogen/fins/controllerbridge/status/assignments');
+        bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/scanning');
+        bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/devices');
+        bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/assignments');
 
-        console.log('[BT Controller] Connected to MQTT');
+        console.log('[Bluetooth] Connected to MQTT');
     });
 
-    btMqttClient.on('message', (topic, message) => {
+    bluetoothMqttClient.on('message', (topic, message) => {
         handleMQTTMessage(topic, message.toString());
     });
 
-    btMqttClient.on('error', () => {
-        btIsConnected = false;
+    bluetoothMqttClient.on('error', () => {
+        bluetoothIsConnected = false;
         updateStatus('Error ✗', false);
     });
 
-    btMqttClient.on('close', () => {
-        btIsConnected = false;
+    bluetoothMqttClient.on('close', () => {
+        bluetoothIsConnected = false;
         updateStatus('Disconnected ✗', false);
     });
 
-    btMqttClient.on('reconnect', () => {
+    bluetoothMqttClient.on('reconnect', () => {
         updateStatus('Reconnecting...', false);
     });
 }
@@ -62,21 +62,21 @@ function connectToMQTT() {
 // Handle MQTT messages
 function handleMQTTMessage(topic, payload) {
     try {
-        if (topic === 'protogen/fins/controllerbridge/status/scanning') {
-            btScanning = JSON.parse(payload);
+        if (topic === 'protogen/fins/bluetoothbridge/status/scanning') {
+            bluetoothScanning = JSON.parse(payload);
             updateScanUI();
         }
-        else if (topic === 'protogen/fins/controllerbridge/status/devices') {
-            btDevices = JSON.parse(payload);
+        else if (topic === 'protogen/fins/bluetoothbridge/status/devices') {
+            bluetoothDevices = JSON.parse(payload);
             updateDevicesList();
             updateAssignmentSelects();
         }
-        else if (topic === 'protogen/fins/controllerbridge/status/assignments') {
-            btAssignments = JSON.parse(payload);
+        else if (topic === 'protogen/fins/bluetoothbridge/status/assignments') {
+            bluetoothAssignments = JSON.parse(payload);
             updateAssignments();
         }
     } catch (e) {
-        console.error('[BT Controller] Error parsing MQTT message:', e);
+        console.error('[Bluetooth] Error parsing MQTT message:', e);
     }
 }
 
@@ -87,12 +87,12 @@ function updateStatus(message, connected) {
     statusEl.className = 'status' + (connected ? ' connected' : '');
 }
 
-// Initialize BT Controller interface
-function initBTController() {
+// Initialize Bluetooth interface
+function initBluetooth() {
     // Scan button
     const scanBtn = document.getElementById('scan-btn');
     scanBtn.addEventListener('click', () => {
-        if (btScanning) {
+        if (bluetoothScanning) {
             stopScan();
         } else {
             startScan();
@@ -134,75 +134,75 @@ function initBTController() {
 
 // Start Bluetooth scan
 function startScan() {
-    if (!btMqttClient || !btIsConnected) return;
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
-    btMqttClient.publish('protogen/fins/controllerbridge/scan/start', '');
-    console.log('[BT Controller] Started scanning');
+    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/scan/start', '');
+    console.log('[Bluetooth] Started scanning');
 }
 
 // Stop Bluetooth scan
 function stopScan() {
-    if (!btMqttClient || !btIsConnected) return;
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
-    btMqttClient.publish('protogen/fins/controllerbridge/scan/stop', '');
-    console.log('[BT Controller] Stopped scanning');
+    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/scan/stop', '');
+    console.log('[Bluetooth] Stopped scanning');
 }
 
 // Connect to device
 function connectDevice(mac) {
-    if (!btMqttClient || !btIsConnected) return;
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
     const message = JSON.stringify({ mac: mac });
-    btMqttClient.publish('protogen/fins/controllerbridge/connect', message);
-    console.log('[BT Controller] Connecting to:', mac);
+    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/connect', message);
+    console.log('[Bluetooth] Connecting to:', mac);
 }
 
 // Disconnect device
 function disconnectDevice(mac) {
-    if (!btMqttClient || !btIsConnected) return;
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
     const message = JSON.stringify({ mac: mac });
-    btMqttClient.publish('protogen/fins/controllerbridge/disconnect', message);
-    console.log('[BT Controller] Disconnecting from:', mac);
+    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/disconnect', message);
+    console.log('[Bluetooth] Disconnecting from:', mac);
 }
 
 // Unpair device
 function unpairDevice(mac) {
-    if (!btMqttClient || !btIsConnected) return;
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
     if (!confirm('Are you sure you want to unpair this device? You will need to pair it again to use it.')) {
         return;
     }
 
     const message = JSON.stringify({ mac: mac });
-    btMqttClient.publish('protogen/fins/controllerbridge/unpair', message);
-    console.log('[BT Controller] Unpairing:', mac);
+    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/unpair', message);
+    console.log('[Bluetooth] Unpairing:', mac);
 }
 
 // Assign controller to display
 function assignController(mac, display) {
-    if (!btMqttClient || !btIsConnected) return;
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
     const message = JSON.stringify({ mac: mac, display: display });
-    btMqttClient.publish('protogen/fins/controllerbridge/assign', message);
-    console.log('[BT Controller] Assigned', mac, 'to', display);
+    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/assign', message);
+    console.log('[Bluetooth] Assigned', mac, 'to', display);
 }
 
 // Remove controller assignment
 function removeAssignment(display) {
-    if (!btMqttClient || !btIsConnected) return;
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
     const message = JSON.stringify({ mac: null, display: display });
-    btMqttClient.publish('protogen/fins/controllerbridge/assign', message);
-    console.log('[BT Controller] Removed assignment for', display);
+    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/assign', message);
+    console.log('[Bluetooth] Removed assignment for', display);
 }
 
 // Restart Bluetooth service
 function restartBluetooth() {
-    if (!btMqttClient || !btIsConnected) return;
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
-    btMqttClient.publish('protogen/fins/controllerbridge/bluetooth/restart', '');
-    console.log('[BT Controller] Restarting Bluetooth service...');
+    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/bluetooth/restart', '');
+    console.log('[Bluetooth] Restarting Bluetooth service...');
     
     // Show feedback in scan status
     const scanStatus = document.getElementById('scan-status');
@@ -221,7 +221,7 @@ function updateScanUI() {
     const scanSpinner = document.getElementById('scan-spinner');
     const scanStatus = document.getElementById('scan-status');
 
-    if (btScanning) {
+    if (bluetoothScanning) {
         scanBtn.classList.add('scanning');
         scanText.textContent = 'Stop Scan';
         scanSpinner.style.display = 'inline-block';
@@ -238,7 +238,7 @@ function updateScanUI() {
 function updateDevicesList() {
     const devicesList = document.getElementById('devices-list');
 
-    if (btDevices.length === 0) {
+    if (bluetoothDevices.length === 0) {
         devicesList.innerHTML = '<div class="empty-state">No devices discovered yet. Click "Start Scan" to begin.</div>';
         return;
     }
@@ -247,7 +247,7 @@ function updateDevicesList() {
     devicesList.innerHTML = '';
 
     // Create device cards
-    btDevices.forEach(device => {
+    bluetoothDevices.forEach(device => {
         const card = createDeviceCard(device);
         devicesList.appendChild(card);
     });
@@ -330,7 +330,7 @@ function updateAssignmentSelects() {
     const rightSelect = document.getElementById('right-select');
 
     // Get connected devices
-    const connectedDevs = btDevices.filter(d => d.connected);
+    const connectedDevs = bluetoothDevices.filter(d => d.connected);
 
     // Update both selects
     [leftSelect, rightSelect].forEach(select => {
@@ -363,8 +363,8 @@ function updateAssignments() {
     const leftController = document.getElementById('left-controller');
     const leftSelect = document.getElementById('left-select');
 
-    if (btAssignments.left) {
-        const isConnected = btAssignments.left.connected !== false; // default to true for backwards compat
+    if (bluetoothAssignments.left) {
+        const isConnected = bluetoothAssignments.left.connected !== false; // default to true for backwards compat
         const statusText = isConnected ? '' : ' (disconnected)';
         leftPanel.classList.add('active');
         leftController.classList.add('assigned');
@@ -375,11 +375,11 @@ function updateAssignments() {
         }
         leftController.innerHTML = `
             <div class="controller-info">
-                <div class="controller-name">${btAssignments.left.name}${statusText}</div>
-                <div class="controller-mac">${btAssignments.left.mac}</div>
+                <div class="controller-name">${bluetoothAssignments.left.name}${statusText}</div>
+                <div class="controller-mac">${bluetoothAssignments.left.mac}</div>
             </div>
         `;
-        leftSelect.value = btAssignments.left.mac;
+        leftSelect.value = bluetoothAssignments.left.mac;
     } else {
         leftPanel.classList.remove('active');
         leftController.classList.remove('assigned');
@@ -393,8 +393,8 @@ function updateAssignments() {
     const rightController = document.getElementById('right-controller');
     const rightSelect = document.getElementById('right-select');
 
-    if (btAssignments.right) {
-        const isConnected = btAssignments.right.connected !== false; // default to true for backwards compat
+    if (bluetoothAssignments.right) {
+        const isConnected = bluetoothAssignments.right.connected !== false; // default to true for backwards compat
         const statusText = isConnected ? '' : ' (disconnected)';
         rightPanel.classList.add('active');
         rightController.classList.add('assigned');
@@ -405,11 +405,11 @@ function updateAssignments() {
         }
         rightController.innerHTML = `
             <div class="controller-info">
-                <div class="controller-name">${btAssignments.right.name}${statusText}</div>
-                <div class="controller-mac">${btAssignments.right.mac}</div>
+                <div class="controller-name">${bluetoothAssignments.right.name}${statusText}</div>
+                <div class="controller-mac">${bluetoothAssignments.right.mac}</div>
             </div>
         `;
-        rightSelect.value = btAssignments.right.mac;
+        rightSelect.value = bluetoothAssignments.right.mac;
     } else {
         rightPanel.classList.remove('active');
         rightController.classList.remove('assigned');

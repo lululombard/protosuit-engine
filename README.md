@@ -74,7 +74,7 @@ The web interface features a spring physics system for parameter sliders, provid
 
 ### Bluetooth Controller Manager
 
-Access the Bluetooth controller manager at `http://<raspberry-pi-ip>:5000/bt-controller`
+Access the Bluetooth controller manager at `http://<raspberry-pi-ip>:5000/bluetooth`
 
 Pair and manage Bluetooth gamepads for physical game control:
 - **Scan for devices** - Discover nearby Bluetooth controllers
@@ -105,18 +105,18 @@ Pair and manage Bluetooth gamepads for physical game control:
 sudo systemctl status protosuit-renderer
 sudo systemctl status protosuit-launcher
 sudo systemctl status protosuit-web
-sudo systemctl status protosuit-controllerbridge
+sudo systemctl status protosuit-bluetoothbridge
 
 # View logs
 sudo journalctl -u protosuit-renderer -f
 sudo journalctl -u protosuit-launcher -f
 sudo journalctl -u protosuit-web -f
-sudo journalctl -u protosuit-controllerbridge -f
+sudo journalctl -u protosuit-bluetoothbridge -f
 
 # Restart services
 sudo systemctl restart protosuit-renderer
 sudo systemctl restart protosuit-launcher
-sudo systemctl restart protosuit-controllerbridge
+sudo systemctl restart protosuit-bluetoothbridge
 ```
 
 ---
@@ -129,7 +129,7 @@ sudo systemctl restart protosuit-controllerbridge
 - `protosuit-renderer` - OpenGL shader renderer (ModernGL + Pygame)
 - `protosuit-launcher` - Audio/video/executable launcher (mpv, ffplay, shell scripts)
 - `protosuit-web` - Flask web interface with live preview
-- `protosuit-controllerbridge` - Bluetooth gamepad manager and input forwarder
+- `protosuit-bluetoothbridge` - Bluetooth gamepad manager and input forwarder
 
 **Supporting services:**
 - `xserver` - X11 server for dual display management
@@ -263,65 +263,65 @@ mosquitto_sub -t "protogen/fins/launcher/status/#" -v
 - Automatic window discovery via process PID tree (handles script wrappers)
 
 **Input device options:**
-- Bluetooth gamepads via controllerbridge service
+- Bluetooth gamepads via bluetoothbridge service
 - ESP32 microcontrollers sending MQTT messages
 - PSP controllers via psp-controller homebrew app
 - Custom input devices publishing to MQTT
 
 ---
 
-### Controllerbridge Topics
+### Bluetoothbridge Topics
 
 **Commands (subscribe):**
 
 | Topic | Payload | Description |
 |-------|---------|-------------|
-| `protogen/fins/controllerbridge/scan/start` | - | Start Bluetooth scanning |
-| `protogen/fins/controllerbridge/scan/stop` | - | Stop Bluetooth scanning |
-| `protogen/fins/controllerbridge/connect` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Connect to device |
-| `protogen/fins/controllerbridge/disconnect` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Disconnect device |
-| `protogen/fins/controllerbridge/unpair` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Unpair/remove device |
-| `protogen/fins/controllerbridge/assign` | `{"mac":"AA:BB:CC:DD:EE:FF","display":"left"}` or `{"mac":null,"display":"left"}` | Assign controller to display or remove assignment (persists via retained message) |
-| `protogen/fins/controllerbridge/bluetooth/restart` | - | Restart Bluetooth service (fixes org.bluez.Error.NotReady) |
+| `protogen/fins/bluetoothbridge/scan/start` | - | Start Bluetooth scanning |
+| `protogen/fins/bluetoothbridge/scan/stop` | - | Stop Bluetooth scanning |
+| `protogen/fins/bluetoothbridge/connect` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Connect to device |
+| `protogen/fins/bluetoothbridge/disconnect` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Disconnect device |
+| `protogen/fins/bluetoothbridge/unpair` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Unpair/remove device |
+| `protogen/fins/bluetoothbridge/assign` | `{"mac":"AA:BB:CC:DD:EE:FF","display":"left"}` or `{"mac":null,"display":"left"}` | Assign controller to display or remove assignment (persists via retained message) |
+| `protogen/fins/bluetoothbridge/bluetooth/restart` | - | Restart Bluetooth service (fixes org.bluez.Error.NotReady) |
 
 **Status (publish, retained):**
 
 | Topic | Content |
 |-------|---------|
-| `protogen/fins/controllerbridge/status/scanning` | `true` or `false` - Scanning state |
-| `protogen/fins/controllerbridge/status/devices` | JSON array of discovered devices |
-| `protogen/fins/controllerbridge/status/assignments` | JSON object with left/right assignments |
+| `protogen/fins/bluetoothbridge/status/scanning` | `true` or `false` - Scanning state |
+| `protogen/fins/bluetoothbridge/status/devices` | JSON array of discovered devices |
+| `protogen/fins/bluetoothbridge/status/assignments` | JSON object with left/right assignments |
 
 **Examples:**
 
 ```bash
 # Start scanning for Bluetooth devices
-mosquitto_pub -t "protogen/fins/controllerbridge/scan/start" -m ""
+mosquitto_pub -t "protogen/fins/bluetoothbridge/scan/start" -m ""
 
 # Stop scanning
-mosquitto_pub -t "protogen/fins/controllerbridge/scan/stop" -m ""
+mosquitto_pub -t "protogen/fins/bluetoothbridge/scan/stop" -m ""
 
 # Connect to a controller
-mosquitto_pub -t "protogen/fins/controllerbridge/connect" \
+mosquitto_pub -t "protogen/fins/bluetoothbridge/connect" \
   -m '{"mac":"AA:BB:CC:DD:EE:FF"}'
 
 # Assign controller to left display
-mosquitto_pub -t "protogen/fins/controllerbridge/assign" \
+mosquitto_pub -t "protogen/fins/bluetoothbridge/assign" \
   -m '{"mac":"AA:BB:CC:DD:EE:FF","display":"left"}'
 
 # Remove assignment from left display
-mosquitto_pub -t "protogen/fins/controllerbridge/assign" \
+mosquitto_pub -t "protogen/fins/bluetoothbridge/assign" \
   -m '{"mac":null,"display":"left"}'
 
 # Restart Bluetooth service (if you get org.bluez.Error.NotReady)
-mosquitto_pub -t "protogen/fins/controllerbridge/bluetooth/restart" -m ""
+mosquitto_pub -t "protogen/fins/bluetoothbridge/bluetooth/restart" -m ""
 
 # Unpair a device
-mosquitto_pub -t "protogen/fins/controllerbridge/unpair" \
+mosquitto_pub -t "protogen/fins/bluetoothbridge/unpair" \
   -m '{"mac":"AA:BB:CC:DD:EE:FF"}'
 
 # Monitor status
-mosquitto_sub -t "protogen/fins/controllerbridge/status/#" -v
+mosquitto_sub -t "protogen/fins/bluetoothbridge/status/#" -v
 ```
 
 **Device status format:**

@@ -126,10 +126,10 @@
     mode: "0644"
   notify: reload systemd
 
-- name: Create protosuit-controllerbridge systemd service file
+- name: Create protosuit-bluetoothbridge systemd service file
   template:
-    src: "{{ playbook_dir }}/../templates/protosuit-controllerbridge.service.j2"
-    dest: /etc/systemd/system/protosuit-controllerbridge.service
+    src: "{{ playbook_dir }}/../templates/protosuit-bluetoothbridge.service.j2"
+    dest: /etc/systemd/system/protosuit-bluetoothbridge.service
     mode: "0644"
   notify: reload systemd
 
@@ -171,9 +171,9 @@
     name: protosuit-web
     enabled: yes
 
-- name: Enable protosuit-controllerbridge service
+- name: Enable protosuit-bluetoothbridge service
   systemd:
-    name: protosuit-controllerbridge
+    name: protosuit-bluetoothbridge
     enabled: yes
 
 - name: Start protosuit-engine service (starts all dependent services)
