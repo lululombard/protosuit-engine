@@ -21,6 +21,7 @@ from config.loader import ConfigLoader
 from launcher.launchers.audio_launcher import AudioLauncher
 from launcher.launchers.video_launcher import VideoLauncher
 from launcher.launchers.exec_launcher import ExecLauncher
+from launcher.audio_device_manager import AudioDeviceManager
 from utils.mqtt_client import create_mqtt_client
 
 
@@ -79,7 +80,74 @@ class Launcher:
         self.volume_min = volume_config.get("min", 0)
         self.volume_max = volume_config.get("max", 100)
 
+        # Audio device management
+        self.audio_device_manager = AudioDeviceManager()
+        audio_device_config = launcher_config.get("audio_device", {})
+        self.auto_reconnect = audio_device_config.get("auto_reconnect", True)
+        self.fallback_to_non_hdmi = audio_device_config.get("fallback_to_non_hdmi", True)
+        self.exclude_hdmi = audio_device_config.get("exclude_hdmi", True)
+        self.last_selected_device = None  # Will be restored from retained MQTT message
+        self.bt_device_mac_to_sink = {}  # Map BT MAC addresses to sink names
+
         print("[Launcher] Initialized")
+        
+        # Ensure PulseAudio is running and set up audio correctly
+        self._init_pulseaudio()
+
+    def _init_pulseaudio(self):
+        """Initialize PulseAudio and ensure default device isn't HDMI"""
+        print("[Launcher] Setting up PulseAudio...")
+        
+        try:
+            # Kill any existing PulseAudio instances
+            print("[Launcher] Restarting PulseAudio for clean state...")
+            subprocess.run(["pulseaudio", "-k"], check=False, capture_output=True)
+            
+            # Wait a moment
+            import time
+            time.sleep(0.5)
+            
+            # Start PulseAudio
+            result = subprocess.run(
+                ["pulseaudio", "--start"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0 or "already running" in result.stdout.lower():
+                print("[Launcher] ✓ PulseAudio is running")
+            else:
+                print(f"[Launcher] ⚠ PulseAudio start warning: {result.stderr}")
+            
+            # Wait for PulseAudio to initialize
+            time.sleep(1)
+            
+            # Check current default device
+            current = self.audio_device_manager.get_current_device()
+            if current:
+                print(f"[Launcher] Current audio device: {current}")
+                
+                # If it's HDMI, switch to non-HDMI device
+                if self.audio_device_manager.is_hdmi_device(current):
+                    print("[Launcher] Default device is HDMI, switching to non-HDMI...")
+                    fallback = self.audio_device_manager.get_non_hdmi_fallback()
+                    if fallback:
+                        if self.audio_device_manager.set_default_device(fallback):
+                            print(f"[Launcher] ✓ Switched to {fallback}")
+                        else:
+                            print("[Launcher] ⚠ Failed to switch audio device")
+                    else:
+                        print("[Launcher] ⚠ No non-HDMI device found")
+                else:
+                    print(f"[Launcher] ✓ Default device is already non-HDMI: {current}")
+            else:
+                print("[Launcher] ⚠ Could not detect current audio device")
+                
+        except Exception as e:
+            print(f"[Launcher] Error initializing PulseAudio: {e}")
+            import traceback
+            traceback.print_exc()
 
     def init_mqtt(self):
         """Initialize MQTT connection and subscriptions"""
@@ -101,6 +169,12 @@ class Launcher:
                 client.subscribe("protogen/fins/launcher/config/reload")
                 client.subscribe("protogen/fins/launcher/input/exec")
                 client.subscribe("protogen/fins/launcher/volume/set")
+                
+                # Audio device management
+                client.subscribe("protogen/fins/launcher/audio/device/set")
+                client.subscribe("protogen/fins/bluetoothbridge/status/audio_devices")
+                client.subscribe("protogen/fins/launcher/status/audio_device/current")  # For restoring state
+                
                 print("[Launcher] Subscribed to topics:")
                 print("  - protogen/fins/launcher/start/*")
                 print("  - protogen/fins/launcher/stop/*")
@@ -108,6 +182,8 @@ class Launcher:
                 print("  - protogen/fins/launcher/config/reload")
                 print("  - protogen/fins/launcher/input/exec")
                 print("  - protogen/fins/launcher/volume/set")
+                print("  - protogen/fins/launcher/audio/device/set")
+                print("  - protogen/fins/bluetoothbridge/status/audio_devices")
             else:
                 print(f"[Launcher] Failed to connect to MQTT broker: {rc}")
 
@@ -127,6 +203,15 @@ class Launcher:
         self.publish_video_status()
         self.publish_exec_status()
         self.publish_volume_status()
+        
+        # Initialize audio device status
+        self.publish_audio_devices_status()
+        self.publish_current_audio_device()
+        
+        # Wait a moment for retained message about last audio device
+        print("[Launcher] Waiting for retained audio device preference...")
+        import time
+        time.sleep(0.5)
 
     def on_mqtt_message(self, topic: str, payload: str):
         """Handle incoming MQTT messages"""
@@ -167,6 +252,14 @@ class Launcher:
             # Volume control
             elif topic == "protogen/fins/launcher/volume/set":
                 self.handle_volume_set(payload)
+
+            # Audio device management
+            elif topic == "protogen/fins/launcher/audio/device/set":
+                self.handle_audio_device_set(payload)
+            elif topic == "protogen/fins/bluetoothbridge/status/audio_devices":
+                self.handle_bt_audio_devices_update(payload)
+            elif topic == "protogen/fins/launcher/status/audio_device/current":
+                self._restore_audio_device_preference(payload)
 
         except Exception as e:
             print(f"[Launcher] Error handling message on {topic}: {e}")
@@ -592,6 +685,163 @@ class Launcher:
             print(f"[Launcher] Error handling volume set: {e}")
             import traceback
             traceback.print_exc()
+
+    def handle_audio_device_set(self, payload: str):
+        """Handle manual audio device selection"""
+        try:
+            data = json.loads(payload)
+            device_name = data.get("device")
+            
+            if not device_name:
+                print("[Launcher] No device specified in payload")
+                return
+
+            print(f"[Launcher] Manual audio device selection: {device_name}")
+            
+            if self.audio_device_manager.set_default_device(device_name):
+                # Store as last selected
+                self.last_selected_device = device_name
+                
+                # Publish updated status
+                self.publish_current_audio_device()
+                print(f"[Launcher] ✓ Audio output switched to {device_name}")
+            else:
+                print(f"[Launcher] Failed to switch audio device to {device_name}")
+
+        except Exception as e:
+            print(f"[Launcher] Error handling audio device set: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def handle_bt_audio_devices_update(self, payload: str):
+        """Handle Bluetooth audio device connection changes from bluetoothbridge"""
+        try:
+            bt_audio_devices = json.loads(payload)
+            
+            # Update our tracking of BT device MAC -> sink mappings
+            for device in bt_audio_devices:
+                mac = device.get("mac")
+                connected = device.get("connected", False)
+                
+                if connected:
+                    # Wait a moment for PulseAudio to detect the device
+                    import time
+                    time.sleep(1)
+                    
+                    # Check and set A2DP profile for high-quality audio
+                    current_profile = self.audio_device_manager.get_bluetooth_card_profile(mac)
+                    if current_profile:
+                        if "a2dp" not in current_profile.lower():
+                            print(f"[Launcher] ⚠ BT device using low-quality profile: {current_profile}")
+                            print(f"[Launcher] Switching to A2DP for better audio quality...")
+                            self.audio_device_manager.set_bluetooth_profile_a2dp(mac)
+                            # Wait for profile change
+                            time.sleep(0.5)
+                        else:
+                            print(f"[Launcher] ✓ BT device already using A2DP profile")
+                    
+                    # Device connected - find its sink and potentially auto-switch
+                    sink_name = self.audio_device_manager.find_bluetooth_sink_by_mac(mac)
+                    if sink_name:
+                        self.bt_device_mac_to_sink[mac] = sink_name
+                        print(f"[Launcher] BT audio device connected: {mac} -> {sink_name}")
+                        
+                        # Auto-reconnect logic: switch if this was the last selected device
+                        if self.auto_reconnect and self.last_selected_device == sink_name:
+                            print(f"[Launcher] Auto-reconnecting to last used BT speaker: {sink_name}")
+                            if self.audio_device_manager.set_default_device(sink_name):
+                                self.publish_current_audio_device()
+                else:
+                    # Device disconnected - fallback logic
+                    if mac in self.bt_device_mac_to_sink:
+                        sink_name = self.bt_device_mac_to_sink[mac]
+                        current_device = self.audio_device_manager.get_current_device()
+                        
+                        print(f"[Launcher] BT audio device disconnected: {mac} ({sink_name})")
+                        
+                        # If we were using this device, fallback
+                        if current_device == sink_name and self.fallback_to_non_hdmi:
+                            print("[Launcher] Current device disconnected, falling back...")
+                            fallback = self.audio_device_manager.get_non_hdmi_fallback()
+                            if fallback:
+                                if self.audio_device_manager.set_default_device(fallback):
+                                    print(f"[Launcher] ✓ Fell back to {fallback}")
+                                    self.publish_current_audio_device()
+                        
+                        del self.bt_device_mac_to_sink[mac]
+            
+            # Refresh device list
+            self.publish_audio_devices_status()
+
+        except Exception as e:
+            print(f"[Launcher] Error handling BT audio device update: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _restore_audio_device_preference(self, payload: str):
+        """Restore last selected audio device from retained MQTT message"""
+        try:
+            if not payload:
+                return
+            
+            data = json.loads(payload)
+            device_name = data.get("device")
+            
+            if device_name:
+                self.last_selected_device = device_name
+                print(f"[Launcher] Restored audio device preference: {device_name}")
+
+        except Exception as e:
+            print(f"[Launcher] Error restoring audio device preference: {e}")
+
+    def publish_audio_devices_status(self):
+        """Publish available audio output devices"""
+        if not self.mqtt_client:
+            return
+
+        try:
+            devices = self.audio_device_manager.list_devices()
+            
+            # Filter out HDMI devices if configured
+            if self.exclude_hdmi:
+                devices = [d for d in devices if not self.audio_device_manager.is_hdmi_device(d["name"])]
+            
+            self.mqtt_client.publish(
+                "protogen/fins/launcher/status/audio_devices",
+                json.dumps(devices),
+                retain=True
+            )
+            print(f"[Launcher] Published {len(devices)} audio devices")
+
+        except Exception as e:
+            print(f"[Launcher] Error publishing audio devices: {e}")
+
+    def publish_current_audio_device(self):
+        """Publish current audio output device"""
+        if not self.mqtt_client:
+            return
+
+        try:
+            current_sink = self.audio_device_manager.get_current_device()
+            
+            if current_sink:
+                device_info = self.audio_device_manager.get_device_info(current_sink)
+                
+                status = {
+                    "device": current_sink,
+                    "description": device_info["description"] if device_info else current_sink,
+                    "type": device_info["type"] if device_info else "unknown"
+                }
+                
+                self.mqtt_client.publish(
+                    "protogen/fins/launcher/status/audio_device/current",
+                    json.dumps(status),
+                    retain=True
+                )
+                print(f"[Launcher] Published current audio device: {current_sink}")
+
+        except Exception as e:
+            print(f"[Launcher] Error publishing current audio device: {e}")
 
     def _on_audio_exit(self):
         """Callback when audio exits"""

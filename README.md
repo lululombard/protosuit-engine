@@ -76,14 +76,25 @@ The web interface features a spring physics system for parameter sliders, provid
 
 Access the Bluetooth controller manager at `http://<raspberry-pi-ip>:5000/bluetooth`
 
-Pair and manage Bluetooth gamepads for physical game control:
-- **Scan for devices** - Discover nearby Bluetooth controllers
+Pair and manage Bluetooth devices for gaming and audio:
+
+**Gamepad Features:**
+- **Scan for devices** - Discover nearby Bluetooth controllers and speakers
 - **Connect controllers** - Pair and connect up to 2 gamepads
 - **Assign displays** - Assign one controller to left display, one to right (persists across restarts)
 - **Auto-reconnect** - Controllers automatically reconnect when powered on (no need to restart software)
 - **Independent control** - Each player controls their own game instance
 - **Real-time status** - See connection status and device information
 - **Button mapping** - D-pad, A, and B buttons automatically mapped to game controls
+
+**Audio Features:**
+- **Bluetooth speakers** - Pair and connect Bluetooth speakers, headphones, or earbuds
+- **Smart audio routing** - Automatically switches to Bluetooth speaker when it reconnects (if previously used)
+- **Intelligent fallback** - Automatically falls back to built-in audio when Bluetooth disconnects
+- **Manual selection** - Choose audio output device from dropdown (excludes HDMI by default)
+- **Seamless switching** - Active audio streams automatically move to new device
+
+**System:**
 - **Restart Bluetooth** - Fix connection issues with one click (handles org.bluez.Error.NotReady)
 
 **Supported Controllers:**
@@ -134,8 +145,35 @@ sudo systemctl restart protosuit-bluetoothbridge
 **Supporting services:**
 - `xserver` - X11 server for dual display management
 - `mosquitto` - MQTT broker for inter-process communication
+- `pulseaudio` - Audio server with Bluetooth A2DP support (auto-started by launcher)
 
 All services communicate via MQTT topics under `protogen/fins/*`
+
+**Audio Setup:**
+- The launcher automatically starts PulseAudio on boot with Bluetooth support
+- Default audio device is set to non-HDMI (usually built-in audio or USB)
+- **Bluetooth audio quality:** When a Bluetooth speaker connects, the system automatically:
+  - Detects the current profile (HSP/HFP vs A2DP)
+  - Switches to A2DP (Advanced Audio Distribution Profile) for high-quality stereo audio
+  - HSP/HFP profiles are for phone calls and have poor audio quality (mono, 8kHz)
+  - A2DP profiles provide full stereo audio with good quality codecs
+- Audio device switching is seamless with automatic stream migration
+
+**Bluetooth Adapter Management:**
+- The system supports multiple Bluetooth adapters to avoid bandwidth conflicts
+- Configure in `config.yaml` under `bluetoothbridge.adapters`:
+  - `gamepads`: Adapter for game controllers (default: `hci0` - built-in)
+  - `audio`: Adapter for speakers/headphones (default: `hci1` - USB dongle)
+- **Why separate adapters?** When multiple devices share one adapter, bandwidth is split causing:
+  - Audio stuttering and quality degradation
+  - Controller input lag
+  - Connection instability
+- **Setup steps:**
+  1. Check available adapters: `bluetoothctl list` or `hciconfig -a`
+  2. Enable USB adapter: `sudo rfkill unblock bluetooth && sudo hciconfig hci1 up`
+  3. Devices will automatically connect to the correct adapter based on their type
+  4. Already-paired devices may need to be removed and re-paired after configuration change
+- **How it works:** The service uses `hciconfig` to get adapter MAC addresses, then uses `bluetoothctl select` to target specific adapters for each operation
 
 ---
 
@@ -200,6 +238,7 @@ mosquitto_sub -t "protogen/fins/renderer/status/#" -v
 | `protogen/fins/launcher/kill/audio` | `"file.mp3"` or `"all"` | Force kill audio |
 | `protogen/fins/launcher/kill/video` | - | Force kill video |
 | `protogen/fins/launcher/kill/exec` | - | Force kill executable |
+| `protogen/fins/launcher/audio/device/set` | `{"device":"sink_name"}` | Set audio output device |
 | `protogen/fins/launcher/config/reload` | - | Rescan asset directories |
 
 **Status (publish, retained):**
@@ -209,6 +248,9 @@ mosquitto_sub -t "protogen/fins/renderer/status/#" -v
 | `protogen/fins/launcher/status/audio` | `{"playing":["file.mp3"],"available":[...]}` |
 | `protogen/fins/launcher/status/video` | `{"playing":"file.mp4","available":[...]}` |
 | `protogen/fins/launcher/status/exec` | `{"running":"script.sh","pid":1234,"available":[...]}` |
+| `protogen/fins/launcher/status/audio_devices` | JSON array of available audio output devices |
+| `protogen/fins/launcher/status/audio_device/current` | JSON object with current audio device info |
+| `protogen/fins/launcher/status/volume` | `{"volume":50,"min":0,"max":100}` |
 
 **Examples:**
 
@@ -289,8 +331,9 @@ mosquitto_sub -t "protogen/fins/launcher/status/#" -v
 | Topic | Content |
 |-------|---------|
 | `protogen/fins/bluetoothbridge/status/scanning` | `true` or `false` - Scanning state |
-| `protogen/fins/bluetoothbridge/status/devices` | JSON array of discovered devices |
-| `protogen/fins/bluetoothbridge/status/assignments` | JSON object with left/right assignments |
+| `protogen/fins/bluetoothbridge/status/devices` | JSON array of discovered gamepad devices |
+| `protogen/fins/bluetoothbridge/status/audio_devices` | JSON array of discovered Bluetooth audio devices |
+| `protogen/fins/bluetoothbridge/status/assignments` | JSON object with left/right gamepad assignments |
 
 **Examples:**
 
@@ -320,11 +363,20 @@ mosquitto_pub -t "protogen/fins/bluetoothbridge/bluetooth/restart" -m ""
 mosquitto_pub -t "protogen/fins/bluetoothbridge/unpair" \
   -m '{"mac":"AA:BB:CC:DD:EE:FF"}'
 
+# Connect to a Bluetooth speaker
+mosquitto_pub -t "protogen/fins/bluetoothbridge/connect" \
+  -m '{"mac":"XX:YY:ZZ:AA:BB:CC"}'
+
+# Select audio output device
+mosquitto_pub -t "protogen/fins/launcher/audio/device/set" \
+  -m '{"device":"bluez_sink.XX_YY_ZZ_AA_BB_CC"}'
+
 # Monitor status
 mosquitto_sub -t "protogen/fins/bluetoothbridge/status/#" -v
+mosquitto_sub -t "protogen/fins/launcher/status/audio_device/#" -v
 ```
 
-**Device status format:**
+**Gamepad device status format:**
 
 ```json
 [
@@ -337,17 +389,66 @@ mosquitto_sub -t "protogen/fins/bluetoothbridge/status/#" -v
 ]
 ```
 
-**Assignment status format:**
+**Gamepad assignment status format:**
 
 ```json
 {
   "left": {
     "mac": "AA:BB:CC:DD:EE:FF",
-    "name": "Xbox Wireless Controller"
+    "name": "Xbox Wireless Controller",
+    "connected": true
   },
   "right": null
 }
 ```
+
+**Audio device status format:**
+
+```json
+[
+  {
+    "mac": "XX:YY:ZZ:AA:BB:CC",
+    "name": "JBL Speaker",
+    "paired": true,
+    "connected": true,
+    "type": "audio"
+  }
+]
+```
+
+**Available audio devices format (from launcher):**
+
+```json
+[
+  {
+    "name": "bluez_sink.XX_YY_ZZ_AA_BB_CC",
+    "description": "JBL Speaker",
+    "type": "bluetooth"
+  },
+  {
+    "name": "alsa_output.usb-device",
+    "description": "USB Audio",
+    "type": "usb"
+  }
+]
+```
+
+**Current audio device format:**
+
+```json
+{
+  "device": "bluez_sink.XX_YY_ZZ_AA_BB_CC",
+  "description": "JBL Speaker",
+  "type": "bluetooth"
+}
+```
+
+**Audio Device Behavior:**
+- When a Bluetooth speaker connects, it automatically becomes available in the device list
+- If the Bluetooth speaker was the last selected device, audio automatically switches to it when it reconnects
+- If the Bluetooth speaker disconnects, audio automatically falls back to a non-HDMI device (usually built-in audio)
+- HDMI audio outputs are excluded from the UI and fallback logic by default
+- Manual device selection via the web interface stores the preference for auto-reconnect
 
 ---
 

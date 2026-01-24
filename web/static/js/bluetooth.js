@@ -8,6 +8,9 @@ let bluetoothScanning = false;
 let bluetoothDevices = [];
 let bluetoothAssignments = { left: null, right: null };
 let bluetoothConnectedDevices = new Set();
+let discoveredAudioDevices = [];  // Discovered BT audio devices from scanning
+let audioDevices = [];  // Available PipeWire/PulseAudio sinks
+let currentAudioDevice = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
@@ -35,7 +38,12 @@ function connectToMQTT() {
         // Subscribe to status topics
         bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/scanning');
         bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/devices');
+        bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/audio_devices');
         bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/assignments');
+        
+        // Subscribe to launcher audio device topics
+        bluetoothMqttClient.subscribe('protogen/fins/launcher/status/audio_devices');
+        bluetoothMqttClient.subscribe('protogen/fins/launcher/status/audio_device/current');
 
         console.log('[Bluetooth] Connected to MQTT');
     });
@@ -71,9 +79,21 @@ function handleMQTTMessage(topic, payload) {
             updateDevicesList();
             updateAssignmentSelects();
         }
+        else if (topic === 'protogen/fins/bluetoothbridge/status/audio_devices') {
+            discoveredAudioDevices = JSON.parse(payload);
+            updateDevicesList();  // Refresh the discovered devices list
+        }
         else if (topic === 'protogen/fins/bluetoothbridge/status/assignments') {
             bluetoothAssignments = JSON.parse(payload);
             updateAssignments();
+        }
+        else if (topic === 'protogen/fins/launcher/status/audio_devices') {
+            audioDevices = JSON.parse(payload);
+            updateAudioDevicesList();
+        }
+        else if (topic === 'protogen/fins/launcher/status/audio_device/current') {
+            currentAudioDevice = JSON.parse(payload);
+            updateCurrentAudioDevice();
         }
     } catch (e) {
         console.error('[Bluetooth] Error parsing MQTT message:', e);
@@ -128,6 +148,15 @@ function initBluetooth() {
             e.target.value = ''; // Reset select
         } else if (mac) {
             assignController(mac, 'right');
+        }
+    });
+
+    // Audio device select
+    const audioSelect = document.getElementById('audio-device-select');
+    audioSelect.addEventListener('change', (e) => {
+        const deviceName = e.target.value;
+        if (deviceName) {
+            selectAudioDevice(deviceName);
         }
     });
 }
@@ -238,7 +267,7 @@ function updateScanUI() {
 function updateDevicesList() {
     const devicesList = document.getElementById('devices-list');
 
-    if (bluetoothDevices.length === 0) {
+    if (bluetoothDevices.length === 0 && discoveredAudioDevices.length === 0) {
         devicesList.innerHTML = '<div class="empty-state">No devices discovered yet. Click "Start Scan" to begin.</div>';
         return;
     }
@@ -246,17 +275,38 @@ function updateDevicesList() {
     // Clear existing list
     devicesList.innerHTML = '';
 
-    // Create device cards
-    bluetoothDevices.forEach(device => {
-        const card = createDeviceCard(device);
-        devicesList.appendChild(card);
-    });
+    // Create gamepad device cards
+    if (bluetoothDevices.length > 0) {
+        const gamepadHeader = document.createElement('h3');
+        gamepadHeader.className = 'device-type-header';
+        gamepadHeader.textContent = '🎮 Gamepads';
+        devicesList.appendChild(gamepadHeader);
+        
+        bluetoothDevices.forEach(device => {
+            const card = createDeviceCard(device, 'gamepad');
+            devicesList.appendChild(card);
+        });
+    }
+
+    // Create audio device cards
+    if (discoveredAudioDevices.length > 0) {
+        const audioHeader = document.createElement('h3');
+        audioHeader.className = 'device-type-header';
+        audioHeader.textContent = '🔊 Audio Devices';
+        devicesList.appendChild(audioHeader);
+        
+        discoveredAudioDevices.forEach(device => {
+            const card = createDeviceCard(device, 'audio');
+            devicesList.appendChild(card);
+        });
+    }
 }
 
 // Create device card element
-function createDeviceCard(device) {
+function createDeviceCard(device, deviceType) {
     const card = document.createElement('div');
     card.className = 'device-card' + (device.connected ? ' connected' : '');
+    card.setAttribute('data-device-type', deviceType);
 
     // Device info
     const info = document.createElement('div');
@@ -427,5 +477,80 @@ function flashInput(display) {
         setTimeout(() => {
             controller.classList.remove('input-active');
         }, 300);
+    }
+}
+
+// Select audio output device
+function selectAudioDevice(deviceName) {
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
+
+    const message = JSON.stringify({ device: deviceName });
+    bluetoothMqttClient.publish('protogen/fins/launcher/audio/device/set', message);
+    console.log('[Bluetooth] Selected audio device:', deviceName);
+}
+
+// Update audio devices list
+function updateAudioDevicesList() {
+    const audioSelect = document.getElementById('audio-device-select');
+    
+    if (!audioDevices || audioDevices.length === 0) {
+        audioSelect.innerHTML = '<option value="">No audio devices available</option>';
+        return;
+    }
+
+    const currentValue = audioSelect.value;
+
+    // Populate dropdown with available devices
+    audioSelect.innerHTML = '<option value="">Select Audio Device...</option>';
+
+    audioDevices.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.name;
+        
+        // Add type indicator
+        let typeIcon = '';
+        if (device.type === 'bluetooth') typeIcon = '🔊 ';
+        else if (device.type === 'usb') typeIcon = '🔌 ';
+        else if (device.type === 'analog') typeIcon = '🎵 ';
+        
+        option.textContent = typeIcon + device.description;
+        audioSelect.appendChild(option);
+    });
+
+    // Restore selection if still valid
+    if (currentValue && audioDevices.some(d => d.name === currentValue)) {
+        audioSelect.value = currentValue;
+    }
+}
+
+// Update current audio device display
+function updateCurrentAudioDevice() {
+    const deviceNameEl = document.getElementById('current-audio-device-name');
+    const deviceTypeEl = document.getElementById('current-audio-device-type');
+    const audioSelect = document.getElementById('audio-device-select');
+
+    if (currentAudioDevice && currentAudioDevice.device) {
+        deviceNameEl.textContent = currentAudioDevice.description || currentAudioDevice.device;
+        
+        // Show type badge
+        let typeBadge = '';
+        if (currentAudioDevice.type === 'bluetooth') {
+            typeBadge = 'Bluetooth';
+        } else if (currentAudioDevice.type === 'usb') {
+            typeBadge = 'USB';
+        } else if (currentAudioDevice.type === 'analog') {
+            typeBadge = 'Built-in';
+        } else {
+            typeBadge = currentAudioDevice.type;
+        }
+        deviceTypeEl.textContent = typeBadge;
+        deviceTypeEl.className = 'audio-device-type ' + currentAudioDevice.type;
+
+        // Update select to match current device
+        audioSelect.value = currentAudioDevice.device;
+    } else {
+        deviceNameEl.textContent = 'Unknown';
+        deviceTypeEl.textContent = '';
+        deviceTypeEl.className = 'audio-device-type';
     }
 }

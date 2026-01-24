@@ -155,6 +155,21 @@
     gap: 15px;
 }
 
+.device-type-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 20px 0 10px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.device-type-header:first-child {
+    margin-top: 0;
+}
+
 .empty-state {
     text-align: center;
     padding: 40px 20px;
@@ -385,6 +400,94 @@
     box-shadow: 0 0 10px rgba(243, 156, 18, 0.2);
 }
 
+/* Audio Output */
+.audio-output {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.current-audio-device {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    transition: border-color 0.3s ease;
+}
+
+.current-audio-device:has(.bluetooth) {
+    border-color: #3498db;
+    box-shadow: 0 0 10px rgba(52, 152, 219, 0.2);
+}
+
+.audio-device-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    min-width: 120px;
+}
+
+.audio-device-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.audio-device-type {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.audio-device-type.bluetooth {
+    background: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+    border: 1px solid #3498db;
+}
+
+.audio-device-type.usb {
+    background: rgba(155, 89, 182, 0.2);
+    color: #9b59b6;
+    border: 1px solid #9b59b6;
+}
+
+.audio-device-type.analog {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+    border: 1px solid #2ecc71;
+}
+
+.audio-device-select {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: 'Rajdhani', sans-serif;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+}
+
+.audio-device-select:hover {
+    border-color: var(--accent-primary);
+}
+
+.audio-device-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 10px rgba(243, 156, 18, 0.2);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .bt-container {
@@ -415,5 +518,14 @@
 
     .assignments {
         grid-template-columns: 1fr;
+    }
+
+    .current-audio-device {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .audio-device-label {
+        min-width: auto;
     }
 }

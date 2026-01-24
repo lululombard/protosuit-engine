@@ -71,6 +71,9 @@ class BluetoothBridge:
         self.discovered_devices: Dict[str, Dict] = {}  # {mac: {name, paired, connected}}
         self.connected_devices: Dict[str, Dict] = {}   # {mac: {name, evdev_path, device}}
         self.assignments: Dict[str, Optional[str]] = {"left": None, "right": None}  # {display: mac}
+        
+        # Audio device tracking (Bluetooth speakers, headphones, etc.)
+        self.audio_devices: Dict[str, Dict] = {}  # {mac: {name, paired, connected, type}}
 
         # Input reading threads
         self.input_threads: Dict[str, threading.Thread] = {}  # {mac: thread}
@@ -79,7 +82,12 @@ class BluetoothBridge:
         # Button mapping configuration
         self.button_mapping = self._load_button_mapping()
 
+        # Bluetooth adapter configuration
+        self.gamepad_adapter, self.audio_adapter = self._load_adapter_config()
+
         print("[BluetoothBridge] Initialized")
+        print(f"[BluetoothBridge] Gamepad adapter: {self.gamepad_adapter}")
+        print(f"[BluetoothBridge] Audio adapter: {self.audio_adapter}")
 
     def _load_button_mapping(self) -> Dict:
         """Load button mapping from config"""
@@ -97,6 +105,83 @@ class BluetoothBridge:
             "ABS_HAT0X": "dpad_x", # D-pad X axis
             "ABS_HAT0Y": "dpad_y"  # D-pad Y axis
         }
+
+    def _load_adapter_config(self) -> tuple:
+        """Load Bluetooth adapter configuration from config
+        
+        Returns:
+            (gamepad_adapter, audio_adapter) - adapter names like "hci0", "hci1"
+        """
+        try:
+            config = self.config_loader.config
+            if 'bluetoothbridge' in config and 'adapters' in config['bluetoothbridge']:
+                adapters = config['bluetoothbridge']['adapters']
+                gamepad_adapter = adapters.get('gamepads', 'hci0')
+                audio_adapter = adapters.get('audio', 'hci1')
+                return gamepad_adapter, audio_adapter
+        except Exception as e:
+            print(f"[BluetoothBridge] Error loading adapter config: {e}")
+
+        # Default: gamepads on built-in (hci0), audio on USB dongle (hci1)
+        return 'hci0', 'hci1'
+
+    def _get_adapter_for_device(self, mac: str) -> str:
+        """Get the appropriate Bluetooth adapter for a device based on its type
+        
+        Args:
+            mac: Device MAC address
+            
+        Returns:
+            Adapter name (e.g., "hci0", "hci1")
+        """
+        # Check if it's an audio device
+        if mac in self.audio_devices:
+            return self.audio_adapter
+        
+        # Check if it's a gamepad
+        if mac in self.discovered_devices:
+            return self.gamepad_adapter
+        
+        # Default to gamepad adapter for unknown devices
+        return self.gamepad_adapter
+
+    def _get_adapter_mac(self, adapter_name: str) -> Optional[str]:
+        """Get the MAC address of a Bluetooth adapter
+        
+        Args:
+            adapter_name: Adapter name (e.g., "hci0", "hci1")
+            
+        Returns:
+            Adapter MAC address or None if not found
+        """
+        try:
+            # Use hciconfig to get the adapter's MAC address
+            result = subprocess.run(
+                ["hciconfig", adapter_name],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode != 0:
+                print(f"[BluetoothBridge] ⚠ Adapter {adapter_name} not found")
+                return None
+            
+            # Parse output for "BD Address: XX:XX:XX:XX:XX:XX"
+            for line in result.stdout.splitlines():
+                if "BD Address:" in line:
+                    match = re.search(r'BD Address:\s+([0-9A-F:]+)', line, re.IGNORECASE)
+                    if match:
+                        mac = match.group(1)
+                        print(f"[BluetoothBridge] ✓ {adapter_name} MAC: {mac}")
+                        return mac
+            
+            print(f"[BluetoothBridge] ⚠ Could not parse MAC for adapter {adapter_name}")
+            return None
+            
+        except Exception as e:
+            print(f"[BluetoothBridge] Error getting adapter MAC: {e}")
+            return None
 
     def init_mqtt(self):
         """Initialize MQTT connection and subscriptions"""
@@ -209,64 +294,119 @@ class BluetoothBridge:
         self.scan_thread.start()
 
     def _scan_worker(self):
-        """Background worker for Bluetooth scanning"""
+        """Background worker for Bluetooth scanning on both adapters"""
         try:
-            # Start bluetoothctl in interactive mode
-            self.scan_process = subprocess.Popen(
-                ["bluetoothctl"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1
-            )
+            # Get both adapter MACs
+            gamepad_adapter_mac = self._get_adapter_mac(self.gamepad_adapter)
+            audio_adapter_mac = self._get_adapter_mac(self.audio_adapter)
+            
+            print(f"[BluetoothBridge] Scanning on both adapters:")
+            print(f"[BluetoothBridge]   {self.gamepad_adapter} ({gamepad_adapter_mac}) - for gamepads")
+            print(f"[BluetoothBridge]   {self.audio_adapter} ({audio_adapter_mac}) - for audio")
 
-            # Send scan on command
-            self.scan_process.stdin.write("scan on\n")
-            self.scan_process.stdin.flush()
+            # Start bluetoothctl processes for each adapter
+            scan_processes = []
+            
+            # Start gamepad adapter scan
+            if gamepad_adapter_mac:
+                proc = subprocess.Popen(
+                    ["bluetoothctl"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1
+                )
+                proc.stdin.write(f"select {gamepad_adapter_mac}\n")
+                proc.stdin.write("scan on\n")
+                proc.stdin.flush()
+                scan_processes.append(('gamepad', proc))
+            
+            # Start audio adapter scan (if different from gamepad adapter)
+            if audio_adapter_mac and audio_adapter_mac != gamepad_adapter_mac:
+                proc = subprocess.Popen(
+                    ["bluetoothctl"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1
+                )
+                proc.stdin.write(f"select {audio_adapter_mac}\n")
+                proc.stdin.write("scan on\n")
+                proc.stdin.flush()
+                scan_processes.append(('audio', proc))
+            
+            # Store for cleanup
+            self.scan_process = scan_processes
 
             # Also get list of paired devices
             self._update_paired_devices()
 
-            # Parse scan output
-            while self.scanning and self.scan_process and self.scan_process.poll() is None:
-                line = self.scan_process.stdout.readline()
-                if not line:
-                    break
+            # Parse scan output from all processes
+            import select
+            while self.scanning and scan_processes:
+                # Check all processes for output
+                for adapter_type, proc in scan_processes:
+                    if proc.poll() is not None:
+                        # Process exited
+                        continue
+                    
+                    # Non-blocking read
+                    r, _, _ = select.select([proc.stdout], [], [], 0.01)
+                    if not r:
+                        continue
+                    
+                    line = proc.stdout.readline()
+                    if not line:
+                        continue
 
-                # Strip ANSI escape codes (color codes from bluetoothctl)
-                line = re.sub(r'\x1b\[[0-9;]*m', '', line)
-                line = line.rstrip()
+                    # Strip ANSI escape codes (color codes from bluetoothctl)
+                    line = re.sub(r'\x1b\[[0-9;]*m', '', line)
+                    line = line.rstrip()
 
-                # Skip empty lines and bluetoothctl prompts
-                if not line or line.startswith('[bluetoothctl]'):
-                    continue
+                    # Skip empty lines and bluetoothctl prompts
+                    if not line or line.startswith('[bluetoothctl]'):
+                        continue
 
-                # Parse device discovery: [NEW] Device AA:BB:CC:DD:EE:FF Device Name
-                # Only process lines that start with [NEW] or [CHG] and contain "Device"
-                if ('[NEW]' in line or '[CHG]' in line) and 'Device' in line:
-                    match = re.search(r'\[(?:NEW|CHG)\]\s+Device\s+([0-9A-F:]+)\s+(.+)', line, re.IGNORECASE)
-                    if match:
-                        mac = match.group(1).upper()
-                        name = match.group(2).strip()
+                    # Parse device discovery: [NEW] Device AA:BB:CC:DD:EE:FF Device Name
+                    # Only process lines that start with [NEW] or [CHG] and contain "Device"
+                    if ('[NEW]' in line or '[CHG]' in line) and 'Device' in line:
+                        match = re.search(r'\[(?:NEW|CHG)\]\s+Device\s+([0-9A-F:]+)\s+(.+)', line, re.IGNORECASE)
+                        if match:
+                            mac = match.group(1).upper()
+                            name = match.group(2).strip()
 
-                        # print(f"[BluetoothBridge] Discovered device: {name} ({mac})")
+                            # Check if it's a gamepad/joystick
+                            if self._is_gamepad_device(name):
+                                self.discovered_devices[mac] = {
+                                    "mac": mac,
+                                    "name": name,
+                                    "paired": False,
+                                    "connected": False
+                                }
+                                print(f"[BluetoothBridge] ✓ Added gamepad: {name} ({mac}) [from {adapter_type} adapter]")
+                                self.publish_devices_status()
+                            # Check if it's an audio device (speaker, headphones, etc.)
+                            elif self._is_audio_device(name):
+                                self.audio_devices[mac] = {
+                                    "mac": mac,
+                                    "name": name,
+                                    "paired": False,
+                                    "connected": False,
+                                    "type": "audio"
+                                }
+                                print(f"[BluetoothBridge] ✓ Added audio device: {name} ({mac}) [from {adapter_type} adapter]")
+                                self.publish_audio_devices_status()
+                            else:
+                                print(f"[BluetoothBridge] Filtered out (not a gamepad or audio device): {name}")
 
-                        # Check if it's a gamepad/joystick
-                        if self._is_gamepad_device(name):
-                            self.discovered_devices[mac] = {
-                                "mac": mac,
-                                "name": name,
-                                "paired": False,
-                                "connected": False
-                            }
-                            print(f"[BluetoothBridge] ✓ Added gamepad: {name} ({mac})")
-                            self.publish_devices_status()
-                        else:
-                            print(f"[BluetoothBridge] Filtered out (not a gamepad): {name}")
+                time.sleep(0.01)  # Small delay to prevent CPU spinning
 
         except Exception as e:
             print(f"[BluetoothBridge] Scan error: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             self.scanning = False
             self.publish_scanning_status()
@@ -318,7 +458,7 @@ class BluetoothBridge:
                         mac = match.group(1).upper()
                         connected = match.group(2).lower() == 'yes'
 
-                        # Only process if it's a known gamepad
+                        # Process known gamepads
                         if mac in self.discovered_devices:
                             if connected:
                                 print(f"[BluetoothBridge] 🎮 Controller connected: {mac}")
@@ -326,6 +466,15 @@ class BluetoothBridge:
                             else:
                                 print(f"[BluetoothBridge] 🎮 Controller disconnected: {mac}")
                                 self._handle_controller_disconnected(mac)
+                        
+                        # Process known audio devices
+                        elif mac in self.audio_devices:
+                            if connected:
+                                print(f"[BluetoothBridge] 🔊 Audio device connected: {mac}")
+                                self._handle_audio_device_connected(mac)
+                            else:
+                                print(f"[BluetoothBridge] 🔊 Audio device disconnected: {mac}")
+                                self._handle_audio_device_disconnected(mac)
 
         except Exception as e:
             print(f"[BluetoothBridge] Monitor error: {e}")
@@ -392,12 +541,52 @@ class BluetoothBridge:
         except Exception as e:
             print(f"[BluetoothBridge] Error handling disconnected controller: {e}")
 
+    def _handle_audio_device_connected(self, mac: str):
+        """Handle an audio device connecting automatically"""
+        try:
+            # Update audio devices state
+            if mac in self.audio_devices:
+                self.audio_devices[mac]["connected"] = True
+
+            self.publish_audio_devices_status()
+            print(f"[BluetoothBridge] ✓ Audio device ready: {mac}")
+
+        except Exception as e:
+            print(f"[BluetoothBridge] Error handling connected audio device: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _handle_audio_device_disconnected(self, mac: str):
+        """Handle an audio device disconnecting automatically"""
+        try:
+            # Update audio devices state
+            if mac in self.audio_devices:
+                self.audio_devices[mac]["connected"] = False
+
+            self.publish_audio_devices_status()
+            print(f"[BluetoothBridge] ✓ Audio device cleaned up: {mac}")
+
+        except Exception as e:
+            print(f"[BluetoothBridge] Error handling disconnected audio device: {e}")
+
     def _is_gamepad_device(self, name: str) -> bool:
         """Check if device name suggests it's a gamepad"""
         keywords = ['controller', 'gamepad', 'joystick', 'xbox', 'playstation',
                    'ps4', 'ps5', 'dualshock', 'dualsense', 'switch', 'pro controller',
                    '8bitdo', 'nintendo']
         name_lower = name.lower()
+        return any(keyword in name_lower for keyword in keywords)
+
+    def _is_audio_device(self, name: str) -> bool:
+        """Check if device name suggests it's an audio device"""
+        keywords = ['speaker', 'headphone', 'headset', 'earphone', 'earbud',
+                   'soundbar', 'audio', 'buds', 'airpods', 'airpod', 'beats',
+                   'bose', 'sony', 'jbl', 'marshall', 'harman', 'tronsmart',
+                   'anker', 'soundcore', 'ue boom', 'megaboom', 'wonderboom']
+        name_lower = name.lower()
+        # Don't match devices that are clearly gamepads
+        if self._is_gamepad_device(name):
+            return False
         return any(keyword in name_lower for keyword in keywords)
 
     def _update_paired_devices(self, start_input_threads=True):
@@ -415,52 +604,77 @@ class BluetoothBridge:
             )
 
             paired_count = 0
+            audio_count = 0
             for line in result.stdout.splitlines():
                 match = re.search(r'Device\s+([0-9A-F:]+)\s+(.+)', line, re.IGNORECASE)
                 if match:
                     mac = match.group(1).upper()
                     name = match.group(2).strip()
 
-                    # Only process gamepad devices
-                    if not self._is_gamepad_device(name):
-                        continue
+                    # Check if it's a gamepad
+                    if self._is_gamepad_device(name):
+                        # Check if device is connected
+                        is_connected = self._check_device_connected(mac)
 
-                    # Check if device is connected
-                    is_connected = self._check_device_connected(mac)
-
-                    if mac in self.discovered_devices:
-                        self.discovered_devices[mac]["paired"] = True
-                        self.discovered_devices[mac]["connected"] = is_connected
-                    else:
-                        self.discovered_devices[mac] = {
-                            "mac": mac,
-                            "name": name,
-                            "paired": True,
-                            "connected": is_connected
-                        }
-
-                    # If already connected, set up evdev
-                    if is_connected:
-                        evdev_path = self._find_evdev_device(mac)
-                        if evdev_path:
-                            self.connected_devices[mac] = {
+                        if mac in self.discovered_devices:
+                            self.discovered_devices[mac]["paired"] = True
+                            self.discovered_devices[mac]["connected"] = is_connected
+                        else:
+                            self.discovered_devices[mac] = {
                                 "mac": mac,
                                 "name": name,
-                                "evdev_path": evdev_path,
-                                "device": None
+                                "paired": True,
+                                "connected": is_connected
                             }
-                            if start_input_threads:
-                                self._start_input_reading(mac)
-                            print(f"[BluetoothBridge] ✓ Loaded connected gamepad: {name} ({mac})")
-                        else:
-                            print(f"[BluetoothBridge] Found paired gamepad (no evdev yet): {name} ({mac})")
-                    else:
-                        print(f"[BluetoothBridge] Found paired gamepad (not connected): {name} ({mac})")
 
-                    paired_count += 1
+                        # If already connected, set up evdev
+                        if is_connected:
+                            evdev_path = self._find_evdev_device(mac)
+                            if evdev_path:
+                                self.connected_devices[mac] = {
+                                    "mac": mac,
+                                    "name": name,
+                                    "evdev_path": evdev_path,
+                                    "device": None
+                                }
+                                if start_input_threads:
+                                    self._start_input_reading(mac)
+                                print(f"[BluetoothBridge] ✓ Loaded connected gamepad: {name} ({mac})")
+                            else:
+                                print(f"[BluetoothBridge] Found paired gamepad (no evdev yet): {name} ({mac})")
+                        else:
+                            print(f"[BluetoothBridge] Found paired gamepad (not connected): {name} ({mac})")
+
+                        paired_count += 1
+                    
+                    # Check if it's an audio device
+                    elif self._is_audio_device(name):
+                        # Check if device is connected
+                        is_connected = self._check_device_connected(mac)
+
+                        if mac in self.audio_devices:
+                            self.audio_devices[mac]["paired"] = True
+                            self.audio_devices[mac]["connected"] = is_connected
+                        else:
+                            self.audio_devices[mac] = {
+                                "mac": mac,
+                                "name": name,
+                                "paired": True,
+                                "connected": is_connected,
+                                "type": "audio"
+                            }
+
+                        if is_connected:
+                            print(f"[BluetoothBridge] ✓ Loaded connected audio device: {name} ({mac})")
+                        else:
+                            print(f"[BluetoothBridge] Found paired audio device (not connected): {name} ({mac})")
+
+                        audio_count += 1
 
             if paired_count > 0:
                 self.publish_devices_status()
+            if audio_count > 0:
+                self.publish_audio_devices_status()
 
         except Exception as e:
             print(f"[BluetoothBridge] Error updating paired devices: {e}")
@@ -488,22 +702,26 @@ class BluetoothBridge:
         self.scanning = False
 
         if self.scan_process:
-            try:
-                # Send scan off command to interactive bluetoothctl
-                if self.scan_process.poll() is None:
-                    self.scan_process.stdin.write("scan off\n")
-                    self.scan_process.stdin.write("quit\n")
-                    self.scan_process.stdin.flush()
-                    self.scan_process.wait(timeout=2)
-            except Exception as e:
-                print(f"[BluetoothBridge] Error stopping scan: {e}")
+            # Handle both single process (legacy) and list of processes (new multi-adapter)
+            processes = self.scan_process if isinstance(self.scan_process, list) else [('default', self.scan_process)]
+            
+            for adapter_type, proc in processes:
                 try:
-                    self.scan_process.terminate()
-                    self.scan_process.wait(timeout=1)
-                except:
-                    self.scan_process.kill()
-            finally:
-                self.scan_process = None
+                    # Send scan off command to interactive bluetoothctl
+                    if proc.poll() is None:
+                        proc.stdin.write("scan off\n")
+                        proc.stdin.write("quit\n")
+                        proc.stdin.flush()
+                        proc.wait(timeout=2)
+                except Exception as e:
+                    print(f"[BluetoothBridge] Error stopping {adapter_type} scan: {e}")
+                    try:
+                        proc.terminate()
+                        proc.wait(timeout=1)
+                    except:
+                        proc.kill()
+            
+            self.scan_process = None
 
         self.publish_scanning_status()
 
@@ -512,58 +730,124 @@ class BluetoothBridge:
         print(f"[BluetoothBridge] Connecting to {mac}...")
 
         try:
-            # Trust device
-            subprocess.run(["bluetoothctl", "trust", mac], timeout=10, check=False)
+            # Get the appropriate adapter for this device
+            adapter = self._get_adapter_for_device(mac)
+            adapter_mac = self._get_adapter_mac(adapter)
+            print(f"[BluetoothBridge] Using adapter: {adapter} ({adapter_mac})")
 
-            # Pair device (may already be paired)
-            subprocess.run(["bluetoothctl", "pair", mac], timeout=15, check=False)
-
-            # Connect device
-            result = subprocess.run(
-                ["bluetoothctl", "connect", mac],
-                capture_output=True,
+            # Start bluetoothctl in interactive mode and keep it running
+            proc = subprocess.Popen(
+                ["bluetoothctl"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                timeout=15
+                bufsize=1
             )
+            
+            # Select adapter
+            proc.stdin.write(f"select {adapter_mac}\n")
+            proc.stdin.flush()
+            time.sleep(0.5)
+            
+            # Trust device
+            proc.stdin.write(f"trust {mac}\n")
+            proc.stdin.flush()
+            time.sleep(0.5)
+            
+            # Pair device
+            print(f"[BluetoothBridge] Pairing to {mac}...")
+            proc.stdin.write(f"pair {mac}\n")
+            proc.stdin.flush()
+            time.sleep(5)  # Wait for pairing to complete
+            
+            # Connect device
+            print(f"[BluetoothBridge] Connecting to {mac}...")
+            proc.stdin.write(f"connect {mac}\n")
+            proc.stdin.flush()
+            time.sleep(5)  # Wait for connection to complete
+            
+            # Quit
+            proc.stdin.write("quit\n")
+            proc.stdin.flush()
+            
+            # Get output
+            output, _ = proc.communicate(timeout=5)
+            result = type('obj', (object,), {'stdout': output, 'stderr': '', 'returncode': proc.returncode})()
 
+            # Combine stdout and stderr for checking
+            output = result.stdout + result.stderr
+            
             # Check for common Bluetooth errors
-            if "org.bluez.Error.NotReady" in result.stderr:
+            if "org.bluez.Error.NotReady" in output:
                 print("[BluetoothBridge] ✗ Bluetooth service is not ready!")
                 print("[BluetoothBridge] → Try restarting Bluetooth via the web interface or MQTT:")
                 print("[BluetoothBridge]   mosquitto_pub -t 'protogen/fins/bluetoothbridge/bluetooth/restart' -m ''")
                 return
+            
+            # Check for audio profile issues
+            if "br-connection-profile-unavailable" in output or "profile unavailable" in output.lower():
+                print("[BluetoothBridge] ✗ Bluetooth profile unavailable!")
+                print("[BluetoothBridge] → This usually means PulseAudio/PipeWire Bluetooth modules aren't loaded.")
+                print("[BluetoothBridge] → Try these fixes:")
+                print("[BluetoothBridge]   1. Restart PulseAudio: pulseaudio -k && pulseaudio --start")
+                print("[BluetoothBridge]   2. Or restart PipeWire: systemctl --user restart pipewire pipewire-pulse")
+                print("[BluetoothBridge]   3. Install bluetooth packages: sudo apt install pulseaudio-module-bluetooth pipewire-audio-modules")
+                return
 
-            if result.returncode == 0 or "Connection successful" in result.stdout:
-                print(f"[BluetoothBridge] Connected to {mac}")
-
-                # Wait a moment for device to appear in /dev/input
-                time.sleep(2)
-
-                # Find the evdev device
-                evdev_path = self._find_evdev_device(mac)
-                if evdev_path:
-                    device_info = self.discovered_devices.get(mac, {})
-                    self.connected_devices[mac] = {
-                        "mac": mac,
-                        "name": device_info.get("name", "Unknown"),
-                        "evdev_path": evdev_path,
-                        "device": None
-                    }
-
-                    # Update discovered devices
-                    if mac in self.discovered_devices:
-                        self.discovered_devices[mac]["connected"] = True
-                        self.discovered_devices[mac]["paired"] = True
-
-                    # Start input reading
-                    self._start_input_reading(mac)
-
-                    self.publish_devices_status()
-                    self.publish_assignments_status()
+            # Check if connection succeeded or was already established
+            if result.returncode == 0 or "Connection successful" in output or "already connected" in output.lower():
+                if "already connected" in output.lower():
+                    print(f"[BluetoothBridge] ✓ Device {mac} was already connected")
                 else:
-                    print(f"[BluetoothBridge] Could not find evdev device for {mac}")
+                    print(f"[BluetoothBridge] ✓ Connected to {mac}")
+
+                # Check if this is an audio device or gamepad
+                is_audio = mac in self.audio_devices
+                is_gamepad = mac in self.discovered_devices
+
+                if is_audio:
+                    # Audio device - just update status
+                    if mac in self.audio_devices:
+                        self.audio_devices[mac]["connected"] = True
+                        self.audio_devices[mac]["paired"] = True
+                    print(f"[BluetoothBridge] ✓ Audio device connected: {self.audio_devices[mac].get('name', mac)}")
+                    self.publish_audio_devices_status()
+
+                elif is_gamepad:
+                    # Gamepad - find evdev device and start input reading
+                    # Wait a moment for device to appear in /dev/input
+                    time.sleep(2)
+
+                    evdev_path = self._find_evdev_device(mac)
+                    if evdev_path:
+                        device_info = self.discovered_devices.get(mac, {})
+                        self.connected_devices[mac] = {
+                            "mac": mac,
+                            "name": device_info.get("name", "Unknown"),
+                            "evdev_path": evdev_path,
+                            "device": None
+                        }
+
+                        # Update discovered devices
+                        if mac in self.discovered_devices:
+                            self.discovered_devices[mac]["connected"] = True
+                            self.discovered_devices[mac]["paired"] = True
+
+                        # Start input reading
+                        self._start_input_reading(mac)
+
+                        self.publish_devices_status()
+                        self.publish_assignments_status()
+                        print(f"[BluetoothBridge] ✓ Gamepad ready: {device_info.get('name', mac)}")
+                    else:
+                        print(f"[BluetoothBridge] ✗ Could not find evdev device for {mac}")
+                else:
+                    print(f"[BluetoothBridge] ⚠ Unknown device type for {mac}")
+
             else:
-                print(f"[BluetoothBridge] Failed to connect: {result.stderr}")
+                print(f"[BluetoothBridge] ✗ Failed to connect:")
+                print(f"[BluetoothBridge]   Output: {output.strip()}")
 
         except Exception as e:
             print(f"[BluetoothBridge] Connection error: {e}")
@@ -636,26 +920,57 @@ class BluetoothBridge:
         print(f"[BluetoothBridge] Disconnecting {mac}...")
 
         try:
-            # Stop input reading
-            self._stop_input_reading(mac)
+            # Check device type
+            is_audio = mac in self.audio_devices
+            is_gamepad = mac in self.discovered_devices
+
+            # Stop input reading for gamepads
+            if is_gamepad:
+                self._stop_input_reading(mac)
+
+            # Get the appropriate adapter for this device
+            adapter = self._get_adapter_for_device(mac)
+            adapter_mac = self._get_adapter_mac(adapter)
 
             # Disconnect via bluetoothctl
-            subprocess.run(["bluetoothctl", "disconnect", mac], timeout=10)
+            if adapter_mac:
+                commands = f"select {adapter_mac}\ndisconnect {mac}\nquit\n"
+                subprocess.run(
+                    ["bluetoothctl"],
+                    input=commands,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+            else:
+                # Fallback to default adapter
+                subprocess.run(["bluetoothctl", "disconnect", mac], timeout=10)
 
-            # Update state
+            # Update state for gamepads
             if mac in self.connected_devices:
                 del self.connected_devices[mac]
 
             if mac in self.discovered_devices:
                 self.discovered_devices[mac]["connected"] = False
 
-            # Clear assignment
+            # Update state for audio devices
+            if mac in self.audio_devices:
+                self.audio_devices[mac]["connected"] = False
+
+            # Clear gamepad assignment
             for display, assigned_mac in self.assignments.items():
                 if assigned_mac == mac:
                     self.assignments[display] = None
 
-            self.publish_devices_status()
-            self.publish_assignments_status()
+            # Publish appropriate status
+            if is_gamepad:
+                self.publish_devices_status()
+                self.publish_assignments_status()
+                print(f"[BluetoothBridge] ✓ Gamepad disconnected: {mac}")
+            
+            if is_audio:
+                self.publish_audio_devices_status()
+                print(f"[BluetoothBridge] ✓ Audio device disconnected: {mac}")
 
         except Exception as e:
             print(f"[BluetoothBridge] Disconnect error: {e}")
@@ -665,28 +980,52 @@ class BluetoothBridge:
         print(f"[BluetoothBridge] Unpairing {mac}...")
 
         try:
+            # Check device type
+            is_audio = mac in self.audio_devices
+            is_gamepad = mac in self.discovered_devices
+
             # First disconnect if connected
-            if mac in self.connected_devices:
+            if mac in self.connected_devices or (is_audio and self.audio_devices.get(mac, {}).get("connected")):
                 self.disconnect_device(mac)
 
+            # Get the appropriate adapter for this device
+            adapter = self._get_adapter_for_device(mac)
+            adapter_mac = self._get_adapter_mac(adapter)
+
             # Remove/unpair via bluetoothctl
-            result = subprocess.run(
-                ["bluetoothctl", "remove", mac],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            if adapter_mac:
+                commands = f"select {adapter_mac}\nremove {mac}\nquit\n"
+                result = subprocess.run(
+                    ["bluetoothctl"],
+                    input=commands,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+            else:
+                # Fallback to default adapter
+                result = subprocess.run(
+                    ["bluetoothctl", "remove", mac],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
 
             if result.returncode == 0 or "Device has been removed" in result.stdout:
-                print(f"[BluetoothBridge] Unpaired {mac}")
+                print(f"[BluetoothBridge] ✓ Unpaired {mac}")
 
-                # Remove from discovered devices
+                # Remove from discovered gamepad devices
                 if mac in self.discovered_devices:
                     del self.discovered_devices[mac]
+                    self.publish_devices_status()
 
-                self.publish_devices_status()
+                # Remove from audio devices
+                if mac in self.audio_devices:
+                    del self.audio_devices[mac]
+                    self.publish_audio_devices_status()
+
             else:
-                print(f"[BluetoothBridge] Failed to unpair: {result.stderr}")
+                print(f"[BluetoothBridge] ✗ Failed to unpair: {result.stderr}")
 
         except Exception as e:
             print(f"[BluetoothBridge] Unpair error: {e}")
@@ -1044,11 +1383,21 @@ class BluetoothBridge:
             retain=True
         )
 
+    def publish_audio_devices_status(self):
+        """Publish Bluetooth audio devices list"""
+        audio_devices_list = list(self.audio_devices.values())
+        self.mqtt_client.publish(
+            "protogen/fins/bluetoothbridge/status/audio_devices",
+            json.dumps(audio_devices_list),
+            retain=True
+        )
+
     def publish_all_status(self):
         """Publish all status topics"""
         self.publish_scanning_status()
         self.publish_devices_status()
         self.publish_assignments_status()
+        self.publish_audio_devices_status()
 
     def cleanup(self):
         """Clean up all resources"""

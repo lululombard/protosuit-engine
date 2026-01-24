@@ -40,10 +40,20 @@ launcher:
     speaker_entity: "Speaker"  # ALSA mixer entity name
     min: 0
     max: 100
+  audio_device:
+    auto_reconnect: true  # Auto-switch to BT speaker when it reconnects (if it was last used)
+    fallback_to_non_hdmi: true  # Fallback to non-HDMI device when BT disconnects
+    exclude_hdmi: true  # Exclude HDMI devices from UI and fallback options
 
 # Bluetoothbridge configuration
 bluetoothbridge:
   enabled: true
+  # Bluetooth adapter selection
+  # Use different adapters for gamepads and audio to avoid bandwidth conflicts
+  # Run 'bluetoothctl list' to see available adapters
+  adapters:
+    gamepads: "hci0"    # Bluetooth adapter for gamepads (usually built-in)
+    audio: "hci1"       # Bluetooth adapter for audio devices (usually USB dongle)
   button_mapping:
     BTN_SOUTH: "a"      # A button (PlayStation X, Xbox A)
     BTN_EAST: "b"       # B button (PlayStation Circle, Xbox B)
