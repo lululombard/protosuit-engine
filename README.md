@@ -80,9 +80,11 @@ Pair and manage Bluetooth gamepads for physical game control:
 - **Scan for devices** - Discover nearby Bluetooth controllers
 - **Connect controllers** - Pair and connect up to 2 gamepads
 - **Assign displays** - Assign one controller to left display, one to right (persists across restarts)
+- **Auto-reconnect** - Controllers automatically reconnect when powered on (no need to restart software)
 - **Independent control** - Each player controls their own game instance
 - **Real-time status** - See connection status and device information
 - **Button mapping** - D-pad, A, and B buttons automatically mapped to game controls
+- **Restart Bluetooth** - Fix connection issues with one click (handles org.bluez.Error.NotReady)
 
 **Supported Controllers:**
 - Xbox controllers (all generations)
@@ -280,6 +282,7 @@ mosquitto_sub -t "protogen/fins/launcher/status/#" -v
 | `protogen/fins/controllerbridge/disconnect` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Disconnect device |
 | `protogen/fins/controllerbridge/unpair` | `{"mac":"AA:BB:CC:DD:EE:FF"}` | Unpair/remove device |
 | `protogen/fins/controllerbridge/assign` | `{"mac":"AA:BB:CC:DD:EE:FF","display":"left"}` or `{"mac":null,"display":"left"}` | Assign controller to display or remove assignment (persists via retained message) |
+| `protogen/fins/controllerbridge/bluetooth/restart` | - | Restart Bluetooth service (fixes org.bluez.Error.NotReady) |
 
 **Status (publish, retained):**
 
@@ -309,6 +312,9 @@ mosquitto_pub -t "protogen/fins/controllerbridge/assign" \
 # Remove assignment from left display
 mosquitto_pub -t "protogen/fins/controllerbridge/assign" \
   -m '{"mac":null,"display":"left"}'
+
+# Restart Bluetooth service (if you get org.bluez.Error.NotReady)
+mosquitto_pub -t "protogen/fins/controllerbridge/bluetooth/restart" -m ""
 
 # Unpair a device
 mosquitto_pub -t "protogen/fins/controllerbridge/unpair" \

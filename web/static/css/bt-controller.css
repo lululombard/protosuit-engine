@@ -108,6 +108,17 @@
     cursor: not-allowed;
 }
 
+.btn.secondary-btn {
+    border-color: #3498db;
+    color: #3498db;
+}
+
+.btn.secondary-btn:hover {
+    background: #3498db;
+    color: var(--text-primary);
+    box-shadow: 0 0 20px rgba(52, 152, 219, 0.3);
+}
+
 .btn.primary-btn.scanning {
     background: var(--accent-primary);
     color: var(--bg-primary);

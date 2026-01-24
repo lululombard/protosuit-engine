@@ -99,6 +99,14 @@ function initBTController() {
         }
     });
 
+    // Restart Bluetooth button
+    const restartBtn = document.getElementById('restart-bluetooth-btn');
+    restartBtn.addEventListener('click', () => {
+        if (confirm('Restart Bluetooth service? This will disconnect all devices temporarily.')) {
+            restartBluetooth();
+        }
+    });
+
     // Assignment selects
     const leftSelect = document.getElementById('left-select');
     const rightSelect = document.getElementById('right-select');
@@ -187,6 +195,23 @@ function removeAssignment(display) {
     const message = JSON.stringify({ mac: null, display: display });
     btMqttClient.publish('protogen/fins/controllerbridge/assign', message);
     console.log('[BT Controller] Removed assignment for', display);
+}
+
+// Restart Bluetooth service
+function restartBluetooth() {
+    if (!btMqttClient || !btIsConnected) return;
+
+    btMqttClient.publish('protogen/fins/controllerbridge/bluetooth/restart', '');
+    console.log('[BT Controller] Restarting Bluetooth service...');
+    
+    // Show feedback in scan status
+    const scanStatus = document.getElementById('scan-status');
+    scanStatus.textContent = 'Restarting Bluetooth service...';
+    scanStatus.style.color = 'var(--accent-primary)';
+    
+    setTimeout(() => {
+        scanStatus.textContent = '';
+    }, 3000);
 }
 
 // Update scan UI

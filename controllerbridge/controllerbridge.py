@@ -64,6 +64,8 @@ class ControllerBridge:
         self.scanning = False
         self.scan_process = None
         self.scan_thread = None
+        self.monitor_process = None
+        self.monitor_thread = None
 
         # Device tracking
         self.discovered_devices: Dict[str, Dict] = {}  # {mac: {name, paired, connected}}
@@ -111,6 +113,7 @@ class ControllerBridge:
                 "protogen/fins/controllerbridge/disconnect",
                 "protogen/fins/controllerbridge/unpair",
                 "protogen/fins/controllerbridge/assign",
+                "protogen/fins/controllerbridge/bluetooth/restart",
                 "protogen/fins/controllerbridge/status/assignments",  # Subscribe to our own status to restore
             ]
 
@@ -148,6 +151,9 @@ class ControllerBridge:
         # Mark startup as complete
         self.startup_complete = True
 
+        # Start monitoring for automatic controller connections/disconnections
+        self._start_monitor()
+
         # Publish initial status (will include restored assignments if any)
         print("[ControllerBridge] Publishing initial status...")
         self.publish_all_status()
@@ -180,6 +186,8 @@ class ControllerBridge:
                 display = data.get("display")
                 if display in ["left", "right"]:
                     self.assign_display(mac, display)
+            elif topic == "protogen/fins/controllerbridge/bluetooth/restart":
+                self.restart_bluetooth()
             elif topic == "protogen/fins/controllerbridge/status/assignments":
                 # Restore assignments from retained message
                 self._restore_assignments(payload)
@@ -254,14 +262,135 @@ class ControllerBridge:
                             }
                             print(f"[ControllerBridge] ✓ Added gamepad: {name} ({mac})")
                             self.publish_devices_status()
-                        # else:
-                            # print(f"[ControllerBridge] Filtered out (not a gamepad): {name}")
+                        else:
+                            print(f"[ControllerBridge] Filtered out (not a gamepad): {name}")
 
         except Exception as e:
             print(f"[ControllerBridge] Scan error: {e}")
         finally:
             self.scanning = False
             self.publish_scanning_status()
+
+    def _start_monitor(self):
+        """Start monitoring for Bluetooth connection state changes"""
+        if self.monitor_thread and self.monitor_thread.is_alive():
+            print("[ControllerBridge] Monitor already running")
+            return
+
+        print("[ControllerBridge] Starting Bluetooth connection monitor...")
+        self.monitor_thread = threading.Thread(target=self._monitor_worker, daemon=True)
+        self.monitor_thread.start()
+
+    def _monitor_worker(self):
+        """Background worker for monitoring Bluetooth connection state changes"""
+        try:
+            # Start bluetoothctl in interactive mode
+            self.monitor_process = subprocess.Popen(
+                ["bluetoothctl"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1
+            )
+
+            print("[ControllerBridge] Monitor worker started")
+
+            # Parse bluetoothctl output for connection changes
+            while self.running and self.monitor_process and self.monitor_process.poll() is None:
+                line = self.monitor_process.stdout.readline()
+                if not line:
+                    time.sleep(0.1)
+                    continue
+
+                # Strip ANSI escape codes
+                line = re.sub(r'\x1b\[[0-9;]*m', '', line)
+                line = line.rstrip()
+
+                # Skip empty lines and bluetoothctl prompts
+                if not line or line.startswith('[bluetoothctl]'):
+                    continue
+
+                # Parse connection state changes: [CHG] Device AA:BB:CC:DD:EE:FF Connected: yes/no
+                if '[CHG]' in line and 'Connected:' in line:
+                    match = re.search(r'\[CHG\]\s+Device\s+([0-9A-F:]+)\s+Connected:\s+(yes|no)', line, re.IGNORECASE)
+                    if match:
+                        mac = match.group(1).upper()
+                        connected = match.group(2).lower() == 'yes'
+
+                        # Only process if it's a known gamepad
+                        if mac in self.discovered_devices:
+                            if connected:
+                                print(f"[ControllerBridge] 🎮 Controller connected: {mac}")
+                                self._handle_controller_connected(mac)
+                            else:
+                                print(f"[ControllerBridge] 🎮 Controller disconnected: {mac}")
+                                self._handle_controller_disconnected(mac)
+
+        except Exception as e:
+            print(f"[ControllerBridge] Monitor error: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _handle_controller_connected(self, mac: str):
+        """Handle a controller connecting automatically"""
+        try:
+            # Wait a moment for device to appear in /dev/input
+            time.sleep(2)
+
+            # Find the evdev device
+            evdev_path = self._find_evdev_device(mac)
+            if evdev_path:
+                device_info = self.discovered_devices.get(mac, {})
+                self.connected_devices[mac] = {
+                    "mac": mac,
+                    "name": device_info.get("name", "Unknown"),
+                    "evdev_path": evdev_path,
+                    "device": None
+                }
+
+                # Update discovered devices
+                if mac in self.discovered_devices:
+                    self.discovered_devices[mac]["connected"] = True
+
+                # Start input reading (only if startup is complete to avoid race conditions)
+                if self.startup_complete:
+                    self._start_input_reading(mac)
+
+                self.publish_devices_status()
+                self.publish_assignments_status()
+                
+                print(f"[ControllerBridge] ✓ Controller ready: {mac}")
+            else:
+                print(f"[ControllerBridge] Could not find evdev device for {mac}")
+
+        except Exception as e:
+            print(f"[ControllerBridge] Error handling connected controller: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _handle_controller_disconnected(self, mac: str):
+        """Handle a controller disconnecting automatically"""
+        try:
+            # Stop input reading
+            if mac in self.input_threads:
+                self._stop_input_reading(mac)
+
+            # Remove from connected devices
+            if mac in self.connected_devices:
+                del self.connected_devices[mac]
+
+            # Update discovered devices
+            if mac in self.discovered_devices:
+                self.discovered_devices[mac]["connected"] = False
+
+            self.publish_devices_status()
+            self.publish_assignments_status()
+            
+            print(f"[ControllerBridge] ✓ Controller cleaned up: {mac}")
+
+        except Exception as e:
+            print(f"[ControllerBridge] Error handling disconnected controller: {e}")
 
     def _is_gamepad_device(self, name: str) -> bool:
         """Check if device name suggests it's a gamepad"""
@@ -396,6 +525,13 @@ class ControllerBridge:
                 text=True,
                 timeout=15
             )
+
+            # Check for common Bluetooth errors
+            if "org.bluez.Error.NotReady" in result.stderr:
+                print("[ControllerBridge] ✗ Bluetooth service is not ready!")
+                print("[ControllerBridge] → Try restarting Bluetooth via the web interface or MQTT:")
+                print("[ControllerBridge]   mosquitto_pub -t 'protogen/fins/controllerbridge/bluetooth/restart' -m ''")
+                return
 
             if result.returncode == 0 or "Connection successful" in result.stdout:
                 print(f"[ControllerBridge] Connected to {mac}")
@@ -554,6 +690,82 @@ class ControllerBridge:
 
         except Exception as e:
             print(f"[ControllerBridge] Unpair error: {e}")
+
+    def restart_bluetooth(self):
+        """Restart the Bluetooth service to fix org.bluez.Error.NotReady and similar issues"""
+        print("[ControllerBridge] Restarting Bluetooth service...")
+
+        try:
+            # Stop scanning first
+            if self.scanning:
+                self.stop_scan()
+
+            # Stop monitor
+            if self.monitor_process:
+                try:
+                    self.monitor_process.stdin.write("quit\n")
+                    self.monitor_process.stdin.flush()
+                    self.monitor_process.terminate()
+                    self.monitor_process.wait(timeout=2)
+                except Exception:
+                    if self.monitor_process:
+                        self.monitor_process.kill()
+                self.monitor_process = None
+
+            # Stop all input reading
+            for mac in list(self.input_threads.keys()):
+                self._stop_input_reading(mac)
+
+            # Clear device state
+            old_assignments = dict(self.assignments)  # Save assignments
+            self.connected_devices.clear()
+
+            # Restart Bluetooth service
+            print("[ControllerBridge] Executing: sudo systemctl restart bluetooth")
+            result = subprocess.run(
+                ["sudo", "systemctl", "restart", "bluetooth"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if result.returncode == 0:
+                print("[ControllerBridge] ✓ Bluetooth service restarted successfully")
+
+                # Wait for service to be ready
+                time.sleep(2)
+
+                # Restore assignments
+                self.assignments = old_assignments
+
+                # Reload paired devices
+                print("[ControllerBridge] Reloading paired devices...")
+                self._update_paired_devices(start_input_threads=False)
+
+                # Wait a moment
+                time.sleep(0.5)
+
+                # Restart input threads for connected devices
+                for mac in list(self.connected_devices.keys()):
+                    self._start_input_reading(mac)
+
+                # Restart the monitor
+                self._start_monitor()
+
+                self.publish_devices_status()
+                self.publish_assignments_status()
+
+                print("[ControllerBridge] ✓ Bluetooth restart complete")
+            else:
+                print(f"[ControllerBridge] ✗ Failed to restart Bluetooth: {result.stderr}")
+                print("[ControllerBridge] Note: You may need to configure passwordless sudo for bluetooth restart")
+                print("[ControllerBridge] Run: sudo visudo")
+                print("[ControllerBridge] Add line: proto ALL=(ALL) NOPASSWD: /bin/systemctl restart bluetooth")
+
+        except Exception as e:
+            print(f"[ControllerBridge] Bluetooth restart error: {e}")
+            import traceback
+            traceback.print_exc()
 
     def assign_display(self, mac: str, display: str):
         """Assign a controller to a display (or remove if mac is None)"""
@@ -791,7 +1003,7 @@ class ControllerBridge:
 
         # Only log keydown to reduce console spam
         if action == "keydown":
-            print(f"[ControllerBridge] [{display}] {key} -> {display}")
+            print(f"[ControllerBridge] {key} -> {display}")
 
     def publish_scanning_status(self):
         """Publish scanning status"""
@@ -844,6 +1056,18 @@ class ControllerBridge:
 
         # Stop scanning
         self.stop_scan()
+
+        # Stop monitor
+        if self.monitor_process:
+            try:
+                self.monitor_process.stdin.write("quit\n")
+                self.monitor_process.stdin.flush()
+                self.monitor_process.terminate()
+                self.monitor_process.wait(timeout=2)
+            except Exception as e:
+                print(f"[ControllerBridge] Error stopping monitor: {e}")
+                if self.monitor_process:
+                    self.monitor_process.kill()
 
         # Stop all input reading
         for mac in list(self.input_threads.keys()):

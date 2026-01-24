@@ -139,6 +139,15 @@
     groups: bluetooth,input
     append: yes
 
+- name: Allow user to restart Bluetooth service without password
+  copy:
+    dest: /etc/sudoers.d/protosuit-bluetooth
+    content: |
+      # Allow protosuit user to restart Bluetooth service without password
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart bluetooth
+    mode: '0440'
+    validate: 'visudo -cf %s'
+
 - name: Reload systemd daemon
   systemd:
     daemon_reload: yes
