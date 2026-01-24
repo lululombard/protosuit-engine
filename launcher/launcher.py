@@ -76,7 +76,6 @@ class Launcher:
         # Volume configuration
         launcher_config = self.config_loader.config.get("launcher", {})
         volume_config = launcher_config.get("volume", {})
-        self.speaker_entity = volume_config.get("speaker_entity", "Speaker")
         self.default_volume = volume_config.get("default", 50)
         self.volume_min = volume_config.get("min", 0)
         self.volume_max = volume_config.get("max", 100)
@@ -597,19 +596,20 @@ class Launcher:
             print(f"[Launcher] Error publishing exec status: {e}")
 
     def get_current_volume(self) -> int:
-        """Get current volume from amixer"""
+        """Get current volume from PulseAudio/PipeWire"""
         try:
-            # Run amixer to get current volume
+            # Get default sink volume
             result = subprocess.run(
-                ["amixer", "sget", self.speaker_entity],
+                ["pactl", "get-sink-volume", "@DEFAULT_SINK@"],
                 capture_output=True,
                 text=True,
-                timeout=2
+                timeout=2,
+                env={**os.environ, 'XDG_RUNTIME_DIR': '/run/user/1000'}
             )
 
             if result.returncode == 0:
-                # Parse output for percentage: [XX%]
-                match = re.search(r'\[(\d+)%\]', result.stdout)
+                # Parse output: "Volume: front-left: 49152 /  75% / -7.32 dB,   front-right: 49152 /  75% / -7.32 dB"
+                match = re.search(r'/\s+(\d+)%', result.stdout)
                 if match:
                     volume = int(match.group(1))
                     print(f"[Launcher] Current volume: {volume}%")
@@ -623,17 +623,18 @@ class Launcher:
             return self.default_volume
 
     def set_volume(self, percentage: int):
-        """Set volume using amixer"""
+        """Set volume using PulseAudio/PipeWire"""
         try:
             # Clamp volume to configured range
             percentage = max(self.volume_min, min(self.volume_max, percentage))
 
-            # Run amixer to set volume
+            # Set volume on default sink
             result = subprocess.run(
-                ["amixer", "sset", self.speaker_entity, f"{percentage}%"],
+                ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{percentage}%"],
                 capture_output=True,
                 text=True,
-                timeout=2
+                timeout=2,
+                env={**os.environ, 'XDG_RUNTIME_DIR': '/run/user/1000'}
             )
 
             if result.returncode == 0:

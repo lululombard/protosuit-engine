@@ -725,6 +725,47 @@ class BluetoothBridge:
 
         self.publish_scanning_status()
 
+    def _reconnect_device(self, mac: str):
+        """Reconnect to an already-paired device (internal helper for restart)"""
+        try:
+            adapter = self._get_adapter_for_device(mac)
+            adapter_mac = self._get_adapter_mac(adapter)
+            
+            if not adapter_mac:
+                print(f"[BluetoothBridge] ✗ Cannot reconnect {mac}: adapter not found")
+                return
+            
+            # Use bluetoothctl to connect (device is already paired/trusted)
+            proc = subprocess.Popen(
+                ["bluetoothctl"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            
+            proc.stdin.write(f"select {adapter_mac}\n")
+            proc.stdin.flush()
+            time.sleep(0.5)
+            
+            proc.stdin.write(f"connect {mac}\n")
+            proc.stdin.flush()
+            time.sleep(3)
+            
+            proc.stdin.write("quit\n")
+            proc.stdin.flush()
+            
+            output, _ = proc.communicate(timeout=5)
+            
+            if "Connection successful" in output or "already connected" in output.lower():
+                print(f"[BluetoothBridge] ✓ Reconnected: {mac}")
+            else:
+                print(f"[BluetoothBridge] ⚠ Reconnect may have failed for {mac}")
+                
+        except Exception as e:
+            print(f"[BluetoothBridge] Error reconnecting {mac}: {e}")
+
     def connect_device(self, mac: str):
         """Connect to a Bluetooth device"""
         print(f"[BluetoothBridge] Connecting to {mac}...")
@@ -1072,7 +1113,7 @@ class BluetoothBridge:
                 print("[BluetoothBridge] ✓ Bluetooth service restarted successfully")
 
                 # Wait for service to be ready
-                time.sleep(2)
+                time.sleep(3)
 
                 # Restore assignments
                 self.assignments = old_assignments
@@ -1081,8 +1122,35 @@ class BluetoothBridge:
                 print("[BluetoothBridge] Reloading paired devices...")
                 self._update_paired_devices(start_input_threads=False)
 
-                # Wait a moment
-                time.sleep(0.5)
+                # Auto-reconnect to previously connected devices
+                print("[BluetoothBridge] Auto-reconnecting previously connected devices...")
+                
+                # Reconnect audio devices that were connected before restart
+                for mac, device_info in list(self.audio_devices.items()):
+                    if device_info.get("paired"):
+                        print(f"[BluetoothBridge] Reconnecting audio device: {device_info.get('name', mac)}")
+                        threading.Thread(
+                            target=self._reconnect_device,
+                            args=(mac,),
+                            daemon=True
+                        ).start()
+                        time.sleep(1)  # Stagger reconnections
+
+                # Reconnect gamepads that have assignments
+                for display, mac in old_assignments.items():
+                    if mac and mac in self.discovered_devices:
+                        device_info = self.discovered_devices[mac]
+                        if device_info.get("paired") and not device_info.get("connected"):
+                            print(f"[BluetoothBridge] Reconnecting gamepad: {device_info.get('name', mac)} (assigned to {display})")
+                            threading.Thread(
+                                target=self._reconnect_device,
+                                args=(mac,),
+                                daemon=True
+                            ).start()
+                            time.sleep(1)  # Stagger reconnections
+
+                # Wait for reconnections to complete
+                time.sleep(2)
 
                 # Restart input threads for connected devices
                 for mac in list(self.connected_devices.keys()):
@@ -1093,6 +1161,7 @@ class BluetoothBridge:
 
                 self.publish_devices_status()
                 self.publish_assignments_status()
+                self.publish_audio_devices_status()
 
                 print("[BluetoothBridge] ✓ Bluetooth restart complete")
             else:

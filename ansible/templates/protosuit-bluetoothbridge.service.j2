@@ -18,7 +18,8 @@ StandardOutput=journal
 StandardError=journal
 
 # Security settings
-NoNewPrivileges=true
+# NoNewPrivileges must be false to allow sudo for Bluetooth restart
+NoNewPrivileges=false
 PrivateTmp=false
 ProtectSystem=strict
 ProtectHome=read-only

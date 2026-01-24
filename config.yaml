@@ -37,7 +37,6 @@ monitoring:
 launcher:
   volume:
     default: 50  # Default volume percentage (0-100)
-    speaker_entity: "Speaker"  # ALSA mixer entity name
     min: 0
     max: 100
   audio_device:
