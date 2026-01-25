@@ -618,6 +618,57 @@ class BluetoothBridge:
             return False
         return any(keyword in name_lower for keyword in keywords)
 
+    def _wait_for_audio_system_ready(self, max_seconds: int = 30) -> bool:
+        """Wait for PulseAudio to be ready
+        
+        Returns:
+            True if ready, False if timeout
+        """
+        for attempt in range(max_seconds):
+            try:
+                result = subprocess.run(
+                    ["pactl", "info"],
+                    capture_output=True,
+                    timeout=2,
+                    env={**os.environ, "XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}"}
+                )
+                if result.returncode == 0 and b"Server Name:" in result.stdout:
+                    if attempt > 0:
+                        print(f"[BluetoothBridge] ✓ Audio system ready after {attempt + 1}s")
+                    return True
+            except Exception:
+                pass
+            time.sleep(1)
+        return False
+
+    def _reload_pulseaudio_bluetooth(self) -> bool:
+        """Reload PulseAudio Bluetooth module to fix profile issues
+        
+        Returns:
+            True if successful
+        """
+        print("[BluetoothBridge] Reloading PulseAudio Bluetooth module...")
+        try:
+            env = {**os.environ, "XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}"}
+            
+            # Unload and reload bluetooth modules
+            subprocess.run(["pactl", "unload-module", "module-bluetooth-discover"], 
+                         capture_output=True, timeout=5, env=env)
+            time.sleep(1)
+            result = subprocess.run(["pactl", "load-module", "module-bluetooth-discover"],
+                                   capture_output=True, timeout=5, env=env)
+            
+            if result.returncode == 0:
+                print("[BluetoothBridge] ✓ PulseAudio Bluetooth module reloaded")
+                time.sleep(2)  # Give it time to discover devices
+                return True
+            else:
+                print(f"[BluetoothBridge] ⚠ Failed to reload module: {result.stderr.decode()}")
+                return False
+        except Exception as e:
+            print(f"[BluetoothBridge] Error reloading PulseAudio module: {e}")
+            return False
+
     def _update_pulseaudio_audio_devices(self):
         """Discover Bluetooth audio devices from PulseAudio
 
@@ -1044,8 +1095,43 @@ class BluetoothBridge:
 
             # Check for audio profile issues
             if "br-connection-profile-unavailable" in full_output or "profile unavailable" in full_output.lower():
-                print("[BluetoothBridge] ✗ Bluetooth profile unavailable!")
-                print("[BluetoothBridge] → This usually means PulseAudio/PipeWire Bluetooth modules aren't loaded.")
+                print("[BluetoothBridge] ⚠ Bluetooth profile unavailable, attempting to reload audio modules...")
+                
+                # Try to reload PulseAudio Bluetooth module
+                if self._reload_pulseaudio_bluetooth():
+                    # Wait for audio system to be ready
+                    if self._wait_for_audio_system_ready(max_seconds=10):
+                        # Retry connection
+                        print(f"[BluetoothBridge] Retrying connection to {mac}...")
+                        retry_result = subprocess.run(
+                            ["bluetoothctl"],
+                            input=f"select {adapter_mac}\nconnect {mac}\nquit\n" if adapter_mac else f"connect {mac}\nquit\n",
+                            capture_output=True,
+                            text=True,
+                            timeout=15
+                        )
+                        retry_output = retry_result.stdout + retry_result.stderr
+                        
+                        if "connection successful" in retry_output.lower():
+                            print(f"[BluetoothBridge] ✓ Connected to {mac} after reload")
+                            # Mark as audio device and publish status
+                            if mac not in self.audio_devices:
+                                self.audio_devices[mac] = {
+                                    "mac": mac,
+                                    "name": self.discovered_devices.get(mac, {}).get("name", "Bluetooth Audio"),
+                                    "paired": True,
+                                    "connected": True,
+                                    "type": "audio"
+                                }
+                            else:
+                                self.audio_devices[mac]["connected"] = True
+                            self.publish_audio_devices_status()
+                            self.publish_last_audio_device(mac)
+                            self.publish_connection_status(mac, "connected")
+                            return
+                
+                print("[BluetoothBridge] ✗ Failed to connect after reload")
+                print("[BluetoothBridge] → PulseAudio/PipeWire Bluetooth modules may need manual restart")
                 self.publish_connection_status(mac, "failed", "Bluetooth profile unavailable")
                 return
 
@@ -1379,21 +1465,7 @@ class BluetoothBridge:
 
                 # Wait for PulseAudio to be fully ready at boot
                 print(f"[BluetoothBridge] Waiting for audio system to be ready...")
-                for attempt in range(30):  # Max 30 seconds
-                    try:
-                        result = subprocess.run(
-                            ["pactl", "info"],
-                            capture_output=True,
-                            timeout=2,
-                            env={**os.environ, "XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}"}
-                        )
-                        if result.returncode == 0 and b"Server Name:" in result.stdout:
-                            print(f"[BluetoothBridge] ✓ Audio system ready after {attempt + 1}s")
-                            break
-                    except Exception:
-                        pass
-                    time.sleep(1)
-                else:
+                if not self._wait_for_audio_system_ready(max_seconds=30):
                     print(f"[BluetoothBridge] ⚠ Audio system not ready after 30s, attempting anyway...")
                 
                 print(f"[BluetoothBridge] Reconnecting to last audio device: {name} ({mac})")
