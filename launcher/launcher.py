@@ -696,6 +696,25 @@ class Launcher:
             import traceback
             traceback.print_exc()
 
+    def _set_default_volume_for_bt_device(self, sink_name: str):
+        """Set volume to default when a BT audio device connects"""
+        try:
+            print(f"[Launcher] Setting BT device volume to {self.default_volume}%")
+            result = subprocess.run(
+                ["pactl", "set-sink-volume", sink_name, f"{self.default_volume}%"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env={**os.environ, "XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}"}
+            )
+            if result.returncode == 0:
+                print(f"[Launcher] ✓ BT device volume set to {self.default_volume}%")
+                self.publish_volume_status()
+            else:
+                print(f"[Launcher] ⚠ Failed to set BT volume: {result.stderr}")
+        except Exception as e:
+            print(f"[Launcher] Error setting BT device volume: {e}")
+
     def handle_audio_device_set(self, payload: str):
         """Handle manual audio device selection"""
         try:
@@ -727,6 +746,43 @@ class Launcher:
         """Handle Bluetooth audio device connection changes from bluetoothbridge"""
         try:
             bt_audio_devices = json.loads(payload)
+            
+            # Check for devices that were removed (unpaired)
+            current_macs = {d.get("mac") for d in bt_audio_devices}
+            removed_macs = set(self.bt_device_mac_to_sink.keys()) - current_macs
+            
+            for mac in removed_macs:
+                sink_name = self.bt_device_mac_to_sink.get(mac)
+                current_device = self.audio_device_manager.get_current_device()
+                print(f"[Launcher] BT audio device removed (unpaired): {mac}")
+                
+                # Check if this was the current device
+                mac_normalized = mac.replace(":", "_").upper()
+                was_current = (current_device == sink_name) or (current_device and mac_normalized in current_device.upper())
+                
+                if was_current and self.fallback_to_non_hdmi:
+                    print("[Launcher] Current device was unpaired, falling back...")
+                    # Exclude the unpaired device from fallback (PulseAudio may still show it briefly)
+                    fallback = self.audio_device_manager.get_non_hdmi_fallback(exclude_mac=mac)
+                    if fallback:
+                        if self.audio_device_manager.set_default_device(fallback):
+                            print(f"[Launcher] ✓ Fell back to {fallback}")
+                    else:
+                        print("[Launcher] ⚠ No fallback device available")
+                
+                del self.bt_device_mac_to_sink[mac]
+                # Skip immediate publish - PulseAudio still shows old device
+                self.publish_current_audio_device(exclude_mac=mac)
+            
+            # If devices were removed, publish status excluding them (PulseAudio may still show them)
+            if removed_macs:
+                self.publish_audio_devices_status(exclude_macs=removed_macs)
+                # Schedule delayed refresh after PulseAudio catches up
+                def delayed_refresh():
+                    self.publish_audio_devices_status()
+                    self.publish_current_audio_device()
+                threading.Timer(3.0, delayed_refresh).start()
+                return  # Skip the normal publish at the end
             
             # Update our tracking of BT device MAC -> sink mappings
             for device in bt_audio_devices:
@@ -769,39 +825,48 @@ class Launcher:
                         # Auto-reconnect logic: switch if this was the last selected device
                         if self.auto_reconnect and self.last_selected_device == sink_name:
                             print(f"[Launcher] Auto-reconnecting to last used BT speaker: {sink_name}")
-                            if self.audio_device_manager.set_default_device(sink_name):
-                                self.publish_current_audio_device()
+                            self.audio_device_manager.set_default_device(sink_name)
+                        
+                        # Set volume to a reasonable default for BT speakers
+                        self._set_default_volume_for_bt_device(sink_name)
+                        
+                        # Always publish current device - PulseAudio may have auto-switched
+                        self.publish_current_audio_device()
                     else:
                         print(f"[Launcher] ⚠ Could not find PulseAudio sink for {mac} after 5 attempts")
-                        print(f"[Launcher]   The device may not be fully connected to PulseAudio yet")
-                        print(f"[Launcher]   Try restarting the launcher service if the speaker doesn't appear")
+                        print(f"[Launcher]   Scheduling delayed device list refresh...")
+                        threading.Timer(5.0, self.publish_audio_devices_status).start()
                 else:
                     # Device disconnected - fallback logic
+                    current_device = self.audio_device_manager.get_current_device()
+                    mac_normalized = mac.replace(":", "_").upper()
+                    
+                    # Check if we tracked this device or if current device contains its MAC
+                    was_current = False
                     if mac in self.bt_device_mac_to_sink:
                         sink_name = self.bt_device_mac_to_sink[mac]
-                        current_device = self.audio_device_manager.get_current_device()
-                        
+                        was_current = current_device == sink_name
                         print(f"[Launcher] BT audio device disconnected: {mac} ({sink_name})")
-                        
-                        # If we were using this device, fallback
-                        if current_device == sink_name and self.fallback_to_non_hdmi:
-                            print("[Launcher] Current device disconnected, falling back...")
-                            fallback = self.audio_device_manager.get_non_hdmi_fallback()
-                            if fallback:
-                                if self.audio_device_manager.set_default_device(fallback):
-                                    print(f"[Launcher] ✓ Fell back to {fallback}")
-                                    self.publish_current_audio_device()
-                        
                         del self.bt_device_mac_to_sink[mac]
+                    elif current_device and mac_normalized in current_device.upper():
+                        was_current = True
+                        print(f"[Launcher] BT audio device disconnected: {mac} (current: {current_device})")
+                    else:
+                        print(f"[Launcher] BT audio device disconnected: {mac}")
+                    
+                    # If we were using this device, fallback to non-HDMI
+                    if was_current and self.fallback_to_non_hdmi:
+                        print("[Launcher] Current device disconnected, falling back...")
+                        fallback = self.audio_device_manager.get_non_hdmi_fallback()
+                        if fallback:
+                            if self.audio_device_manager.set_default_device(fallback):
+                                print(f"[Launcher] ✓ Fell back to {fallback}")
+                    
+                    # Always publish updated current device after disconnect
+                    self.publish_current_audio_device()
             
             # Always refresh device list after processing BT device changes
             self.publish_audio_devices_status()
-            
-            # If we didn't find the sink yet but device is connected, schedule a delayed refresh
-            # This catches the case where PulseAudio creates the sink after our retries
-            if connected and not sink_name:
-                print("[Launcher] Scheduling delayed device list refresh (sink may appear later)...")
-                threading.Timer(5.0, self.publish_audio_devices_status).start()
 
         except Exception as e:
             print(f"[Launcher] Error handling BT audio device update: {e}")
@@ -824,8 +889,12 @@ class Launcher:
         except Exception as e:
             print(f"[Launcher] Error restoring audio device preference: {e}")
 
-    def publish_audio_devices_status(self):
-        """Publish available audio output devices"""
+    def publish_audio_devices_status(self, exclude_macs: set = None):
+        """Publish available audio output devices
+        
+        Args:
+            exclude_macs: Optional set of MAC addresses to exclude (for recently unpaired devices)
+        """
         if not self.mqtt_client:
             return
 
@@ -840,6 +909,17 @@ class Launcher:
             # Filter out HDMI devices if configured
             if self.exclude_hdmi:
                 devices = [d for d in devices if not self.audio_device_manager.is_hdmi_device(d["name"])]
+            
+            # Filter out excluded MACs (recently unpaired devices that PulseAudio still shows)
+            if exclude_macs:
+                def should_exclude(device_name):
+                    for mac in exclude_macs:
+                        mac_pattern = mac.replace(":", "_").upper()
+                        if mac_pattern in device_name.upper():
+                            print(f"[Launcher] Excluding recently unpaired device: {device_name}")
+                            return True
+                    return False
+                devices = [d for d in devices if not should_exclude(d["name"])]
             
             # Don't publish if filtering removed everything
             if not devices:
@@ -856,13 +936,24 @@ class Launcher:
         except Exception as e:
             print(f"[Launcher] Error publishing audio devices: {e}")
 
-    def publish_current_audio_device(self):
-        """Publish current audio output device"""
+    def publish_current_audio_device(self, exclude_mac: str = None):
+        """Publish current audio output device
+        
+        Args:
+            exclude_mac: Optional MAC to exclude (for recently unpaired devices)
+        """
         if not self.mqtt_client:
             return
 
         try:
             current_sink = self.audio_device_manager.get_current_device()
+            
+            # Check if current device matches excluded MAC (recently unpaired)
+            if exclude_mac and current_sink:
+                mac_pattern = exclude_mac.replace(":", "_").upper()
+                if mac_pattern in current_sink.upper():
+                    print(f"[Launcher] Current device {current_sink} was just unpaired, skipping publish")
+                    return
             
             if current_sink:
                 device_info = self.audio_device_manager.get_device_info(current_sink)

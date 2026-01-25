@@ -12,13 +12,14 @@ import os
 from enum import Enum
 
 # Game constants
-NUM_LEVELS = 5
+NUM_LEVELS = 20
 INITIAL_TARGET_ARC = 90  # degrees
 FINAL_TARGET_ARC = 20    # degrees
 ROTATION_SPEED = 2.0     # degrees per frame
 CIRCLE_RADIUS = 280      # pixels
 TRACK_WIDTH = 40         # pixels
 MARKER_SIZE = 50         # pixels
+HIT_MARGIN = 6           # degrees
 
 # Colors (RGB)
 COLOR_BG = (0, 0, 0)
@@ -153,6 +154,7 @@ class RingDingGame:
 
         self.state = GameState.IDLE
         self.current_level = 0
+        self.score = 0
         self.marker_angle = 0.0  # 0-360, internal angle
         self.target_start_angle = 0.0
         self.target_arc_size = 0.0
@@ -162,12 +164,14 @@ class RingDingGame:
     def start_game(self):
         self.state = GameState.PLAYING
         self.current_level = 1
+        self.score = 0
         self.marker_angle = 0.0
         self.set_new_objective()
         print(f"[RingDing] Starting game - Level {self.current_level}")
 
     def set_new_objective(self):
         progress = (self.current_level - 1) / (NUM_LEVELS - 1)
+        self.rotation_speed = ROTATION_SPEED + (self.current_level * 0.3)
         self.target_arc_size = INITIAL_TARGET_ARC - (INITIAL_TARGET_ARC - FINAL_TARGET_ARC) * progress
         max_angle = 360 - self.target_arc_size
         self.target_start_angle = np.random.uniform(0, max_angle)
@@ -176,8 +180,8 @@ class RingDingGame:
     def check_hit(self):
         """Simple angle range check"""
         marker = self.marker_angle % 360
-        target_start = self.target_start_angle % 360
-        target_end = (self.target_start_angle + self.target_arc_size) % 360
+        target_start = (self.target_start_angle - HIT_MARGIN) % 360
+        target_end = (self.target_start_angle + self.target_arc_size + HIT_MARGIN) % 360
 
         if target_start <= target_end:
             in_zone = target_start <= marker <= target_end
@@ -204,6 +208,7 @@ class RingDingGame:
             else:
                 self.sounds['ding'].play()
                 self.current_level += 1
+                self.score += 10
                 self.set_new_objective()
                 print(f"[RingDing] Level {self.current_level}")
         else:
@@ -263,8 +268,11 @@ class RingDingGame:
 
             # Level text
             level_text = self.font_medium.render(f"Level {self.current_level}", True, COLOR_TEXT)
-            text_rect = level_text.get_rect(center=(center_x, center_y))
+            score_text = self.font_medium.render(f"Score {self.score}", True, COLOR_TEXT)
+            text_rect = level_text.get_rect(center=(center_x, center_y - 25))
             surface.blit(level_text, text_rect)
+            score_rect = score_text.get_rect(center=(center_x, center_y + 25))
+            surface.blit(score_text, score_rect)
 
     def draw(self):
         self.screen.fill(COLOR_BG)

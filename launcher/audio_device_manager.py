@@ -218,19 +218,30 @@ class AudioDeviceManager:
         name_lower = sink_name.lower()
         return "bluez" in name_lower or "bluetooth" in name_lower
 
-    def get_non_hdmi_fallback(self) -> Optional[str]:
+    def get_non_hdmi_fallback(self, exclude_mac: str = None) -> Optional[str]:
         """
         Find first non-HDMI device for fallback
+        
+        Args:
+            exclude_mac: Optional MAC address to exclude (for recently unpaired devices)
         
         Returns:
             Sink name of first non-HDMI device, or None if not found
         """
         devices = self.list_devices()
         
+        # Normalize exclude_mac for comparison (MAC in sink names uses underscores)
+        exclude_pattern = exclude_mac.replace(":", "_").upper() if exclude_mac else None
+        
         for device in devices:
-            if not self.is_hdmi_device(device["name"]):
-                print(f"[AudioDeviceManager] Found non-HDMI fallback: {device['name']} ({device['description']})")
-                return device["name"]
+            if self.is_hdmi_device(device["name"]):
+                continue
+            # Skip the excluded device (recently unpaired, PulseAudio may still show it)
+            if exclude_pattern and exclude_pattern in device["name"].upper():
+                print(f"[AudioDeviceManager] Skipping excluded device: {device['name']}")
+                continue
+            print(f"[AudioDeviceManager] Found non-HDMI fallback: {device['name']} ({device['description']})")
+            return device["name"]
         
         print("[AudioDeviceManager] No non-HDMI fallback device found")
         return None

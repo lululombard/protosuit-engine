@@ -40,6 +40,7 @@ function connectToMQTT() {
         bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/devices');
         bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/audio_devices');
         bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/assignments');
+        bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/connection');
         
         // Subscribe to launcher audio device topics
         bluetoothMqttClient.subscribe('protogen/fins/launcher/status/audio_devices');
@@ -91,6 +92,9 @@ function handleMQTTMessage(topic, payload) {
             audioDevices = JSON.parse(payload);
             updateAudioDevicesList();
         }
+        else if (topic === 'protogen/fins/bluetoothbridge/status/connection') {
+            handleConnectionStatus(JSON.parse(payload));
+        }
         else if (topic === 'protogen/fins/launcher/status/audio_device/current') {
             currentAudioDevice = JSON.parse(payload);
             updateCurrentAudioDevice();
@@ -98,6 +102,80 @@ function handleMQTTMessage(topic, payload) {
     } catch (e) {
         console.error('[Bluetooth] Error parsing MQTT message:', e);
     }
+}
+
+// Handle connection status updates
+function handleConnectionStatus(status) {
+    const mac = status.mac;
+    const deviceName = status.name || mac;
+    
+    console.log(`[Bluetooth] Connection status: ${mac} -> ${status.status}`);
+    
+    // Find the device card
+    const deviceCard = document.querySelector(`[data-mac="${mac}"]`);
+    if (!deviceCard) {
+        console.log(`[Bluetooth] Device card not found for ${mac}`);
+        return;
+    }
+    
+    // Find connect or disconnect button (either might exist depending on current state)
+    const connectBtn = deviceCard.querySelector('.connect-btn') || deviceCard.querySelector('.disconnect-btn');
+    if (!connectBtn) {
+        console.log(`[Bluetooth] Button not found in device card for ${mac}`);
+        return;
+    }
+    
+    if (status.status === 'connecting') {
+        console.log(`Connecting to ${deviceName}...`);
+        connectBtn.disabled = true;
+        connectBtn.textContent = 'Connecting...';
+        connectBtn.classList.add('connecting');
+        connectBtn.classList.remove('disconnecting');
+    } else if (status.status === 'disconnecting') {
+        console.log(`Disconnecting from ${deviceName}...`);
+        connectBtn.disabled = true;
+        connectBtn.textContent = 'Disconnecting...';
+        connectBtn.classList.add('disconnecting');
+        connectBtn.classList.remove('connecting');
+    } else if (status.status === 'connected') {
+        console.log(`Connected to ${deviceName}`);
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Disconnect';
+        connectBtn.classList.remove('connecting', 'disconnecting');
+        connectBtn.classList.remove('connect-btn');
+        connectBtn.classList.add('disconnect-btn');
+    } else if (status.status === 'disconnected') {
+        console.log(`Disconnected from ${deviceName}`);
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Connect';
+        connectBtn.classList.remove('connecting', 'disconnecting');
+        connectBtn.classList.remove('disconnect-btn');
+        connectBtn.classList.add('connect-btn');
+    } else if (status.status === 'failed') {
+        console.error(`Failed: ${status.error || 'Unknown error'}`);
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Connect';  // Reset to Connect on failure
+        connectBtn.classList.remove('connecting', 'disconnecting');
+        // Show error notification
+        showNotification(`${status.error || 'Operation failed'}`, 'error');
+    }
+}
+
+// Show notification
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+    
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
 }
 
 // Update status display
@@ -307,6 +385,7 @@ function createDeviceCard(device, deviceType) {
     const card = document.createElement('div');
     card.className = 'device-card' + (device.connected ? ' connected' : '');
     card.setAttribute('data-device-type', deviceType);
+    card.setAttribute('data-mac', device.mac);
 
     // Device info
     const info = document.createElement('div');

@@ -11,6 +11,7 @@ Group={{ service_group }}
 WorkingDirectory={{ project_dir }}
 Environment=DISPLAY=:0
 Environment=PYTHONPATH={{ project_dir }}
+Environment=PYTHONUNBUFFERED=1
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/launcher/launcher.py
 Restart={{ service_config.restart_policy }}
