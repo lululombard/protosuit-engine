@@ -17,11 +17,16 @@
         state: started
         enabled: yes
 
-    - name: Verify protosuit-engine service is running
+    - name: Verify protosuit services are running
       systemd:
-        name: "protosuit-engine"
+        name: "{{ item }}"
         state: started
         enabled: yes
+      loop:
+        - protosuit-renderer
+        - protosuit-launcher
+        - protosuit-web
+        - protosuit-bluetoothbridge
 
     - name: Test MQTT connection
       shell: |
@@ -36,7 +41,10 @@
 
           Service Status:
           - Mosquitto MQTT Broker: Running
-          - Protosuit Engine: Running
+          - Protosuit Renderer: Running
+          - Protosuit Launcher: Running
+          - Protosuit Web: Running
+          - Protosuit Bluetooth Bridge: Running
 
           Configuration:
           - Project Directory: {{ project_dir }}
@@ -44,8 +52,8 @@
           - MQTT Broker: {{ mqtt_broker }}:{{ mqtt_port }}
 
           Test Commands:
-          - Check service: sudo systemctl status protosuit-engine
-          - View logs: sudo journalctl -u protosuit-engine -f
+          - Check services: sudo systemctl status protosuit-renderer protosuit-launcher protosuit-web protosuit-bluetoothbridge
+          - View logs: sudo journalctl -u protosuit-renderer -u protosuit-launcher -f
 
   handlers:
     - name: reload systemd

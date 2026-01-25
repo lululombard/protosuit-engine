@@ -98,13 +98,6 @@
     owner: "{{ pi_user }}"
     group: "{{ pi_user }}"
 
-- name: Create protosuit-engine systemd service file
-  template:
-    src: "{{ playbook_dir }}/../templates/protosuit-engine.service.j2"
-    dest: /etc/systemd/system/protosuit-engine.service
-    mode: "0644"
-  notify: reload systemd
-
 - name: Create protosuit-renderer systemd service file
   template:
     src: "{{ playbook_dir }}/../templates/protosuit-renderer.service.j2"
@@ -156,14 +149,27 @@
   command: systemctl set-default graphical.target
   become: true
 
+- name: Disable and remove legacy protosuit-engine wrapper service
+  systemd:
+    name: protosuit-engine
+    enabled: no
+    state: stopped
+  ignore_errors: yes
+
+- name: Remove legacy protosuit-engine service file
+  file:
+    path: /etc/systemd/system/protosuit-engine.service
+    state: absent
+  notify: reload systemd
+
 - name: Enable protosuit-renderer service
   systemd:
     name: protosuit-renderer
     enabled: yes
 
-- name: Enable protosuit-engine service
+- name: Enable protosuit-launcher service
   systemd:
-    name: "protosuit-engine"
+    name: protosuit-launcher
     enabled: yes
 
 - name: Enable protosuit-web service
@@ -176,7 +182,12 @@
     name: protosuit-bluetoothbridge
     enabled: yes
 
-- name: Start protosuit-engine service (starts all dependent services)
+- name: Start all protosuit services
   systemd:
-    name: protosuit-engine
+    name: "{{ item }}"
     state: started
+  loop:
+    - protosuit-renderer
+    - protosuit-launcher
+    - protosuit-web
+    - protosuit-bluetoothbridge
