@@ -132,12 +132,13 @@
     groups: bluetooth,input
     append: yes
 
-- name: Allow user to restart Bluetooth service without password
+- name: Allow user to manage Bluetooth service without password
   copy:
     dest: /etc/sudoers.d/protosuit-bluetooth
     content: |
-      # Allow protosuit user to restart Bluetooth service without password
+      # Allow protosuit user to restart Bluetooth service and manage adapters without password
       {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart bluetooth
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/hciconfig
     mode: '0440'
     validate: 'visudo -cf %s'
 

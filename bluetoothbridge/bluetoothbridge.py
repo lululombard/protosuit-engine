@@ -1054,11 +1054,11 @@ class BluetoothBridge:
                 proc.stdin.flush()
                 success, output = self._wait_for_bluetoothctl_response(
                     proc,
-                    success_patterns=["pairing successful", "paired: yes"],
-                    failure_patterns=["failed to pair", "org.bluez.error.authenticationfailed", "org.bluez.error.authenticationcanceled"],
+                    success_patterns=["pairing successful", "paired: yes", "alreadyexists"],
+                    failure_patterns=["org.bluez.error.authenticationfailed", "org.bluez.error.authenticationcanceled"],
                     timeout=10
                 )
-                if success is False and "alreadyexists" not in output.lower():
+                if success is False:
                     print(f"[BluetoothBridge] ⚠ Pairing issue: {output}")
             else:
                 print(f"[BluetoothBridge] Device already paired, skipping trust/pair")
@@ -1391,48 +1391,74 @@ class BluetoothBridge:
             # First disconnect if connected
             if mac in self.connected_devices or (is_audio and self.audio_devices.get(mac, {}).get("connected")):
                 self.disconnect_device(mac)
+                time.sleep(0.5)  # Wait for disconnect
 
-            # Get the appropriate adapter for this device
-            adapter = self._get_adapter_for_device(mac)
+            # Get the appropriate adapter for this device based on type we already determined
+            if is_audio:
+                adapter = self.audio_adapter
+            else:
+                adapter = self.gamepad_adapter
             adapter_mac = self._get_adapter_mac(adapter)
+            print(f"[BluetoothBridge] Using adapter {adapter} ({adapter_mac}) for unpair")
 
-            # Remove/unpair via bluetoothctl
+            # Remove/unpair via bluetoothctl using interactive mode (more reliable)
+            proc = subprocess.Popen(
+                ["bluetoothctl"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+
+            # Select adapter if available
             if adapter_mac:
-                commands = f"select {adapter_mac}\nremove {mac}\nquit\n"
-                result = subprocess.run(
-                    ["bluetoothctl"],
-                    input=commands,
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-            else:
-                # Fallback to default adapter
-                result = subprocess.run(
-                    ["bluetoothctl", "remove", mac],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
+                proc.stdin.write(f"select {adapter_mac}\n")
+                proc.stdin.flush()
+                time.sleep(0.3)
 
-            if result.returncode == 0 or "Device has been removed" in result.stdout:
+            # Untrust and remove the device
+            proc.stdin.write(f"untrust {mac}\n")
+            proc.stdin.flush()
+            time.sleep(0.3)
+
+            proc.stdin.write(f"remove {mac}\n")
+            proc.stdin.flush()
+            time.sleep(0.5)
+
+            proc.stdin.write("quit\n")
+            proc.stdin.flush()
+
+            try:
+                output, _ = proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                output = ""
+
+            success = "Device has been removed" in output or "not available" in output.lower()
+
+            if success:
                 print(f"[BluetoothBridge] ✓ Unpaired {mac}")
-
-                # Remove from discovered gamepad devices
-                if mac in self.discovered_devices:
-                    del self.discovered_devices[mac]
-                    self.publish_devices_status()
-
-                # Remove from audio devices
-                if mac in self.audio_devices:
-                    del self.audio_devices[mac]
-                    self.publish_audio_devices_status()
-
             else:
-                print(f"[BluetoothBridge] ✗ Failed to unpair: {result.stderr}")
+                print(f"[BluetoothBridge] ⚠ Unpair command sent (output: {output.strip()[:100]})")
+
+            # Always remove from local state regardless of bluetoothctl output
+            # (the device might already be gone)
+            if mac in self.discovered_devices:
+                del self.discovered_devices[mac]
+                self.publish_devices_status()
+
+            if mac in self.audio_devices:
+                del self.audio_devices[mac]
+                self.publish_audio_devices_status()
+
+            if mac in self.connected_devices:
+                del self.connected_devices[mac]
 
         except Exception as e:
             print(f"[BluetoothBridge] Unpair error: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _auto_reconnect_devices(self):
         """Auto-reconnect to previously connected devices"""
@@ -2033,6 +2059,30 @@ class BluetoothBridge:
                 print(f"[BluetoothBridge] ⚠ Failed to restart Bluetooth: {result.stderr}")
         except Exception as e:
             print(f"[BluetoothBridge] ⚠ Error restarting Bluetooth on startup: {e}")
+
+        # Unblock and power on all Bluetooth adapters
+        print("[BluetoothBridge] Ensuring Bluetooth adapters are ready...")
+        try:
+            # Unblock Bluetooth via rfkill
+            subprocess.run(["rfkill", "unblock", "bluetooth"], capture_output=True, timeout=5)
+            time.sleep(0.5)
+            
+            # Power on both adapters via hciconfig
+            for adapter in ["hci0", "hci1"]:
+                result = subprocess.run(
+                    ["sudo", "hciconfig", adapter, "up"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    print(f"[BluetoothBridge] ✓ {adapter} powered on")
+                else:
+                    # Not an error if adapter doesn't exist
+                    if "No such device" not in result.stderr:
+                        print(f"[BluetoothBridge] ⚠ {adapter}: {result.stderr.strip()}")
+        except Exception as e:
+            print(f"[BluetoothBridge] ⚠ Error powering on adapters: {e}")
 
         # Set running flag before starting any threads
         self.running = True
