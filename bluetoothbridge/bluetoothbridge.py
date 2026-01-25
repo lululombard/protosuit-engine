@@ -1744,6 +1744,9 @@ class BluetoothBridge:
             button_states = {}
             dpad_x_state = 0
             dpad_y_state = 0
+            
+            # Track previous assignment to detect when device gets assigned
+            was_assigned = False
 
             # Use select for non-blocking reads with timeout
             import select
@@ -1758,7 +1761,7 @@ class BluetoothBridge:
 
                 # Read all available events
                 try:
-                    events = device.read()
+                    events = list(device.read())  # Convert to list so we can discard
                 except (BlockingIOError, OSError):
                     continue
 
@@ -1773,7 +1776,14 @@ class BluetoothBridge:
                         break
 
                 if not display:
+                    was_assigned = False
                     continue  # Not assigned to any display
+                
+                # If we just got assigned, discard buffered events to avoid input dump
+                if not was_assigned:
+                    print(f"[BluetoothBridge] Controller {mac} assigned to {display}, discarding {len(events)} buffered events")
+                    was_assigned = True
+                    continue  # Skip these events, they were from before assignment
 
                 # Process all available events
                 for event in events:
