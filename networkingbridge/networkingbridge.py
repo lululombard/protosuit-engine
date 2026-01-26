@@ -833,10 +833,19 @@ dhcp-option=option:dns-server,{ip}
         """Enable or disable the access point"""
         try:
             if enable:
-                # Configure AP first
+                # Configure AP first (writes hostapd.conf and dnsmasq.conf)
                 self._configure_ap()
                 
-                # Set IP address on interface
+                # Start hostapd first - it will bring up the interface in AP mode
+                subprocess.run(
+                    ["sudo", "systemctl", "start", "hostapd"],
+                    check=True, timeout=15
+                )
+                
+                # Wait for interface to come up
+                time.sleep(2)
+                
+                # Set IP address on interface (after hostapd brings it up)
                 ip_cidr = self.ap_status.ip_cidr or "192.168.50.1/24"
                 subprocess.run(
                     ["sudo", "ip", "addr", "flush", "dev", self.ap_interface],
@@ -846,18 +855,8 @@ dhcp-option=option:dns-server,{ip}
                     ["sudo", "ip", "addr", "add", ip_cidr, "dev", self.ap_interface],
                     check=True, timeout=5
                 )
-                subprocess.run(
-                    ["sudo", "ip", "link", "set", self.ap_interface, "up"],
-                    check=True, timeout=5
-                )
                 
-                # Start hostapd
-                subprocess.run(
-                    ["sudo", "systemctl", "start", "hostapd"],
-                    check=True, timeout=10
-                )
-                
-                # Start dnsmasq (might need to restart to pick up new config)
+                # Start dnsmasq for DHCP
                 subprocess.run(
                     ["sudo", "systemctl", "restart", "dnsmasq"],
                     check=True, timeout=10
@@ -908,17 +907,18 @@ dhcp-option=option:dns-server,{ip}
                     check=True, timeout=5
                 )
                 
-                # Allow forwarding
+                # Allow forwarding from AP to client (outbound internet)
                 subprocess.run(
                     ["sudo", "iptables", "-A", "FORWARD",
                      "-i", self.ap_interface, "-o", self.client_interface,
-                     "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
+                     "-j", "ACCEPT"],
                     check=True, timeout=5
                 )
+                # Allow return traffic from client to AP
                 subprocess.run(
                     ["sudo", "iptables", "-A", "FORWARD",
                      "-i", self.client_interface, "-o", self.ap_interface,
-                     "-j", "ACCEPT"],
+                     "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
                     check=True, timeout=5
                 )
                 
@@ -934,13 +934,13 @@ dhcp-option=option:dns-server,{ip}
                 subprocess.run(
                     ["sudo", "iptables", "-D", "FORWARD",
                      "-i", self.ap_interface, "-o", self.client_interface,
-                     "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
+                     "-j", "ACCEPT"],
                     timeout=5
                 )
                 subprocess.run(
                     ["sudo", "iptables", "-D", "FORWARD",
                      "-i", self.client_interface, "-o", self.ap_interface,
-                     "-j", "ACCEPT"],
+                     "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
                     timeout=5
                 )
                 
