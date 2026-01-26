@@ -340,6 +340,10 @@ class RingDingGame:
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_a:
                         self.handle_hit()
+                    elif event.key == pygame.K_b:
+                        if self.state == GameState.PLAYING:
+                            print("[RingDing] Returning to main menu...")
+                            self.state = GameState.IDLE
                     elif event.key == pygame.K_ESCAPE:
                         running = False
 
