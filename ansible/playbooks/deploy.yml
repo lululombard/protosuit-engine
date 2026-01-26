@@ -27,6 +27,7 @@
         - protosuit-launcher
         - protosuit-web
         - protosuit-bluetoothbridge
+        - protosuit-networkingbridge
 
     - name: Test MQTT connection
       shell: |
@@ -45,6 +46,7 @@
           - Protosuit Launcher: Running
           - Protosuit Web: Running
           - Protosuit Bluetooth Bridge: Running
+          - Protosuit Networking Bridge: Running
 
           Configuration:
           - Project Directory: {{ project_dir }}
@@ -52,7 +54,7 @@
           - MQTT Broker: {{ mqtt_broker }}:{{ mqtt_port }}
 
           Test Commands:
-          - Check services: sudo systemctl status protosuit-renderer protosuit-launcher protosuit-web protosuit-bluetoothbridge
+          - Check services: sudo systemctl status protosuit-renderer protosuit-launcher protosuit-web protosuit-bluetoothbridge protosuit-networkingbridge
           - View logs: sudo journalctl -u protosuit-renderer -u protosuit-launcher -f
 
   handlers:

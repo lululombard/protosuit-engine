@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Network Settings{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/networking.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div class="header-content">
+        <a href="/">
+            <h1>Network Settings</h1>
+        </a>
+    </div>
+    <div class="status" id="status">Connecting...</div>
+</div>
+
+<div class="net-container">
+    <div class="net-columns">
+        <!-- Left Column: Integrated Wi-Fi (Client Mode) -->
+        <div class="net-column">
+            <div class="section">
+                <h2 class="section-title">INTEGRATED WI-FI</h2>
+                <div class="interface-info">
+                    <div class="info-row">
+                        <span class="info-label">Interface</span>
+                        <span class="info-value" id="client-interface">wlan0</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Detected</span>
+                        <span class="info-value" id="client-detected">
+                            <span class="status-indicator unknown"></span>
+                            <span>Checking...</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Enabled</span>
+                        <span class="info-value">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="client-enabled" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Mode</span>
+                        <span class="info-value mode-badge client">Client</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">CONNECTION STATUS</h2>
+                <div class="connection-status" id="client-status">
+                    <div class="info-row">
+                        <span class="info-label">Connected</span>
+                        <span class="info-value" id="client-connected">
+                            <span class="status-indicator unknown"></span>
+                            <span>Checking...</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">SSID</span>
+                        <span class="info-value" id="client-ssid">--</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">IP Address</span>
+                        <span class="info-value" id="client-ip">--</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Router</span>
+                        <span class="info-value" id="client-router">--</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Signal</span>
+                        <span class="info-value signal-display">
+                            <div class="signal-bars" id="client-signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                            <span id="client-signal-dbm">-- dBm</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">AVAILABLE NETWORKS</h2>
+                <div class="scan-controls">
+                    <button id="scan-btn" class="btn primary-btn">
+                        <span id="scan-text">Scan</span>
+                        <span id="scan-spinner" class="spinner" style="display: none;"></span>
+                    </button>
+                    <span id="scan-status" class="scan-status"></span>
+                </div>
+                <div class="networks-list" id="networks-list">
+                    <div class="empty-state">Click "Scan" to discover networks</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: USB Wi-Fi (AP Mode) -->
+        <div class="net-column">
+            <div class="section">
+                <h2 class="section-title">USB WI-FI</h2>
+                <div class="interface-info">
+                    <div class="info-row">
+                        <span class="info-label">Interface</span>
+                        <span class="info-value" id="ap-interface">wlan1</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Detected</span>
+                        <span class="info-value" id="ap-detected">
+                            <span class="status-indicator unknown"></span>
+                            <span>Checking...</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Enabled</span>
+                        <span class="info-value">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="ap-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Mode</span>
+                        <span class="info-value mode-badge ap">Access Point</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">ACCESS POINT CONFIG</h2>
+                <div class="ap-config">
+                    <button id="qr-btn" class="btn secondary-btn qr-btn">
+                        <span>Show QR Code</span>
+                    </button>
+                    
+                    <div class="config-row">
+                        <span class="config-label">SSID</span>
+                        <div class="config-value">
+                            <input type="text" id="ap-ssid" placeholder="Network name">
+                        </div>
+                    </div>
+                    
+                    <div class="config-row">
+                        <span class="config-label">Security</span>
+                        <div class="config-value">
+                            <select id="ap-security">
+                                <option value="none">None (Open)</option>
+                                <option value="wep">WEP (5 or 13 chars)</option>
+                                <option value="wpa2">WPA2 (8-63 chars)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="config-row" id="password-row">
+                        <span class="config-label">Password</span>
+                        <div class="config-value password-field">
+                            <input type="password" id="ap-password" placeholder="Password">
+                            <button class="show-btn" data-target="ap-password">Show</button>
+                        </div>
+                    </div>
+                    
+                    <div class="config-row">
+                        <span class="config-label">IP/CIDR</span>
+                        <div class="config-value">
+                            <input type="text" id="ap-ip-cidr" placeholder="192.168.50.1/24">
+                        </div>
+                    </div>
+                    
+                    <button id="save-ap-config-btn" class="btn primary-btn">
+                        Save Config
+                    </button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">ROUTING</h2>
+                <div class="routing-config">
+                    <div class="toggle-row">
+                        <span class="toggle-label">Route to Client Interface</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="routing-enabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <p class="toggle-description">Enable NAT to share internet from integrated Wi-Fi</p>
+                    
+                    <div class="toggle-row">
+                        <span class="toggle-label">Captive Portal</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="captive-enabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <p class="toggle-description">Redirect HTTP traffic to Protosuit web interface</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">CONNECTED CLIENTS</h2>
+                <div class="clients-list" id="ap-clients-list">
+                    <div class="empty-state">No clients connected</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- QR Code Modal -->
+<div id="qr-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Wi-Fi QR Code</h3>
+            <button class="modal-close" id="qr-modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="qr-code-container">
+                <div class="qr-loading">Generating QR code...</div>
+            </div>
+            <p class="qr-instructions">Scan with your phone to connect to <strong id="qr-ssid">Protosuit-AP</strong></p>
+        </div>
+    </div>
+</div>
+
+<!-- Password Dialog -->
+<div id="password-modal" class="modal">
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h3>Connect to Network</h3>
+            <button class="modal-close" id="password-modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p>Enter password for <strong id="connect-ssid"></strong></p>
+            <input type="password" id="connect-password" class="password-input" placeholder="Password">
+            <div class="modal-actions">
+                <button class="btn secondary-btn" id="connect-cancel">Cancel</button>
+                <button class="btn primary-btn" id="connect-submit">Connect</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/networking.js') }}"></script>
+{% endblock %}

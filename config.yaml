@@ -44,6 +44,24 @@ launcher:
     fallback_to_non_hdmi: true  # Fallback to non-HDMI device when BT disconnects
     exclude_hdmi: true  # Exclude HDMI devices from UI and fallback options
 
+# Networkingbridge configuration
+networkingbridge:
+  enabled: true
+  interfaces:
+    client: "wlan0"      # Integrated Wi-Fi for client mode (auto-detected, can override)
+    ap: "wlan1"          # USB Wi-Fi for AP mode (auto-detected, can override)
+  ap:
+    ssid: "Protosuit-AP"
+    security: "wpa2"     # none, wep, wpa2
+    password: "protosuit123"
+    ip_cidr: "192.168.50.1/24"
+    dhcp_range: "192.168.50.10,192.168.50.100"
+    channel: 6
+  routing:
+    enabled: false       # NAT from AP to client interface
+  captive_portal:
+    enabled: false       # Redirect HTTP traffic to web UI
+
 # Bluetoothbridge configuration
 bluetoothbridge:
   enabled: true

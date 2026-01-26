@@ -43,6 +43,12 @@ def bluetooth():
     return render_template("bluetooth.html")
 
 
+@app.route("/networking")
+def networking():
+    """Network settings management interface"""
+    return render_template("networking.html")
+
+
 @app.route("/api/stream")
 def api_stream():
     """

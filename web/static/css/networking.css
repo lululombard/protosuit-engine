@@ -1,0 +1,783 @@
+/* Networking Settings Styles */
+
+.header {
+    position: relative;
+    padding: 20px;
+    border-bottom: 2px solid var(--accent-primary);
+    background: var(--bg-panel);
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header-content a {
+    text-decoration: none;
+}
+
+.header h1 {
+    font-size: 2em;
+    margin: 0;
+    cursor: pointer;
+    transition: opacity 0.3s ease;
+}
+
+.header-content a:hover h1 {
+    opacity: 0.8;
+}
+
+.status {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.status.connected {
+    color: var(--success);
+}
+
+/* Main Container */
+.net-container {
+    padding: 40px 20px;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+/* Two Column Layout */
+.net-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+}
+
+.net-column {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Sections */
+.section {
+    background: var(--bg-panel);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 25px;
+}
+
+.section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin: 0 0 20px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Interface Info */
+.interface-info,
+.connection-status {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.info-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.info-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Status Indicators */
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-indicator.connected,
+.status-indicator.detected {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+}
+
+.status-indicator.disconnected,
+.status-indicator.not-detected {
+    background: var(--danger);
+    box-shadow: 0 0 8px var(--danger);
+}
+
+.status-indicator.unknown {
+    background: var(--text-dim);
+}
+
+/* Mode Badges */
+.mode-badge {
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.mode-badge.client {
+    background: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+    border: 1px solid #3498db;
+}
+
+.mode-badge.ap {
+    background: rgba(155, 89, 182, 0.2);
+    color: #9b59b6;
+    border: 1px solid #9b59b6;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 26px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 26px;
+    transition: all 0.3s ease;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background: var(--text-dim);
+    border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: rgba(243, 156, 18, 0.2);
+    border-color: var(--accent-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    background: var(--accent-primary);
+    transform: translateX(24px);
+    box-shadow: 0 0 10px var(--accent-primary);
+}
+
+/* Signal Bars */
+.signal-display {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.signal-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 20px;
+}
+
+.signal-bars .bar {
+    width: 4px;
+    background: var(--border-color);
+    border-radius: 1px;
+    transition: background 0.3s ease;
+}
+
+.signal-bars .bar:nth-child(1) { height: 4px; }
+.signal-bars .bar:nth-child(2) { height: 8px; }
+.signal-bars .bar:nth-child(3) { height: 12px; }
+.signal-bars .bar:nth-child(4) { height: 16px; }
+.signal-bars .bar:nth-child(5) { height: 20px; }
+
+.signal-bars .bar.active {
+    background: var(--success);
+}
+
+.signal-bars.weak .bar.active {
+    background: var(--danger);
+}
+
+.signal-bars.fair .bar.active {
+    background: var(--warning);
+}
+
+#client-signal-dbm {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Scan Controls */
+.scan-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.scan-status {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* Networks List */
+.networks-list,
+.clients-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+}
+
+/* Network Card */
+.network-card {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.network-card:hover {
+    border-color: var(--accent-primary);
+    background: rgba(243, 156, 18, 0.05);
+}
+
+.network-card.connected {
+    border-color: var(--success);
+    background: rgba(46, 204, 113, 0.05);
+}
+
+.network-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.network-ssid {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.network-details {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.network-security {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.network-security.open {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+.network-security.wep {
+    background: rgba(241, 196, 15, 0.2);
+    color: #f1c40f;
+}
+
+.network-security.wpa,
+.network-security.wpa2,
+.network-security.wpa3 {
+    background: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+}
+
+.network-signal {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* AP Config */
+.ap-config {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.qr-btn {
+    align-self: flex-start;
+    margin-bottom: 10px;
+}
+
+.config-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.config-row:last-of-type {
+    border-bottom: none;
+}
+
+.config-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    min-width: 80px;
+}
+
+.config-value {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.config-value input,
+.config-value select {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px 12px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: 'Share Tech Mono', monospace;
+    min-width: 180px;
+}
+
+.config-value input:focus,
+.config-value select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.config-value.password-field {
+    display: flex;
+    gap: 8px;
+}
+
+.config-value.password-field input {
+    flex: 1;
+}
+
+.show-btn {
+    padding: 6px 12px;
+    font-size: 11px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.edit-btn:hover,
+.show-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.edit-btn.editing {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    border-color: var(--accent-primary);
+}
+
+/* Routing Config */
+.routing-config {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.toggle-label {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.toggle-description {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin: 0;
+    padding-left: 10px;
+    border-left: 2px solid var(--border-color);
+}
+
+/* Client Card */
+.client-card {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.client-ip {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'Share Tech Mono', monospace;
+    margin-bottom: 8px;
+}
+
+.client-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.client-detail {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.client-detail span {
+    color: var(--text-dim);
+}
+
+/* Buttons */
+.btn {
+    padding: 12px 24px;
+    border: 2px solid var(--accent-primary);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    transition: all 0.3s ease;
+    font-family: 'Rajdhani', sans-serif;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn:hover {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    box-shadow: 0 0 20px rgba(243, 156, 18, 0.3);
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn.secondary-btn {
+    border-color: #3498db;
+    color: #3498db;
+}
+
+.btn.secondary-btn:hover {
+    background: #3498db;
+    color: var(--text-primary);
+    box-shadow: 0 0 20px rgba(52, 152, 219, 0.3);
+}
+
+.btn.primary-btn.scanning {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(243, 156, 18, 0.3); }
+    50% { box-shadow: 0 0 30px rgba(243, 156, 18, 0.6); }
+}
+
+.spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    background: var(--bg-panel);
+    border: 2px solid var(--accent-primary);
+    border-radius: 8px;
+    max-width: 400px;
+    width: 90%;
+    animation: modalSlide 0.3s ease;
+}
+
+.modal-small {
+    max-width: 350px;
+}
+
+@keyframes modalSlide {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: var(--accent-primary);
+}
+
+.modal-body {
+    padding: 20px;
+    text-align: center;
+}
+
+.modal-body p {
+    margin: 0 0 15px 0;
+    color: var(--text-secondary);
+}
+
+#qr-code-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    margin-bottom: 15px;
+}
+
+#qr-code-container img {
+    max-width: 100%;
+    border-radius: 8px;
+}
+
+.qr-loading {
+    color: var(--text-secondary);
+}
+
+.qr-instructions {
+    font-size: 13px;
+}
+
+.password-input {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 14px;
+    margin-bottom: 15px;
+}
+
+.password-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* Scrollbar styling */
+.networks-list::-webkit-scrollbar,
+.clients-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.networks-list::-webkit-scrollbar-track,
+.clients-list::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.networks-list::-webkit-scrollbar-thumb,
+.clients-list::-webkit-scrollbar-thumb {
+    background: var(--accent-primary);
+    border-radius: 3px;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .net-columns {
+        grid-template-columns: 1fr;
+    }
+    
+    .net-container {
+        padding: 20px 15px;
+    }
+}
+
+@media (max-width: 600px) {
+    .config-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .config-value {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    
+    .config-value input,
+    .config-value select {
+        flex: 1;
+        min-width: unset;
+    }
+    
+    .toggle-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+}
+
+/* Notification styles */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    background: #333;
+    color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transform: translateX(400px);
+    transition: transform 0.3s ease-out;
+    z-index: 1001;
+    max-width: 300px;
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification-error {
+    background: #f44336;
+}
+
+.notification-success {
+    background: #4CAF50;
+}
+
+.notification-info {
+    background: #2196F3;
+}

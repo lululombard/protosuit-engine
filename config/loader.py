@@ -155,6 +155,11 @@ class ConfigLoader:
         config_dict = self.config.get("monitoring", {})
         return self._parse_typed_config(config_dict, MonitoringConfig)
 
+    def get_networking_config(self) -> NetworkingConfig:
+        """Get networking bridge configuration"""
+        config_dict = self.config.get("networkingbridge", {})
+        return self._parse_typed_config(config_dict, NetworkingConfig)
+
     def validate(self) -> bool:
         """
         Perform basic validation on config
