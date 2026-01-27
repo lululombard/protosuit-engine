@@ -128,6 +128,43 @@ ansible/
 2. **Desktop Autostart**: Starts when user logs into desktop
 3. **Manual Start**: Use provided helper functions
 
+### Wi-Fi Hardware Configuration
+
+The networking bridge requires two Wi-Fi interfaces for dual-mode operation:
+
+1. **Built-in Raspberry Pi Wi-Fi (wlan0)**: Used for **Access Point mode**
+   - Provides stable AP operation
+   - Hosts the "Protosuit" access point for device connectivity
+
+2. **USB Wi-Fi Dongle (wlan1)**: Used for **Client mode**
+   - Connects to external Wi-Fi networks for internet access
+   - Tested with AliExpress Wi-Fi 6 USB dongles (RTL8851BU chipset)
+
+**Important**: The RTL8851BU unofficial drivers work well in client mode but are **unstable in AP mode**. Running them as access points causes kernel bugs, memory corruption/leaks, and system instability. This is why we use the integrated Raspberry Pi Wi-Fi for AP mode instead.
+
+**Note**: Newer Linux kernel versions include built-in RTL8851BU drivers, but as of January 2026, the latest Raspberry Pi OS still requires out-of-tree drivers for these chipsets.
+
+#### USB Wi-Fi Driver Installation
+
+The deployment playbook automatically installs the RTL8851BU driver from the [biglinux/rtl8831](https://github.com/biglinux/rtl8831) repository. This is a quality driver repository that provides stable client mode operation.
+
+The driver is compiled during deployment and configured to load automatically on boot. If you're using a different USB Wi-Fi adapter, you may need to modify the driver installation tasks in [playbooks/main.yml](playbooks/main.yml:234-297).
+
+#### Interface Configuration
+
+The interface assignments are configured in:
+- **Application config**: [config.yaml](../config.yaml:50-52)
+- **Ansible inventory**: [inventory/hosts.yml](inventory/hosts.yml:25-26)
+
+```yaml
+networkingbridge:
+  interfaces:
+    client: "wlan1"  # USB Wi-Fi for client mode
+    ap: "wlan0"      # Built-in Wi-Fi for AP mode
+```
+
+NetworkManager is configured to leave wlan0 unmanaged so hostapd can control it as an access point. This prevents NetworkManager from trying to connect wlan0 as a client.
+
 ## Testing and Verification
 
 ### Test Displays

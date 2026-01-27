@@ -127,12 +127,7 @@ function initNetworking() {
     document.getElementById('routing-enabled').addEventListener('change', (e) => {
         setRoutingEnabled(e.target.checked);
     });
-    
-    // Captive portal toggle
-    document.getElementById('captive-enabled').addEventListener('change', (e) => {
-        setCaptiveEnabled(e.target.checked);
-    });
-    
+
     // QR code button
     document.getElementById('qr-btn').addEventListener('click', showQRCode);
     
@@ -170,7 +165,9 @@ function initNetworking() {
 // Update interfaces UI
 function updateInterfacesUI() {
     // Client interface
-    const clientIface = interfaces['wlan0'] || interfaces[Object.keys(interfaces).find(k => interfaces[k].mode === 'client')];
+    // Find interfaces by mode (not hardcoded names)
+    const clientKey = Object.keys(interfaces).find(k => interfaces[k].mode === 'client');
+    const clientIface = clientKey ? interfaces[clientKey] : null;
     if (clientIface) {
         document.getElementById('client-interface').textContent = clientIface.name;
         updateDetectedIndicator('client-detected', clientIface.detected);
@@ -178,7 +175,8 @@ function updateInterfacesUI() {
     }
     
     // AP interface
-    const apIface = interfaces['wlan1'] || interfaces[Object.keys(interfaces).find(k => interfaces[k].mode === 'ap')];
+    const apKey = Object.keys(interfaces).find(k => interfaces[k].mode === 'ap');
+    const apIface = apKey ? interfaces[apKey] : null;
     if (apIface) {
         document.getElementById('ap-interface').textContent = apIface.name;
         updateDetectedIndicator('ap-detected', apIface.detected);
@@ -251,21 +249,20 @@ function updateAPStatusUI() {
     
     // Populate form fields with current config (only on first load)
     if (!apConfigInitialized) {
-        document.getElementById('ap-ssid').value = apStatus.ssid || 'Protosuit-AP';
-        document.getElementById('ap-password').value = apStatus.password || 'protosuit123';
+        document.getElementById('ap-ssid').value = apStatus.ssid || 'Protosuit';
+        document.getElementById('ap-password').value = apStatus.password || 'BeepBoop';
         document.getElementById('ap-ip-cidr').value = apStatus.ip_cidr || '192.168.50.1/24';
-        document.getElementById('ap-security').value = apStatus.security || 'wpa2';
+        document.getElementById('ap-security').value = apStatus.security || 'wpa';
         apConfigInitialized = true;
     }
     
     updatePasswordVisibility(document.getElementById('ap-security').value);
     
-    // Routing toggles
+    // Routing toggle
     document.getElementById('routing-enabled').checked = apStatus.routing_enabled || false;
-    document.getElementById('captive-enabled').checked = apStatus.captive_portal_enabled || false;
-    
+
     // Update QR code SSID
-    document.getElementById('qr-ssid').textContent = apStatus.ssid || 'Protosuit-AP';
+    document.getElementById('qr-ssid').textContent = apStatus.ssid || 'Protosuit';
     
     // Connected clients
     updateClientsListUI();
@@ -274,7 +271,7 @@ function updateAPStatusUI() {
 // Update password field visibility based on security type
 function updatePasswordVisibility(security) {
     const passwordRow = document.getElementById('password-row');
-    passwordRow.style.display = (security === 'none') ? 'none' : 'flex';
+    passwordRow.style.display = (security === 'open') ? 'none' : 'flex';
 }
 
 // Update clients list UI
@@ -387,30 +384,22 @@ function setClientEnabled(enabled) {
 // Set AP enabled
 function setAPEnabled(enabled) {
     if (!networkingMqttClient || !networkingIsConnected) return;
-    
+
     networkingMqttClient.publish(
         'protogen/fins/networkingbridge/ap/enable',
-        JSON.stringify({ enable: enabled })
+        JSON.stringify({ enable: enabled }),
+        { retain: true }
     );
 }
 
 // Set routing enabled
 function setRoutingEnabled(enabled) {
     if (!networkingMqttClient || !networkingIsConnected) return;
-    
+
     networkingMqttClient.publish(
         'protogen/fins/networkingbridge/routing/enable',
-        JSON.stringify({ enable: enabled })
-    );
-}
-
-// Set captive portal enabled
-function setCaptiveEnabled(enabled) {
-    if (!networkingMqttClient || !networkingIsConnected) return;
-    
-    networkingMqttClient.publish(
-        'protogen/fins/networkingbridge/captive/enable',
-        JSON.stringify({ enable: enabled })
+        JSON.stringify({ enable: enabled }),
+        { retain: true }
     );
 }
 
@@ -543,14 +532,9 @@ function saveAPConfig() {
     }
     
     // Validate password based on security type
-    if (security === 'wep') {
-        if (password.length !== 5 && password.length !== 13) {
-            showNotification('WEP password must be exactly 5 or 13 characters', 'error');
-            return;
-        }
-    } else if (security === 'wpa2') {
+    if (security === 'wpa' || security === 'wpa2') {
         if (password.length < 8 || password.length > 63) {
-            showNotification('WPA2 password must be 8-63 characters', 'error');
+            showNotification('Password must be 8-63 characters', 'error');
             return;
         }
     }
@@ -568,12 +552,13 @@ function saveAPConfig() {
         password: password,
         ip_cidr: ipCidr
     };
-    
+
     networkingMqttClient.publish(
         'protogen/fins/networkingbridge/ap/config',
-        JSON.stringify(config)
+        JSON.stringify(config),
+        { retain: true }
     );
-    
+
     showNotification('AP configuration saved', 'success');
 }
 

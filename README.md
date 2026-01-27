@@ -23,6 +23,28 @@ That's it! The system will auto-configure and start on boot.
 
 ---
 
+## Hardware Requirements
+
+### Recommended Setup
+
+- **Raspberry Pi 5** (4GB+ RAM recommended)
+- **Two 720x720 HDMI displays** (for fursuit fins)
+- **USB Wi-Fi 6 dongle** (RTL8851BU chipset) - for client/internet connectivity
+  - The built-in Raspberry Pi Wi-Fi is used for AP mode
+  - RTL8851BU drivers work well for client mode but are unstable as access points (kernel bugs)
+  - Many RTL8851BU dongles include integrated Bluetooth
+  - See [ansible/README.md](ansible/README.md#wi-fi-hardware-configuration) for details
+- **USB Bluetooth adapter** (optional, if your Wi-Fi dongle doesn't have Bluetooth, or for separating gamepad and audio devices to avoid bandwidth conflicts)
+
+### Display Configuration
+
+The system is designed for **dual 720x720 displays** mounted on fursuit fins:
+- Left display rotated 90° clockwise
+- Right display rotated 90° counter-clockwise
+- Extended desktop spanning both displays
+
+---
+
 ## Features
 
 - **GLSL Shader Animations** - Smooth cross-fade transitions with blur effects and real-time parameter control

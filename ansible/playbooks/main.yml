@@ -136,35 +136,25 @@
 - name: Install networking packages for AP mode
   apt:
     name:
-      - hostapd
-      - dnsmasq
       - iptables
+      - dnsmasq
+      - hostapd
+      - network-manager
     state: present
 
-- name: Unmask hostapd (may be masked by default on some systems)
-  systemd:
-    name: hostapd
-    masked: no
-  ignore_errors: yes
-
-- name: Stop hostapd from starting automatically (managed by service)
+- name: Disable and mask system hostapd service (we manage it ourselves)
   systemd:
     name: hostapd
     enabled: no
     state: stopped
+    masked: yes
   ignore_errors: yes
 
-- name: Create hostapd config directory
-  file:
-    path: /etc/hostapd
-    state: directory
-    mode: '0755'
-
-- name: Create dnsmasq config directory
-  file:
-    path: /etc/dnsmasq.d
-    state: directory
-    mode: '0755'
+- name: Ensure NetworkManager is enabled and running
+  systemd:
+    name: NetworkManager
+    enabled: yes
+    state: started
 
 - name: Create polkit rule for NetworkManager access
   copy:
@@ -183,17 +173,15 @@
     dest: /etc/sudoers.d/protosuit-networking
     content: |
       # Allow protosuit user to manage network services and interfaces without password
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl start hostapd
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl stop hostapd
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart hostapd
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart dnsmasq
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl start dnsmasq
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl stop dnsmasq
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/nmcli
       {{ pi_user }} ALL=(ALL) NOPASSWD: /sbin/ip
       {{ pi_user }} ALL=(ALL) NOPASSWD: /sbin/iptables
       {{ pi_user }} ALL=(ALL) NOPASSWD: /sbin/sysctl
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/cp /tmp/hostapd.conf /etc/hostapd/hostapd.conf
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/cp /tmp/protosuit-ap.conf /etc/dnsmasq.d/protosuit-ap.conf
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/sbin/dnsmasq
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/sbin/hostapd
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/pkill
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /sbin/rmmod 8851bu
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /sbin/modprobe 8851bu
     mode: '0440'
     validate: 'visudo -cf %s'
 
@@ -202,6 +190,21 @@
     name: "{{ pi_user }}"
     groups: netdev
     append: yes
+
+- name: Copy Python binary for privileged port binding
+  copy:
+    src: /usr/bin/python3
+    dest: "{{ project_dir }}/env/bin/python3-privileged"
+    remote_src: yes
+    mode: '0755'
+    owner: "{{ pi_user }}"
+    group: "{{ pi_user }}"
+
+- name: Allow Python to bind to privileged ports (for web server on port 80)
+  community.general.capabilities:
+    path: "{{ project_dir }}/env/bin/python3-privileged"
+    capability: cap_net_bind_service+ep
+    state: present
 
 - name: Download OUI database if not exists
   get_url:

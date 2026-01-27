@@ -41,8 +41,8 @@ class WebConfig:
     """Web server configuration"""
 
     host: str = "0.0.0.0"
-    port: int = 5000
-    debug: bool = True
+    port: int = 80
+    debug: bool = False
 
 
 @dataclass
