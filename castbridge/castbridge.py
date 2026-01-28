@@ -102,6 +102,7 @@ class CastBridge:
 general = {{
     name = "{self.airplay_status.device_name}";
     output_backend = "pa";
+    mdns_backend = "avahi";
 }};
 '''
         if self.airplay_status.password:
