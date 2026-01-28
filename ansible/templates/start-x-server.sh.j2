@@ -4,12 +4,9 @@
 
 set -e
 
-# Wait for system to be ready
-sleep 5
-
 # Kill any existing X processes
 pkill -f "X :0" || true
-sleep 2
+sleep 0.5
 
 # Start X server in background
 export DISPLAY=:0

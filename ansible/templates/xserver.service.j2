@@ -1,6 +1,6 @@
 [Unit]
 Description=X Server for Protosuit Engine
-After=basic.target multi-user.target
+After=systemd-modules-load.service sysinit.target
 
 [Service]
 Type=oneshot
