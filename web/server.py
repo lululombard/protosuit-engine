@@ -49,6 +49,12 @@ def networking():
     return render_template("networking.html")
 
 
+@app.route("/cast")
+def cast():
+    """Cast settings management interface (AirPlay/Spotify)"""
+    return render_template("cast.html")
+
+
 @app.route("/api/stream")
 def api_stream():
     """

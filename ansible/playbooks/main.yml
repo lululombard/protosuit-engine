@@ -133,6 +133,125 @@
     mode: "0644"
   notify: reload systemd
 
+- name: Create protosuit-castbridge systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-castbridge.service.j2"
+    dest: /etc/systemd/system/protosuit-castbridge.service
+    mode: "0644"
+  notify: reload systemd
+
+# Cast Bridge dependencies (AirPlay + Spotify Connect)
+- name: Install shairport-sync for AirPlay support
+  apt:
+    name: shairport-sync
+    state: present
+
+- name: Create keyrings directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download raspotify GPG key
+  get_url:
+    url: https://dtcooper.github.io/raspotify/key.asc
+    dest: /etc/apt/keyrings/raspotify.asc
+    mode: '0644'
+
+- name: Add raspotify repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/raspotify.asc] https://dtcooper.github.io/raspotify raspotify main"
+    state: present
+    filename: raspotify
+
+- name: Install raspotify for Spotify Connect support
+  apt:
+    name: raspotify
+    state: present
+    update_cache: yes
+
+- name: Disable and mask shairport-sync service (we manage it ourselves)
+  systemd:
+    name: shairport-sync
+    enabled: no
+    state: stopped
+    masked: yes
+  ignore_errors: yes
+
+- name: Create shairport-sync systemd override directory
+  file:
+    path: /etc/systemd/system/shairport-sync.service.d
+    state: directory
+    mode: '0755'
+
+- name: Configure shairport-sync to run as user with PulseAudio access
+  copy:
+    dest: /etc/systemd/system/shairport-sync.service.d/override.conf
+    content: |
+      [Service]
+      User={{ pi_user }}
+      Group={{ pi_user }}
+      Environment=XDG_RUNTIME_DIR=/run/user/1000
+      Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+    mode: '0644'
+  notify: reload systemd
+
+- name: Disable and mask raspotify service (we manage it ourselves)
+  systemd:
+    name: raspotify
+    enabled: no
+    state: stopped
+    masked: yes
+  ignore_errors: yes
+
+- name: Create raspotify systemd override directory
+  file:
+    path: /etc/systemd/system/raspotify.service.d
+    state: directory
+    mode: '0755'
+
+- name: Configure raspotify to run as user with PulseAudio access
+  copy:
+    dest: /etc/systemd/system/raspotify.service.d/override.conf
+    content: |
+      [Service]
+      User={{ pi_user }}
+      Group={{ pi_user }}
+      DynamicUser=no
+      Environment=XDG_RUNTIME_DIR=/run/user/1000
+      Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+    mode: '0644'
+  notify: reload systemd
+
+- name: Allow user to manage cast services without password
+  copy:
+    dest: /etc/sudoers.d/protosuit-cast
+    content: |
+      # Allow protosuit user to manage AirPlay and Spotify services without password
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl start shairport-sync
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl stop shairport-sync
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart shairport-sync
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl status shairport-sync
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl unmask shairport-sync
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl mask shairport-sync
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/default/shairport-sync
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl start raspotify
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl stop raspotify
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart raspotify
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl status raspotify
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl unmask raspotify
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl mask raspotify
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/mkdir -p /etc/raspotify
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/raspotify/conf
+    mode: '0440'
+    validate: 'visudo -cf %s'
+
+- name: Add user to audio group for cast services
+  user:
+    name: "{{ pi_user }}"
+    groups: audio
+    append: yes
+
 - name: Install networking packages for AP mode
   apt:
     name:
@@ -342,6 +461,11 @@
     name: protosuit-networkingbridge
     enabled: yes
 
+- name: Enable protosuit-castbridge service
+  systemd:
+    name: protosuit-castbridge
+    enabled: yes
+
 - name: Start all protosuit services
   systemd:
     name: "{{ item }}"
@@ -352,3 +476,4 @@
     - protosuit-web
     - protosuit-bluetoothbridge
     - protosuit-networkingbridge
+    - protosuit-castbridge

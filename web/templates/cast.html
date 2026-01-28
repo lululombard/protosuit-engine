@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Cast Settings{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/cast.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div class="header-content">
+        <a href="/">
+            <h1>Cast Settings</h1>
+        </a>
+    </div>
+    <div class="status" id="status">Connecting...</div>
+</div>
+
+<div class="cast-container">
+    <div class="cast-columns">
+        <!-- Left Column: AirPlay -->
+        <div class="cast-column">
+            <div class="section">
+                <h2 class="section-title">AIRPLAY</h2>
+                <div class="service-info">
+                    <div class="info-row">
+                        <span class="info-label">Service</span>
+                        <span class="info-value service-name">shairport-sync</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Status</span>
+                        <span class="info-value" id="airplay-status">
+                            <span class="status-indicator unknown"></span>
+                            <span>Checking...</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Enabled</span>
+                        <span class="info-value">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="airplay-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">AIRPLAY CONFIG</h2>
+                <div class="config-form">
+                    <div class="config-row">
+                        <span class="config-label">Device Name</span>
+                        <div class="config-value">
+                            <input type="text" id="airplay-name" placeholder="Protosuit">
+                        </div>
+                    </div>
+                    <div class="config-row">
+                        <span class="config-label">Password</span>
+                        <div class="config-value password-field">
+                            <input type="password" id="airplay-password" placeholder="Optional">
+                            <button class="show-btn" data-target="airplay-password">Show</button>
+                        </div>
+                    </div>
+                    <button id="save-airplay-btn" class="btn primary-btn">Save Config</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">ABOUT AIRPLAY</h2>
+                <div class="about-box">
+                    <p>AirPlay allows you to stream audio from Apple devices (iPhone, iPad, Mac) directly to this device.</p>
+                    <p class="instructions">To use: Open Control Center on your Apple device, tap the AirPlay icon, and select "<span id="airplay-device-display">Protosuit</span>".</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Spotify Connect -->
+        <div class="cast-column">
+            <div class="section">
+                <h2 class="section-title">SPOTIFY CONNECT</h2>
+                <div class="service-info">
+                    <div class="info-row">
+                        <span class="info-label">Service</span>
+                        <span class="info-value service-name">raspotify</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Status</span>
+                        <span class="info-value" id="spotify-status">
+                            <span class="status-indicator unknown"></span>
+                            <span>Checking...</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Enabled</span>
+                        <span class="info-value">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="spotify-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">SPOTIFY CONFIG</h2>
+                <div class="config-form">
+                    <div class="config-row">
+                        <span class="config-label">Device Name</span>
+                        <div class="config-value">
+                            <input type="text" id="spotify-name" placeholder="Protosuit">
+                        </div>
+                    </div>
+                    <div class="config-row">
+                        <span class="config-label">Username</span>
+                        <div class="config-value">
+                            <input type="text" id="spotify-username" placeholder="Optional">
+                        </div>
+                    </div>
+                    <div class="config-row">
+                        <span class="config-label">Password</span>
+                        <div class="config-value password-field">
+                            <input type="password" id="spotify-password" placeholder="Optional">
+                            <button class="show-btn" data-target="spotify-password">Show</button>
+                        </div>
+                    </div>
+                    <button id="save-spotify-btn" class="btn primary-btn">Save Config</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">ABOUT SPOTIFY CONNECT</h2>
+                <div class="about-box">
+                    <p>Spotify Connect allows you to stream music from the Spotify app on any device.</p>
+                    <p class="instructions">To use: Open Spotify, play a song, tap the "Devices Available" icon, and select "<span id="spotify-device-display">Protosuit</span>".</p>
+                    <p class="note">Note: Username and password are optional. They enable premium features like higher bitrate.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/cast.js') }}"></script>
+{% endblock %}

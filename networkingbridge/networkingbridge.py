@@ -132,7 +132,12 @@ class NetworkingBridge:
     # ======== Polling Loop ========
 
     def _poll_loop(self):
-        """Simple polling loop - check status every 2 seconds"""
+        """Poll status every 10 seconds"""
+        # Publish initial status on startup
+        self._publish_interfaces()
+        self._publish_client_status()
+        self._publish_ap_status()
+
         while self.running:
             try:
                 self._update_interfaces()
@@ -141,7 +146,7 @@ class NetworkingBridge:
                 self._update_ap_clients()
             except Exception as e:
                 print(f"[NetworkingBridge] Error in poll loop: {e}")
-            time.sleep(2)
+            time.sleep(10)
 
     # ======== AP Management ========
 
@@ -846,7 +851,8 @@ server=8.8.4.4
         # Publish QR code
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/qrcode",
-            json.dumps({"qrcode": data_url})
+            json.dumps({"qrcode": data_url}),
+            retain=True
         )
 
         print("[NetworkingBridge] QR code generated and published")
@@ -857,28 +863,32 @@ server=8.8.4.4
         """Publish interface status"""
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/interfaces",
-            json.dumps({k: asdict(v) for k, v in self.interfaces.items()})
+            json.dumps({k: asdict(v) for k, v in self.interfaces.items()}),
+            retain=True
         )
 
     def _publish_client_status(self):
         """Publish client status"""
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/client",
-            json.dumps(asdict(self.client_status))
+            json.dumps(asdict(self.client_status)),
+            retain=True
         )
 
     def _publish_ap_status(self):
         """Publish AP status"""
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/ap",
-            json.dumps(asdict(self.ap_status))
+            json.dumps(asdict(self.ap_status)),
+            retain=True
         )
 
     def _publish_scan_results(self):
         """Publish scan results"""
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/scan",
-            json.dumps([asdict(n) for n in self.scan_results])
+            json.dumps([asdict(n) for n in self.scan_results]),
+            retain=True
         )
 
     def _publish_scanning(self, scanning: bool):

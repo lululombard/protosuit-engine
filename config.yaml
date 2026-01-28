@@ -77,6 +77,18 @@ bluetoothbridge:
     ABS_HAT0Y: "dpad_y" # D-pad Y axis
   dead_zone: 0.2        # Analog stick dead zone
 
+# Cast configuration (AirPlay and Spotify Connect)
+cast:
+  airplay:
+    enabled: false
+    device_name: "Protosuit"
+    password: ""  # Optional password for AirPlay
+  spotify:
+    enabled: false
+    device_name: "Protosuit"
+    username: ""  # Optional Spotify username (for premium features)
+    password: ""  # Optional Spotify password
+
 animations:
   # Base animations (persistent, run indefinitely)
   #
