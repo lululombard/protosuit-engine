@@ -91,6 +91,8 @@ ansible/
 │   └── deploy.yml             # Complete deployment playbook
 ├── templates/
 │   ├── protosuit-engine.service.j2    # Systemd service template
+│   ├── protosuit-castbridge.service.j2 # Castbridge service template
+│   ├── protosuit-networkingbridge.service.j2 # Networkingbridge service template
 │   ├── 99-dual-display.conf.j2        # X11 configuration template
 │   ├── xinitrc.j2                     # X11 startup script template
 │   └── display-env.sh.j2              # Display environment template
@@ -108,6 +110,9 @@ ansible/
 - Games (chocolate-doom, retroarch)
 - Bluetooth support
 - X11 and display utilities
+- AirPlay receiver (shairport-sync)
+- Spotify Connect (raspotify)
+- Access point (hostapd, dnsmasq)
 
 ### Display Configuration
 - Dual HDMI display setup (720x720 each)
@@ -117,11 +122,13 @@ ansible/
 - Power management disabled
 
 ### Service Configuration
-- Systemd service for auto-start
-- Service runs as non-root user
+- Systemd services for auto-start (renderer, launcher, web, bluetoothbridge, castbridge, networkingbridge)
+- Services run as non-root user
 - Automatic restart on failure
 - Proper environment variables
 - Security hardening
+- Castbridge sudo permissions for managing shairport-sync and raspotify
+- Networkingbridge sudo permissions for hostapd, dnsmasq, nmcli, and iptables
 
 ### Auto-Start Options
 1. **Systemd Service** (recommended): Starts on boot, runs in background

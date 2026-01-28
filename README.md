@@ -52,6 +52,8 @@ The system is designed for **dual 720x720 displays** mounted on fursuit fins:
 - **Executables** - Run shell scripts (like Doom) positioned across both displays
 - **MQTT Input Control** - Send keyboard inputs to running games via MQTT (ready for ESP32 or custom input devices)
 - **Bluetooth Gamepad Support** - Pair Bluetooth controllers and assign one per display for independent control
+- **AirPlay & Spotify Connect** - Stream audio from Apple devices or Spotify app via shairport-sync and raspotify
+- **Wi-Fi Management** - Dual-mode networking with AP hotspot and client mode, NAT routing, and QR code sharing
 - **Web Control Interface** - Browser-based control with live preview and performance monitoring
 - **MQTT Integration** - Remote control and automation from external devices
 
@@ -61,7 +63,7 @@ The system is designed for **dual 720x720 displays** mounted on fursuit fins:
 
 ### Web Interface
 
-Open your browser to `http://<raspberry-pi-ip>:5000`
+Open your browser to `http://<raspberry-pi-ip>`
 
 - Control animations with one click
 - View live preview of both displays
@@ -71,7 +73,7 @@ Open your browser to `http://<raspberry-pi-ip>:5000`
 
 ### Virtual Controller
 
-Access the virtual controller at `http://<raspberry-pi-ip>:5000/controller`
+Access the virtual controller at `http://<raspberry-pi-ip>/controller`
 
 Optional URL parameters:
 - `?display=left` - Start with left display selected (default)
@@ -96,7 +98,7 @@ The web interface features a spring physics system for parameter sliders, provid
 
 ### Bluetooth Controller Manager
 
-Access the Bluetooth controller manager at `http://<raspberry-pi-ip>:5000/bluetooth`
+Access the Bluetooth controller manager at `http://<raspberry-pi-ip>/bluetooth`
 
 Pair and manage Bluetooth devices for gaming and audio:
 
@@ -131,6 +133,47 @@ Pair and manage Bluetooth devices for gaming and audio:
 - **A Button**: A key (confirm/jump)
 - **B Button**: B key (back/action)
 
+### Cast Settings
+
+Access the cast settings at `http://<raspberry-pi-ip>/cast`
+
+Enable and configure audio streaming services:
+
+- **AirPlay (shairport-sync)** - Stream audio from Apple devices (iPhone, iPad, Mac)
+  - Enable/disable with one click
+  - Configure device name (appears in AirPlay menu)
+  - Optional password protection
+- **Spotify Connect (raspotify)** - Stream music from the Spotify app
+  - Enable/disable with one click
+  - Configure device name (appears in Spotify devices)
+  - Optional username/password for premium features
+
+Both services output audio through PulseAudio, so they respect the current audio device selection (Bluetooth speaker, built-in audio, etc.).
+
+### Networking Settings
+
+Access the networking settings at `http://<raspberry-pi-ip>/networking`
+
+Manage Wi-Fi connectivity with dual-mode operation:
+
+**Client Mode (wlan1 - USB Wi-Fi):**
+- **Scan for networks** - Find available Wi-Fi networks
+- **Connect to networks** - Join external Wi-Fi for internet access
+- **Connection status** - View signal strength, IP address, and gateway
+- **Auto-reconnect** - Automatically reconnects to known networks
+
+**Access Point Mode (wlan0 - Built-in Wi-Fi):**
+- **Enable/disable AP** - Toggle the "Protosuit" hotspot
+- **Configure SSID** - Change the network name
+- **Security options** - WPA, WPA2, or Open
+- **Password protection** - Set a custom password
+- **QR code sharing** - Generate QR code for easy mobile connection
+- **Connected clients** - View devices connected to the hotspot
+
+**Routing:**
+- **NAT forwarding** - Share internet from client interface to AP clients
+- **Automatic setup** - IP forwarding and iptables rules managed automatically
+
 ### Service Management
 
 ```bash
@@ -139,17 +182,23 @@ sudo systemctl status protosuit-renderer
 sudo systemctl status protosuit-launcher
 sudo systemctl status protosuit-web
 sudo systemctl status protosuit-bluetoothbridge
+sudo systemctl status protosuit-castbridge
+sudo systemctl status protosuit-networkingbridge
 
 # View logs
 sudo journalctl -u protosuit-renderer -f
 sudo journalctl -u protosuit-launcher -f
 sudo journalctl -u protosuit-web -f
 sudo journalctl -u protosuit-bluetoothbridge -f
+sudo journalctl -u protosuit-castbridge -f
+sudo journalctl -u protosuit-networkingbridge -f
 
 # Restart services
 sudo systemctl restart protosuit-renderer
 sudo systemctl restart protosuit-launcher
 sudo systemctl restart protosuit-bluetoothbridge
+sudo systemctl restart protosuit-castbridge
+sudo systemctl restart protosuit-networkingbridge
 ```
 
 ---
@@ -158,11 +207,13 @@ sudo systemctl restart protosuit-bluetoothbridge
 
 ### Components
 
-**Four independent services:**
+**Six independent services:**
 - `protosuit-renderer` - OpenGL shader renderer (ModernGL + Pygame)
 - `protosuit-launcher` - Audio/video/executable launcher (mpv, ffplay, shell scripts)
 - `protosuit-web` - Flask web interface with live preview
 - `protosuit-bluetoothbridge` - Bluetooth gamepad manager and input forwarder
+- `protosuit-castbridge` - AirPlay and Spotify Connect manager (shairport-sync, raspotify)
+- `protosuit-networkingbridge` - Wi-Fi client/AP manager with NAT routing (hostapd, dnsmasq)
 
 **Supporting services:**
 - `xserver` - X11 server for dual display management
@@ -474,6 +525,123 @@ mosquitto_sub -t "protogen/fins/launcher/status/audio_device/#" -v
 
 ---
 
+### Castbridge Topics
+
+The castbridge service manages AirPlay (shairport-sync) and Spotify Connect (raspotify) audio streaming.
+
+**Commands (subscribe):**
+
+| Topic | Payload | Description |
+|-------|---------|-------------|
+| `protogen/fins/castbridge/airplay/enable` | `{"enable":true}` | Enable or disable AirPlay |
+| `protogen/fins/castbridge/airplay/config` | `{"device_name":"Protosuit","password":""}` | Configure AirPlay settings |
+| `protogen/fins/castbridge/spotify/enable` | `{"enable":true}` | Enable or disable Spotify Connect |
+| `protogen/fins/castbridge/spotify/config` | `{"device_name":"Protosuit","username":"","password":""}` | Configure Spotify settings |
+
+**Status (publish, retained):**
+
+| Topic | Content |
+|-------|---------|
+| `protogen/fins/castbridge/status/airplay` | `{"enabled":false,"device_name":"Protosuit","password":"","running":false}` |
+| `protogen/fins/castbridge/status/spotify` | `{"enabled":false,"device_name":"Protosuit","username":"","password":"","running":false}` |
+
+**Examples:**
+
+```bash
+# Enable AirPlay
+mosquitto_pub -t "protogen/fins/castbridge/airplay/enable" \
+  -m '{"enable":true}'
+
+# Configure AirPlay with custom name
+mosquitto_pub -t "protogen/fins/castbridge/airplay/config" \
+  -m '{"device_name":"My Protosuit","password":""}'
+
+# Enable Spotify Connect
+mosquitto_pub -t "protogen/fins/castbridge/spotify/enable" \
+  -m '{"enable":true}'
+
+# Configure Spotify with credentials
+mosquitto_pub -t "protogen/fins/castbridge/spotify/config" \
+  -m '{"device_name":"Protosuit","username":"myuser","password":"mypass"}'
+
+# Monitor castbridge status
+mosquitto_sub -t "protogen/fins/castbridge/status/#" -v
+```
+
+**Notes:**
+- Services are disabled and masked by default (managed by castbridge, not systemd)
+- Enabling a service unmasks it and starts it with the configured settings
+- Configuration changes restart the service automatically if it's running
+- Audio is routed through PulseAudio, respecting current audio device selection
+
+---
+
+### Networkingbridge Topics
+
+The networkingbridge service manages Wi-Fi client connections, access point hosting, and NAT routing.
+
+**Commands (subscribe):**
+
+| Topic | Payload | Description |
+|-------|---------|-------------|
+| `protogen/fins/networkingbridge/scan/start` | - | Scan for available Wi-Fi networks |
+| `protogen/fins/networkingbridge/client/connect` | `{"ssid":"NetworkName","password":"pass"}` | Connect to a Wi-Fi network |
+| `protogen/fins/networkingbridge/client/disconnect` | - | Disconnect from current network |
+| `protogen/fins/networkingbridge/ap/enable` | `{"enable":true}` | Enable or disable the access point |
+| `protogen/fins/networkingbridge/ap/config` | `{"ssid":"Protosuit","security":"wpa","password":"BeepBoop","ip_cidr":"192.168.50.1/24"}` | Configure access point settings |
+| `protogen/fins/networkingbridge/routing/enable` | `{"enable":true}` | Enable or disable NAT routing |
+| `protogen/fins/networkingbridge/qrcode/generate` | - | Generate QR code for AP connection |
+
+**Status (publish, retained):**
+
+| Topic | Content |
+|-------|---------|
+| `protogen/fins/networkingbridge/status/interfaces` | Interface detection status |
+| `protogen/fins/networkingbridge/status/client` | `{"connected":true,"ssid":"...","ip_address":"...","signal_percent":80}` |
+| `protogen/fins/networkingbridge/status/ap` | `{"enabled":true,"ssid":"Protosuit","clients":[...]}` |
+| `protogen/fins/networkingbridge/status/scan` | Array of discovered networks |
+| `protogen/fins/networkingbridge/status/scanning` | `true` or `false` |
+| `protogen/fins/networkingbridge/status/qrcode` | `{"qrcode":"data:image/png;base64,..."}` |
+
+**Examples:**
+
+```bash
+# Scan for Wi-Fi networks
+mosquitto_pub -t "protogen/fins/networkingbridge/scan/start" -m ""
+
+# Connect to a network
+mosquitto_pub -t "protogen/fins/networkingbridge/client/connect" \
+  -m '{"ssid":"MyWiFi","password":"mypassword"}'
+
+# Enable access point
+mosquitto_pub -t "protogen/fins/networkingbridge/ap/enable" \
+  -m '{"enable":true}'
+
+# Configure AP with custom settings
+mosquitto_pub -t "protogen/fins/networkingbridge/ap/config" \
+  -m '{"ssid":"MyProtosuit","security":"wpa2","password":"SecurePass123"}'
+
+# Generate QR code for AP
+mosquitto_pub -t "protogen/fins/networkingbridge/qrcode/generate" -m ""
+
+# Enable NAT routing
+mosquitto_pub -t "protogen/fins/networkingbridge/routing/enable" \
+  -m '{"enable":true}'
+
+# Monitor networking status
+mosquitto_sub -t "protogen/fins/networkingbridge/status/#" -v
+```
+
+**Security options:** `"wpa"` (WPA1 for legacy devices like PSP), `"wpa2"`, or `"open"`
+
+**Notes:**
+- Client mode uses the USB Wi-Fi dongle (wlan1) for internet connectivity
+- AP mode uses the built-in Raspberry Pi Wi-Fi (wlan0) for stability
+- NAT routing allows AP clients to access the internet through the client connection
+- QR codes use the standard Wi-Fi QR format, scannable by most phone cameras
+
+---
+
 ## Configuration
 
 Edit `config.yaml` to customize animations:
@@ -656,14 +824,6 @@ sudo journalctl -u protosuit-web -f
 ```
 
 For more help, [open an issue on GitHub](https://github.com/lululombard/protosuit-engine/issues).
-
----
-
-## Hardware
-
-- **Raspberry Pi 5** (or compatible model)
-- **Two 720x720 displays** via HDMI1 and HDMI2 (4-inch round LCDs recommended)
-- **microSD card** - 16GB or more
 
 ---
 
