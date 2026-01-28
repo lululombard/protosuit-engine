@@ -6,6 +6,7 @@ import subprocess
 import time
 import os
 import json
+import select
 from typing import Callable, Optional, Dict
 from launcher.launchers.base_launcher import BaseLauncher
 from utils.program_helper import ProgramHelper
@@ -49,6 +50,11 @@ class ExecLauncher(BaseLauncher):
         self.windows: Dict[str, str] = {}  # {"left": window_id, "right": window_id}
         self.use_window_targeting = False  # True for multi-window games like Doom, False for single-window
 
+        # Setup signaling for scripts that need extended initialization time
+        self._setup_started = False
+        self._setup_topic = "protosuit/launcher/setup"
+        self._setup_listener = None
+
     def launch(self) -> bool:
         """
         Launch the executable script
@@ -76,6 +82,9 @@ class ExecLauncher(BaseLauncher):
             env["PROTOSUIT_Y"] = str(self.display_config.y)
 
             print(f"[ExecLauncher] Launching script: {self.script_name}")
+
+            # Start setup listener BEFORE launching so we don't miss "started" message
+            self._start_setup_listener()
 
             # Execute the script
             process = subprocess.Popen(
@@ -150,6 +159,9 @@ class ExecLauncher(BaseLauncher):
         """Clean up script processes and their children"""
         print(f"[ExecLauncher] Cleaning up script: {self.script_name}")
 
+        # Stop setup listener if still running
+        self._stop_setup_listener()
+
         # Unsubscribe from MQTT inputs
         self.unsubscribe_from_inputs()
 
@@ -161,10 +173,67 @@ class ExecLauncher(BaseLauncher):
         self.windows = {}
         self.use_window_targeting = False
 
+    def _start_setup_listener(self):
+        """Start a mosquitto_sub process to listen for setup messages"""
+        try:
+            self._setup_listener = subprocess.Popen(
+                ["mosquitto_sub", "-t", self._setup_topic, "-C", "2"],  # -C 2 = exit after 2 messages
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            print(f"[ExecLauncher] Started setup listener on {self._setup_topic}")
+        except Exception as e:
+            print(f"[ExecLauncher] Failed to start setup listener: {e}")
+            self._setup_listener = None
+
+    def _stop_setup_listener(self):
+        """Stop the setup listener process"""
+        if self._setup_listener:
+            try:
+                self._setup_listener.terminate()
+                self._setup_listener.wait(timeout=1)
+            except Exception:
+                pass
+            self._setup_listener = None
+
+    def _wait_for_ready(self):
+        """Wait for script to signal it's ready, or use default timeout"""
+        if not self._setup_listener:
+            print(f"[ExecLauncher] No setup listener, using default wait")
+            time.sleep(1.0)
+            return
+
+        # Read messages from mosquitto_sub with timeout
+        timeout_total = 30.0
+        start_time = time.time()
+
+        while time.time() - start_time < timeout_total:
+            # Check if there's data to read (non-blocking)
+            ready, _, _ = select.select([self._setup_listener.stdout], [], [], 0.5)
+            if ready:
+                line = self._setup_listener.stdout.readline().decode().strip().lower()
+                if line == "started":
+                    print(f"[ExecLauncher] Script signaled setup started")
+                    self._setup_started = True
+                elif line == "ready":
+                    print(f"[ExecLauncher] Script signaled ready")
+                    self._stop_setup_listener()
+                    return
+
+            # If we haven't seen "started" after 1 second, script doesn't use signaling
+            if not self._setup_started and time.time() - start_time > 1.0:
+                print(f"[ExecLauncher] No setup signal received, using default wait")
+                self._stop_setup_listener()
+                time.sleep(0.5)
+                return
+
+        print(f"[ExecLauncher] Timeout waiting for ready signal, proceeding anyway")
+        self._stop_setup_listener()
+
     def discover_windows(self):
         """Auto-discover game windows and assign to left/right displays"""
         try:
-            time.sleep(4)
+            self._wait_for_ready()
 
             all_windows = []
 
