@@ -158,6 +158,18 @@ function updateUniformControls(animationId) {
                 onEnd: () => sliderEnd(uniform.name)
             });
             html += slider.generateHTML();
+        } else if (uniform.type === 'int' && min !== undefined && max !== undefined) {
+            const defaultVal = hasPerDisplay ? uniform.value.left : uniform.value;
+            // Use current value from engine if available, otherwise use default
+            const currentVal = currentUniformValues[uniform.name] !== undefined ? currentUniformValues[uniform.name] : defaultVal;
+
+            const slider = new Slider(uniform.name, min, max, step || 1, currentVal, 'int', {
+                // Use string function names for HTML attributes (no physics for int)
+                oninputFunc: `setUniformImmediate('${uniform.name}', 'int')`,
+                onmousedownFunc: '', // No momentum tracking
+                onmouseupFunc: ''
+            });
+            html += slider.generateHTML();
         } else if (uniform.type === 'vec3' && min !== undefined && max !== undefined) {
             const components = hasPerDisplay ? uniform.value.left : uniform.value;
             // Use current value from engine if available, otherwise use default
@@ -342,6 +354,26 @@ function sendSliderMQTT(uniformName, value, uniformType) {
     sendCommand('protogen/fins/renderer/set/shader/uniform', payload, true); // Silent mode
 }
 
+// Set uniform value immediately (no physics) - used for int sliders
+function setUniformImmediate(uniformName, uniformType) {
+    const slider = document.getElementById(`uniform_${uniformName}`);
+    const valueSpan = document.getElementById(`value_${uniformName}`);
+    const value = uniformType === 'int' ? parseInt(slider.value) : parseFloat(slider.value);
+
+    // Visual feedback
+    valueSpan.classList.add('updating');
+    setTimeout(() => valueSpan.classList.remove('updating'), 50);
+
+    // Update displayed value (no decimals for int)
+    valueSpan.textContent = uniformType === 'int' ? value.toString() : value.toFixed(3);
+
+    // Track locally
+    currentUniformValues[uniformName] = value;
+
+    // Send immediately (no physics)
+    sendSliderMQTT(uniformName, value, uniformType);
+}
+
 // Set vec3 uniform with momentum-based smoothing
 function setVec3UniformRealtimeSmooth(uniformName) {
     const r = parseFloat(document.getElementById(`uniform_${uniformName}_r`).value);
@@ -522,6 +554,13 @@ function handleRendererUniformStatus(payload) {
                 if (slider && valueSpan) {
                     slider.value = actualValue;
                     valueSpan.textContent = actualValue.toFixed(3);
+                }
+            } else if (uniformType === 'int') {
+                const slider = document.getElementById(`uniform_${uniformName}`);
+                const valueSpan = document.getElementById(`value_${uniformName}`);
+                if (slider && valueSpan) {
+                    slider.value = actualValue;
+                    valueSpan.textContent = actualValue.toString();
                 }
             } else if (uniformType === 'vec3' && Array.isArray(actualValue)) {
                 const sliderR = document.getElementById(`uniform_${uniformName}_r`);

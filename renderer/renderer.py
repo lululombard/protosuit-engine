@@ -115,8 +115,9 @@ class Renderer:
 
         self.command_queue = Queue()
 
-        # Performance optimization: track if executable is running
+        # Performance optimization: track if executable or video is running
         self.exec_running = False
+        self.video_running = False
 
         # Shader directory and available shaders
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -140,8 +141,9 @@ class Renderer:
             self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/uniform")
             self.mqtt_client.subscribe("protogen/fins/renderer/config/reload")
 
-            # Subscribe to launcher exec status for performance optimization
+            # Subscribe to launcher status for performance optimization
             self.mqtt_client.subscribe("protogen/fins/launcher/status/exec")
+            self.mqtt_client.subscribe("protogen/fins/launcher/status/video")
 
             self.mqtt_client.loop_start()
 
@@ -158,6 +160,7 @@ class Renderer:
             print("  - protogen/fins/renderer/set/shader/uniform")
             print("  - protogen/fins/renderer/config/reload")
             print("  - protogen/fins/launcher/status/exec (performance optimization)")
+            print("  - protogen/fins/launcher/status/video (performance optimization)")
             print(f"[Renderer] Found {len(self.available_shaders)} shaders")
 
         except Exception as e:
@@ -178,6 +181,8 @@ class Renderer:
                 self.handle_control_command("reload_config")
             elif topic == "protogen/fins/launcher/status/exec":
                 self.handle_exec_status(payload)
+            elif topic == "protogen/fins/launcher/status/video":
+                self.handle_video_status(payload)
 
         except Exception as e:
             print(f"[Renderer] Error handling MQTT message: {e}")
@@ -199,6 +204,21 @@ class Renderer:
 
         except Exception as e:
             print(f"[Renderer] Error handling exec status: {e}")
+
+    def handle_video_status(self, payload: str):
+        """Handle launcher video status updates for performance optimization"""
+        try:
+            data = json.loads(payload)
+            # Check if any video is playing
+            self.video_running = data.get("playing") is not None and data.get("playing") != ""
+
+            if self.video_running:
+                print(f"[Renderer] Video playing: {data.get('playing')} - Skipping shader rendering for performance")
+            else:
+                print("[Renderer] No video playing - Resuming shader rendering")
+
+        except Exception as e:
+            print(f"[Renderer] Error handling video status: {e}")
 
     def handle_shader_command(self, payload: str):
         """Handle shader change command (queues for main thread)
@@ -1107,8 +1127,8 @@ class Renderer:
                     except Exception as cmd_error:
                         print(f"[Renderer] Error processing command: {cmd_error}")
 
-                # Performance optimization: skip rendering when executable is running
-                if not self.exec_running:
+                # Performance optimization: skip rendering when executable or video is running
+                if not self.exec_running and not self.video_running:
                     # Render both displays
                     self.render_display("left", 0)
                     self.render_display("right", self.display_width)
@@ -1116,7 +1136,7 @@ class Renderer:
                     # Swap buffers
                     pygame.display.flip()
                 else:
-                    # When executable is running, just clear the screen to black
+                    # When executable or video is running, just clear the screen to black
                     # This saves significant GPU/CPU resources
                     self.ctx.clear(0.0, 0.0, 0.0, 1.0)  # Clear to black
                     pygame.display.flip()

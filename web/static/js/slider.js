@@ -22,6 +22,9 @@ class Slider {
         const onmousedownFunc = this.callbacks.onmousedownFunc || `sliderStart('${this.name}')`;
         const onmouseupFunc = this.callbacks.onmouseupFunc || `sliderEnd('${this.name}')`;
 
+        // Format value based on type
+        const displayValue = this.type === 'int' ? Math.round(this.value).toString() : this.value.toFixed(3);
+
         const sliderHTML = `
             <input type="range" id="${sliderId}"
                 min="${this.min}" max="${this.max}" step="${this.step}" value="${this.value}"
@@ -31,7 +34,7 @@ class Slider {
                 onmouseup="${onmouseupFunc}"
                 ontouchstart="${onmousedownFunc}"
                 ontouchend="${onmouseupFunc}">
-            <span id="${valueDisplayId}" class="value-display" style="margin-left: 10px;">${this.value.toFixed(3)}</span>
+            <span id="${valueDisplayId}" class="value-display" style="margin-left: 10px;">${displayValue}</span>
         `;
 
         if (wrapper) {
