@@ -2,6 +2,8 @@
 precision highp float;
 
 // Monster Shader - Fractal Tunnel
+// Created by butadiene (2020-03-05)
+// https://www.shadertoy.com/view/WtKSzt
 
 // Standard uniforms
 uniform float iTime;

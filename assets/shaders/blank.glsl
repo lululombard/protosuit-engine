@@ -1,8 +1,8 @@
 #version 300 es
 precision highp float;
 
-// Minimal blank shader - just renders a solid color
-// Ultra-lightweight, perfect as a base for external programs
+// Blank Shader
+// Original shader by lululombard
 
 // Standard uniforms
 uniform float iTime;

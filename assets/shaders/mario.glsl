@@ -2,10 +2,13 @@
 precision highp float;
 
 // Super Mario Bros Recreation
+// Created by knarkowicz (2015-07-29)
+// https://www.shadertoy.com/view/XtlSD7
+//
 // Interesting findings from original NES Super Mario Bros.:
-// -Clouds and brushes of all sizes are drawn using the same small sprite (32x24)
-// -Hills, clouds and bushes weren't placed manually. Every background object type is repeated after 768 pixels.
-// -Overworld (main theme) drum sound uses only the APU noise generator
+// - Clouds and brushes of all sizes are drawn using the same small sprite (32x24)
+// - Hills, clouds and bushes weren't placed manually. Every background object type is repeated after 768 pixels.
+// - Overworld (main theme) drum sound uses only the APU noise generator
 
 uniform float iTime;
 uniform vec2 iResolution;

@@ -2,6 +2,8 @@
 precision highp float;
 
 // Echo Signal Shader
+// Original source from Shadertoy (author unknown)
+// If you know the original author, please open an issue to properly credit them
 
 // Standard uniforms
 uniform float iTime;

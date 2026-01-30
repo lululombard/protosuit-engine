@@ -2,7 +2,8 @@
 precision highp float;
 
 // Sun Shader
-// Based on https://www.shadertoy.com/view/lsf3RH by trisomie21
+// Original source from Shadertoy (author unknown)
+// If you know the original author, please open an issue to properly credit them
 
 // Standard uniforms
 uniform float iTime;

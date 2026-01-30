@@ -1,8 +1,9 @@
 #version 300 es
 precision highp float;
 
-// Hex Kaleidoscope Shader
-// Based on "Ashanoha" by soundproof cushion
+// Hex Kaleidoscope Shader (Ashanoha)
+// Created by coposuke (2020-01-24)
+// https://www.shadertoy.com/view/wlGGWG
 
 // Standard uniforms
 uniform float iTime;

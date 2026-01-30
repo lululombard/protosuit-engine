@@ -1,7 +1,9 @@
 #version 300 es
 precision highp float;
 
-// Retrowave Shader with MQTT-controllable parameters
+// Retrowave Shader
+// Created by kaiware007 (2020-01-28)
+// https://www.shadertoy.com/view/Wt33Wf
 
 // Standard uniforms
 uniform float iTime;

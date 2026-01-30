@@ -2,6 +2,8 @@
 precision highp float;
 
 // Hypnosis Tunnel Shader
+// Created by s23b (2016-01-11)
+// https://www.shadertoy.com/view/4st3WX
 
 // Standard uniforms
 uniform float iTime;

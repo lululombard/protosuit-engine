@@ -1,8 +1,8 @@
 #version 300 es
 precision highp float;
 
-// Example shader with MQTT-controllable uniforms
-// Uniforms from moderngl
+// Waves Shader
+// Original shader by lululombard
 uniform float iTime;
 uniform vec2 iResolution;
 

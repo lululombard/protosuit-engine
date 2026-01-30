@@ -1,11 +1,9 @@
 #version 300 es
 precision highp float;
 
-// Created by Danil (2024+) https://github.com/danilw
-// License - CC0 or use as you wish
-// Original: https://www.shadertoy.com/view/MXl3WX
-
-// Converted to moderngl format for protosuit-engine
+// Portal Shader
+// Created by morimea (2024-02-15)
+// https://www.shadertoy.com/view/MXl3WX
 
 // Uniforms from moderngl
 uniform float iTime;

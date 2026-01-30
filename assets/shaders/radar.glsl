@@ -2,6 +2,8 @@
 precision highp float;
 
 // Sci-fi Radar Shader
+// Created by ndel (2014-11-14)
+// https://www.shadertoy.com/view/4s2SRt
 // Based on the work of gmunk for Oblivion
 // http://work.gmunk.com/OBLIVION-GFX
 
