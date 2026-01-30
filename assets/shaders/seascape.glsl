@@ -2,11 +2,10 @@
 precision highp float;
 
 /*
- * "Seascape" by Alexander Alekseev aka TDM - 2014
+ * "Seascape" by Alexander Alekseev aka TDM (2014-09-26)
+ * https://www.shadertoy.com/view/Ms2SD1
  * License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
  * Contact: tdmaav@gmail.com
- *
- * Adapted for protosuit-engine with MQTT-controllable parameters
  */
 
 // Standard uniforms

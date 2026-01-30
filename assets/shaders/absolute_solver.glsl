@@ -1,6 +1,9 @@
 #version 300 es
 precision highp float;
 
+// Absolute Solver Shader
+// Original shader by Miggy
+
 // --- Standard uniforms (provided by renderer) ---
 uniform float iTime;
 uniform vec2 iResolution;

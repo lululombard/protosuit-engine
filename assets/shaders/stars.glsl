@@ -1,6 +1,10 @@
 #version 300 es
 precision highp float;
 
+// Stars Shader
+// Created by soilmaster (2022-03-12)
+// https://www.shadertoy.com/view/sd2BWy
+
 // Standard uniforms
 uniform float iTime;
 uniform int frame;

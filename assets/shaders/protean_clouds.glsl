@@ -1,7 +1,8 @@
 #version 300 es
 precision highp float;
 
-// Protean clouds by nimitz (twitter: @stormoid)
+// Protean Clouds Shader
+// Created by nimitz (2019-05-27)
 // https://www.shadertoy.com/view/3l23Rh
 // License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License
 

@@ -1,7 +1,9 @@
 #version 300 es
 precision highp float;
 
-// Converted to moderngl format for protosuit-engine
+// Spiral Shader
+// Original source from Shadertoy (author unknown)
+// If you know the original author, please open an issue to properly credit them
 
 // Uniforms from moderngl
 uniform float iTime;

@@ -2,7 +2,7 @@
 precision highp float;
 
 // Plasma Globe Shader
-// Based on "Plasma Globe" by nimitz (twitter: @stormoid)
+// Created by nimitz (2014-09-10)
 // https://www.shadertoy.com/view/XsjXRm
 // License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License
 

@@ -1,7 +1,8 @@
 #version 300 es
 precision highp float;
 
-// Aperture Shader with MQTT-controllable parameters
+// Aperture Shader
+// Original shader by lululombard
 
 // Standard uniforms
 uniform float iTime;

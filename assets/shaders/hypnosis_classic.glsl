@@ -2,6 +2,8 @@
 precision highp float;
 
 // Hypnosis Classic Shader
+// Created by avin (2019-04-07)
+// https://www.shadertoy.com/view/3dBSRd
 
 // Standard uniforms
 uniform float iTime;

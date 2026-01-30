@@ -1,8 +1,9 @@
 #version 300 es
 precision highp float;
 
-// Reproduction of Outer Wilds solar system by Miolith
-// Converted to moderngl format for protosuit-engine
+// Outer Wilds Solar System
+// Created by Miolith (2024-01-02)
+// https://www.shadertoy.com/view/lcXGWs
 
 // Uniforms from moderngl
 uniform float iTime;

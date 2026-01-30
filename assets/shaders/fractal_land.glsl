@@ -2,7 +2,8 @@
 precision highp float;
 
 // Fractal Land Shader
-// Based on "Fractal Cartoon" by Kali
+// Created by Kali (2013-11-07)
+// https://www.shadertoy.com/view/XsBXWt
 
 // Standard uniforms
 uniform float iTime;

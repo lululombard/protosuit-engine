@@ -2,8 +2,8 @@
 precision highp float;
 
 // Optical Lens Shader
-// http://www.pouet.net/prod.php?which=57245
-// If you intend to reuse this shader, please add credits to 'Danilo Guanabara'
+// Created by Danguafer/Danilo Guanabara (2014-04-29)
+// https://www.shadertoy.com/view/XsXXDn
 
 // Standard uniforms
 uniform float iTime;
