@@ -153,7 +153,7 @@ The networking bridge requires two Wi-Fi interfaces for dual-mode operation:
 
 #### USB Wi-Fi Driver Installation
 
-The deployment playbook automatically installs the RTL8851BU driver from the [biglinux/rtl8831](https://github.com/biglinux/rtl8831) repository. This is a quality driver repository that provides stable client mode operation.
+The deployment playbook automatically installs the RTL8851BU driver from the [morrownr/rtw89](https://github.com/morrownr/rtw89) repository. This is a quality driver repository that provides stable client mode operation.
 
 The driver is compiled during deployment and configured to load automatically on boot. If you're using a different USB Wi-Fi adapter, you may need to modify the driver installation tasks in [playbooks/main.yml](playbooks/main.yml:234-297).
 

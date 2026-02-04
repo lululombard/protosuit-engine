@@ -334,70 +334,74 @@
   become_user: "{{ pi_user }}"
   ignore_errors: yes
 
-# RTL8851BU USB Wi-Fi driver installation
-- name: Check if RTL8851BU driver is installed
-  stat:
-    path: "/lib/modules/{{ ansible_kernel }}/kernel/drivers/net/wireless/8851bu.ko"
+# RTL8851BU USB Wi-Fi driver installation (using rtw89 driver from morrownr)
+- name: Check if rtw89 RTL8851BU driver is installed
+  shell: "modinfo rtw89_8851bu_git 2>/dev/null || echo 'not found'"
   register: rtl8851bu_driver
+  changed_when: false
 
-- name: Install RTL8851BU driver dependencies
+- name: Install rtw89 driver dependencies
   apt:
     name:
       - git
       - build-essential
       - dkms
+      - bc
     state: present
-  when: not rtl8851bu_driver.stat.exists
+  when: "'not found' in rtl8851bu_driver.stdout"
 
-- name: Clone RTL8851BU driver repository
+- name: Clone rtw89 driver repository
   git:
-    repo: https://github.com/biglinux/rtl8831.git
-    dest: /tmp/rtl8831
+    repo: https://github.com/morrownr/rtw89.git
+    dest: /tmp/rtw89
     version: main
     force: yes
   become_user: "{{ pi_user }}"
-  when: not rtl8851bu_driver.stat.exists
+  when: "'not found' in rtl8851bu_driver.stdout"
 
-- name: Configure RTL8851BU driver for ARM64
-  lineinfile:
-    path: /tmp/rtl8831/Makefile
-    regexp: "{{ item.regexp }}"
-    line: "{{ item.line }}"
-  loop:
-    - { regexp: '^CONFIG_PLATFORM_I386_PC = y', line: 'CONFIG_PLATFORM_I386_PC = n' }
-    - { regexp: '^CONFIG_PLATFORM_ARM64_PC = n', line: 'CONFIG_PLATFORM_ARM64_PC = y' }
-  when: not rtl8851bu_driver.stat.exists
+- name: Clean up conflicting drivers
+  command: make cleanup_target_system
+  args:
+    chdir: /tmp/rtw89
+  ignore_errors: yes
+  when: "'not found' in rtl8851bu_driver.stdout"
 
-- name: Build RTL8851BU driver
+- name: Build rtw89 driver
   command: make -j4
   args:
-    chdir: /tmp/rtl8831
-  when: not rtl8851bu_driver.stat.exists
+    chdir: /tmp/rtw89
+  when: "'not found' in rtl8851bu_driver.stdout"
 
-- name: Install RTL8851BU driver
+- name: Install rtw89 driver
   command: make install
   args:
-    chdir: /tmp/rtl8831
-  when: not rtl8851bu_driver.stat.exists
+    chdir: /tmp/rtw89
+  when: "'not found' in rtl8851bu_driver.stdout"
+
+- name: Install rtw89 firmware
+  command: make install_fw
+  args:
+    chdir: /tmp/rtw89
+  when: "'not found' in rtl8851bu_driver.stdout"
 
 - name: Load RTL8851BU driver module
   modprobe:
-    name: 8851bu
+    name: rtw89_8851bu_git
     state: present
   ignore_errors: yes
 
 - name: Ensure RTL8851BU driver loads on boot
   lineinfile:
     path: /etc/modules-load.d/rtl8851bu.conf
-    line: 8851bu
+    line: rtw89_8851bu_git
     create: yes
     mode: '0644'
 
-- name: Clean up RTL8851BU build directory
+- name: Clean up rtw89 build directory
   file:
-    path: /tmp/rtl8831
+    path: /tmp/rtw89
     state: absent
-  when: not rtl8851bu_driver.stat.exists
+  when: "'not found' in rtl8851bu_driver.stdout"
 
 - name: Add user to bluetooth and input groups
   user:
