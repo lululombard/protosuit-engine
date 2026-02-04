@@ -468,10 +468,31 @@ server=8.8.4.4
         """Connect to a network"""
         print(f"[NetworkingBridge] Connecting to network: {ssid}")
 
-        # Create connection
+        # Check if wlan0 is connected to the same SSID in client mode
+        check_result = subprocess.run(
+            ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device"],
+            capture_output=True, text=True
+        )
+
+        for line in check_result.stdout.strip().split('\n'):
+            if line:
+                parts = line.split(':')
+                if len(parts) >= 4:
+                    device, dtype, state, connection = parts[0], parts[1], parts[2], parts[3]
+                    # If wlan0 is connected to the same SSID, disconnect it first
+                    if device == self.ap_interface and dtype == "wifi" and state == "connected" and ssid in connection:
+                        print(f"[NetworkingBridge] Disconnecting {device} from {ssid} (switching to {self.client_interface})")
+                        subprocess.run(
+                            ["sudo", "nmcli", "device", "disconnect", device],
+                            capture_output=True, text=True
+                        )
+
+        # Create connection with unique name for this interface
+        conn_name = f"{ssid}-{self.client_interface}"
         cmd = [
             "sudo", "nmcli", "device", "wifi", "connect", ssid,
-            "ifname", self.client_interface  # wlan1
+            "ifname", self.client_interface,
+            "name", conn_name
         ]
 
         if password:
