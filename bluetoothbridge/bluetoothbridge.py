@@ -429,13 +429,13 @@ class BluetoothBridge:
     def _monitor_worker(self):
         """Background worker for monitoring Bluetooth connection state changes via polling"""
         print("[BluetoothBridge] Monitor worker started (polling mode)")
-        
+
         poll_count = 0
-        
+
         while self.running:
             try:
                 poll_count += 1
-                
+
                 # Get currently connected BT devices from bluetoothctl (for gamepads)
                 result = subprocess.run(
                     ["bluetoothctl", "devices", "Connected"],
@@ -443,13 +443,13 @@ class BluetoothBridge:
                     text=True,
                     timeout=5
                 )
-                
+
                 bt_connected = set()
                 for line in result.stdout.splitlines():
                     match = re.search(r'Device\s+([0-9A-F:]+)', line, re.IGNORECASE)
                     if match:
                         bt_connected.add(match.group(1).upper())
-                
+
                 # Get connected audio devices from PulseAudio (more reliable for audio)
                 audio_connected = set()
                 try:
@@ -470,38 +470,38 @@ class BluetoothBridge:
                                 audio_connected.add(mac)
                 except Exception as e:
                     pass  # PulseAudio check failed, skip
-                
+
                 # Log every 10th poll
                 if poll_count % 10 == 1:
                     print(f"[BluetoothBridge] Monitor poll #{poll_count}, BT: {bt_connected}, Audio: {audio_connected}")
-                
+
                 # Check gamepads - use bluetoothctl state
                 for mac in bt_connected:
                     if mac in self.discovered_devices:
                         if not self.discovered_devices[mac].get("connected"):
                             print(f"[BluetoothBridge] 🎮 Controller reconnected: {mac}")
                             self._handle_controller_connected(mac)
-                
+
                 for mac, info in list(self.discovered_devices.items()):
                     if info.get("connected") and mac not in bt_connected:
                         print(f"[BluetoothBridge] 🎮 Controller disconnected (poll): {mac}")
                         self._handle_controller_disconnected(mac)
-                
+
                 # Check audio devices - use PulseAudio state
                 for mac in audio_connected:
                     if mac in self.audio_devices:
                         if not self.audio_devices[mac].get("connected"):
                             print(f"[BluetoothBridge] 🔊 Audio device reconnected: {mac}")
                             self._handle_audio_device_connected(mac)
-                
+
                 for mac, info in list(self.audio_devices.items()):
                     if info.get("connected") and mac not in audio_connected:
                         print(f"[BluetoothBridge] 🔊 Audio device disconnected (poll): {mac}")
                         self._handle_audio_device_disconnected(mac)
-                
+
                 # Poll every 2 seconds
                 time.sleep(2)
-                
+
             except Exception as e:
                 print(f"[BluetoothBridge] Monitor poll error: {e}")
                 time.sleep(5)  # Wait longer on error
@@ -510,7 +510,7 @@ class BluetoothBridge:
         """Handle a controller connecting automatically"""
         try:
             # Wait a moment for device to appear in /dev/input
-            time.sleep(2)
+            time.sleep(3)
 
             # Find the evdev device
             evdev_path = self._find_evdev_device(mac)
@@ -620,7 +620,7 @@ class BluetoothBridge:
 
     def _wait_for_audio_system_ready(self, max_seconds: int = 30) -> bool:
         """Wait for PulseAudio to be ready
-        
+
         Returns:
             True if ready, False if timeout
         """
@@ -643,21 +643,21 @@ class BluetoothBridge:
 
     def _reload_pulseaudio_bluetooth(self) -> bool:
         """Reload PulseAudio Bluetooth module to fix profile issues
-        
+
         Returns:
             True if successful
         """
         print("[BluetoothBridge] Reloading PulseAudio Bluetooth module...")
         try:
             env = {**os.environ, "XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}"}
-            
+
             # Unload and reload bluetooth modules
-            subprocess.run(["pactl", "unload-module", "module-bluetooth-discover"], 
+            subprocess.run(["pactl", "unload-module", "module-bluetooth-discover"],
                          capture_output=True, timeout=5, env=env)
             time.sleep(1)
             result = subprocess.run(["pactl", "load-module", "module-bluetooth-discover"],
                                    capture_output=True, timeout=5, env=env)
-            
+
             if result.returncode == 0:
                 print("[BluetoothBridge] ✓ PulseAudio Bluetooth module reloaded")
                 time.sleep(2)  # Give it time to discover devices
@@ -916,7 +916,7 @@ class BluetoothBridge:
 
             proc.stdin.write(f"connect {mac}\n")
             proc.stdin.flush()
-            
+
             # Wait for response
             success, output = self._wait_for_bluetoothctl_response(
                 proc,
@@ -950,45 +950,45 @@ class BluetoothBridge:
 
     def _wait_for_bluetoothctl_response(self, proc, success_patterns: list, failure_patterns: list, timeout: float = 10) -> tuple:
         """Wait for bluetoothctl response by reading output in real-time
-        
+
         Args:
             proc: The bluetoothctl subprocess
             success_patterns: List of strings that indicate success
             failure_patterns: List of strings that indicate failure
             timeout: Maximum time to wait in seconds
-            
+
         Returns:
             (success: bool, output: str)
         """
         import select
         output_lines = []
         start_time = time.time()
-        
+
         while time.time() - start_time < timeout:
             # Check if there's data to read
             r, _, _ = select.select([proc.stdout], [], [], 0.1)
             if not r:
                 continue
-                
+
             line = proc.stdout.readline()
             if not line:
                 continue
-                
+
             # Strip ANSI codes
             line = re.sub(r'\x1b\[[0-9;]*m', '', line).strip()
             if line:
                 output_lines.append(line)
-                
+
                 # Check for success
                 for pattern in success_patterns:
                     if pattern.lower() in line.lower():
                         return True, '\n'.join(output_lines)
-                
+
                 # Check for failure
                 for pattern in failure_patterns:
                     if pattern.lower() in line.lower():
                         return False, '\n'.join(output_lines)
-        
+
         # Timeout - return what we have
         return None, '\n'.join(output_lines)
 
@@ -1096,7 +1096,7 @@ class BluetoothBridge:
             # Check for audio profile issues
             if "br-connection-profile-unavailable" in full_output or "profile unavailable" in full_output.lower():
                 print("[BluetoothBridge] ⚠ Bluetooth profile unavailable, attempting to reload audio modules...")
-                
+
                 # Try to reload PulseAudio Bluetooth module
                 if self._reload_pulseaudio_bluetooth():
                     # Wait for audio system to be ready
@@ -1111,7 +1111,7 @@ class BluetoothBridge:
                             timeout=15
                         )
                         retry_output = retry_result.stdout + retry_result.stderr
-                        
+
                         if "connection successful" in retry_output.lower():
                             print(f"[BluetoothBridge] ✓ Connected to {mac} after reload")
                             # Mark as audio device and publish status
@@ -1129,7 +1129,7 @@ class BluetoothBridge:
                             self.publish_last_audio_device(mac)
                             self.publish_connection_status(mac, "connected")
                             return
-                
+
                 print("[BluetoothBridge] ✗ Failed to connect after reload")
                 print("[BluetoothBridge] → PulseAudio/PipeWire Bluetooth modules may need manual restart")
                 self.publish_connection_status(mac, "failed", "Bluetooth profile unavailable")
@@ -1140,7 +1140,7 @@ class BluetoothBridge:
                 if "already connected" in output.lower():
                     print(f"[BluetoothBridge] ✓ Device {mac} was already connected")
                 else:
-                    print(f"[BluetoothBridge] ✓ Connected to {mac}")
+                    print(f"[BluetoothBridge] ✓ Connected to {mac} ({full_output})")
 
                 # Check if this is an audio device or gamepad
                 is_audio = mac in self.audio_devices
@@ -1214,7 +1214,7 @@ class BluetoothBridge:
                 for info in self.connected_devices.values()
                 if "evdev_path" in info
             )
-            
+
             # Get the expected device name from our discovered devices
             expected_name = None
             if mac in self.discovered_devices:
@@ -1273,7 +1273,7 @@ class BluetoothBridge:
                         keys = caps[ecodes.EV_KEY]
                         if ecodes.BTN_SOUTH in keys or ecodes.BTN_GAMEPAD in keys:
                             unassigned_gamepads.append(device)
-            
+
             if len(unassigned_gamepads) == 1:
                 device = unassigned_gamepads[0]
                 print(f"[BluetoothBridge] ✓ Found single unassigned gamepad: {device.path} ({device.name})")
@@ -1330,7 +1330,7 @@ class BluetoothBridge:
 
             proc.stdin.write(f"disconnect {mac}\n")
             proc.stdin.flush()
-            
+
             # Wait for disconnect response
             success, output = self._wait_for_bluetoothctl_response(
                 proc,
@@ -1493,7 +1493,7 @@ class BluetoothBridge:
                 print(f"[BluetoothBridge] Waiting for audio system to be ready...")
                 if not self._wait_for_audio_system_ready(max_seconds=30):
                     print(f"[BluetoothBridge] ⚠ Audio system not ready after 30s, attempting anyway...")
-                
+
                 print(f"[BluetoothBridge] Reconnecting to last audio device: {name} ({mac})")
                 reconnecting.add(mac)
                 threading.Thread(
@@ -1624,12 +1624,12 @@ class BluetoothBridge:
             old_mac = self.assignments.get(display)
             self.assignments[display] = None
             print(f"[BluetoothBridge] Removed assignment for {display} display")
-            
+
             # Restart input reading for the old device so it updates its assignment
             if old_mac and old_mac in self.connected_devices:
                 self._stop_input_reading(old_mac)
                 self._start_input_reading(old_mac)
-            
+
             self.publish_assignments_status()
             return
 
@@ -1770,7 +1770,7 @@ class BluetoothBridge:
             button_states = {}
             dpad_x_state = 0
             dpad_y_state = 0
-            
+
             # Track previous assignment to detect when device gets assigned
             was_assigned = False
 
@@ -1804,7 +1804,7 @@ class BluetoothBridge:
                 if not display:
                     was_assigned = False
                     continue  # Not assigned to any display
-                
+
                 # If we just got assigned, discard buffered events to avoid input dump
                 if not was_assigned:
                     print(f"[BluetoothBridge] Controller {mac} assigned to {display}, discarding {len(events)} buffered events")
@@ -2064,9 +2064,9 @@ class BluetoothBridge:
         print("[BluetoothBridge] Ensuring Bluetooth adapters are ready...")
         try:
             # Unblock Bluetooth via rfkill
-            subprocess.run(["rfkill", "unblock", "bluetooth"], capture_output=True, timeout=5)
+            subprocess.run(["sudo", "rfkill", "unblock", "bluetooth"], capture_output=True, timeout=5)
             time.sleep(0.5)
-            
+
             # Power on both adapters via hciconfig
             for adapter in ["hci0", "hci1"]:
                 result = subprocess.run(

@@ -187,7 +187,7 @@ class NetworkingBridge:
 driver=nl80211
 ssid={self.ap_status.ssid}
 hw_mode=g
-channel=1
+channel=11
 ieee80211n=1
 wmm_enabled=1
 ap_isolate=0

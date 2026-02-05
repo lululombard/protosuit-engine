@@ -269,6 +269,21 @@
     masked: yes
   ignore_errors: yes
 
+- name: Disable and mask system dnsmasq service (we manage it ourselves)
+  systemd:
+    name: dnsmasq
+    enabled: no
+    state: stopped
+    masked: yes
+  ignore_errors: yes
+
+- name: Disable ModemManager (interferes with Bluetooth pairing)
+  systemd:
+    name: ModemManager
+    enabled: no
+    state: stopped
+  ignore_errors: yes
+
 - name: Ensure NetworkManager is enabled and running
   systemd:
     name: NetworkManager
@@ -416,8 +431,13 @@
       # Allow protosuit user to restart Bluetooth service and manage adapters without password
       {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart bluetooth
       {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/hciconfig
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/sbin/rfkill
     mode: '0440'
     validate: 'visudo -cf %s'
+
+- name: Unblock Bluetooth via rfkill
+  command: rfkill unblock bluetooth
+  changed_when: false
 
 - name: Reload systemd daemon
   systemd:
