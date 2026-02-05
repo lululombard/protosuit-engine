@@ -160,6 +160,11 @@ class ConfigLoader:
         config_dict = self.config.get("networkingbridge", {})
         return self._parse_typed_config(config_dict, NetworkingConfig)
 
+    def get_esp32_config(self) -> ESP32Config:
+        """Get ESP32 bridge configuration"""
+        config_dict = self.config.get("esp32", {})
+        return self._parse_typed_config(config_dict, ESP32Config)
+
     def validate(self) -> bool:
         """
         Perform basic validation on config

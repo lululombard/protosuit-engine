@@ -54,6 +54,7 @@ The system is designed for **dual 720x720 displays** mounted on fursuit fins:
 - **Bluetooth Gamepad Support** - Pair Bluetooth controllers and assign one per display for independent control
 - **AirPlay & Spotify Connect** - Stream audio from Apple devices or Spotify app via shairport-sync and raspotify
 - **Wi-Fi Management** - Dual-mode networking with AP hotspot and client mode, NAT routing, and QR code sharing
+- **ESP32 Visor Control** - Temperature/humidity monitoring, fan control, and Teensy communication for LED visor
 - **Web Control Interface** - Browser-based control with live preview and performance monitoring
 - **MQTT Integration** - Remote control and automation from external devices
 
@@ -184,6 +185,7 @@ sudo systemctl status protosuit-web
 sudo systemctl status protosuit-bluetoothbridge
 sudo systemctl status protosuit-castbridge
 sudo systemctl status protosuit-networkingbridge
+sudo systemctl status protosuit-espbridge
 
 # View logs
 sudo journalctl -u protosuit-renderer -f
@@ -192,6 +194,7 @@ sudo journalctl -u protosuit-web -f
 sudo journalctl -u protosuit-bluetoothbridge -f
 sudo journalctl -u protosuit-castbridge -f
 sudo journalctl -u protosuit-networkingbridge -f
+sudo journalctl -u protosuit-espbridge -f
 
 # Restart services
 sudo systemctl restart protosuit-renderer
@@ -199,6 +202,7 @@ sudo systemctl restart protosuit-launcher
 sudo systemctl restart protosuit-bluetoothbridge
 sudo systemctl restart protosuit-castbridge
 sudo systemctl restart protosuit-networkingbridge
+sudo systemctl restart protosuit-espbridge
 ```
 
 ---
@@ -207,13 +211,14 @@ sudo systemctl restart protosuit-networkingbridge
 
 ### Components
 
-**Six independent services:**
+**Seven independent services:**
 - `protosuit-renderer` - OpenGL shader renderer (ModernGL + Pygame)
 - `protosuit-launcher` - Audio/video/executable launcher (mpv, ffplay, shell scripts)
 - `protosuit-web` - Flask web interface with live preview
 - `protosuit-bluetoothbridge` - Bluetooth gamepad manager and input forwarder
 - `protosuit-castbridge` - AirPlay and Spotify Connect manager (shairport-sync, raspotify)
 - `protosuit-networkingbridge` - Wi-Fi client/AP manager with NAT routing (hostapd, dnsmasq)
+- `protosuit-espbridge` - ESP32 serial bridge for visor sensors, fan control, and Teensy communication
 
 **Supporting services:**
 - `xserver` - X11 server for dual display management
@@ -639,6 +644,71 @@ mosquitto_sub -t "protogen/fins/networkingbridge/status/#" -v
 - AP mode uses the built-in Raspberry Pi Wi-Fi (wlan0) for stability
 - NAT routing allows AP clients to access the internet through the client connection
 - QR codes use the standard Wi-Fi QR format, scannable by most phone cameras
+
+---
+
+### ESPBridge Topics
+
+The espbridge service manages communication with an ESP32 mounted in the visor for temperature/humidity monitoring, fan control, and Teensy LED controller communication.
+
+**Commands (subscribe):**
+
+| Topic | Payload | Description |
+|-------|---------|-------------|
+| `protogen/visor/esp/set/fan` | `"50"` | Set fan speed (0-100%) |
+| `protogen/visor/teensy/menu/set` | `{"param":"bright","value":5}` | Set Teensy menu parameter |
+
+**Status (publish, retained):**
+
+| Topic | Content |
+|-------|---------|
+| `protogen/visor/esp/status/sensors` | `{"temp":25.5,"hum":60.2,"rpm":1200,"fan":50}` - Sensor readings |
+| `protogen/visor/esp/status/alive` | `true` or `false` - ESP32 connection status |
+| `protogen/visor/teensy/raw` | Raw messages from Teensy |
+
+**Teensy Menu Parameters:**
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `face` | 0-N | Face/animation selection |
+| `bright` | 0-10 | Main brightness |
+| `accentBright` | 0-10 | Accent brightness |
+| `microphone` | 0-1 | Microphone on/off |
+| `micLevel` | 0-10 | Microphone sensitivity |
+| `boopSensor` | 0-1 | Boop sensor on/off |
+| `spectrumMirror` | 0-1 | Spectrum analyzer mirroring |
+| `faceSize` | 0-10 | Face size |
+| `color` | 0-10 | Color selection |
+| `hueF` | 0-10 | Front hue |
+| `hueB` | 0-10 | Back hue |
+| `effect` | 0-10 | Post-processing effect |
+| `fanSpeed` | 0-10 | Fan speed (0-10 scale) |
+
+**Examples:**
+
+```bash
+# Set fan speed to 75%
+mosquitto_pub -t "protogen/visor/esp/set/fan" -m "75"
+
+# Set Teensy brightness to 8
+mosquitto_pub -t "protogen/visor/teensy/menu/set" \
+  -m '{"param":"bright","value":8}'
+
+# Enable microphone on Teensy
+mosquitto_pub -t "protogen/visor/teensy/menu/set" \
+  -m '{"param":"microphone","value":1}'
+
+# Monitor ESP32 sensor data
+mosquitto_sub -t "protogen/visor/esp/status/#" -v
+```
+
+**Hardware Setup:**
+
+- ESP32 connected via USB serial (`/dev/ttyUSB0` at 921600 baud)
+- DHT22 temperature/humidity sensor on GPIO 27
+- PWM fan control on GPIO 33, tachometer on GPIO 35
+- OLED display (SSD1306/SSD1315) on I2C (GPIO 21/22)
+- Teensy communication on GPIO 16 (RX) / GPIO 17 (TX)
 
 ---
 

@@ -9,3 +9,5 @@ mss==9.0.1
 Pillow==10.4.0
 evdev>=1.6.0
 qrcode[pil]>=7.4.0
+pyserial>=3.5
+platformio>=6.1

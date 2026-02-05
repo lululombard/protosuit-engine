@@ -77,6 +77,11 @@ bluetoothbridge:
     ABS_HAT0Y: "dpad_y" # D-pad Y axis
   dead_zone: 0.2        # Analog stick dead zone
 
+# ESP32 bridge configuration
+esp32:
+  serial_port: "/dev/ttyUSB0"
+  baud_rate: 921600
+
 # Cast configuration (AirPlay and Spotify Connect)
 cast:
   airplay:

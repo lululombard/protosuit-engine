@@ -24,6 +24,7 @@ COLORS = {
     "launcher": "\033[92m",  # Green
     "web": "\033[93m",  # Yellow
     "bluetoothbridge": "\033[95m",  # Magenta
+    "espbridge": "\033[96m",  # Cyan
     "reset": "\033[0m",
 }
 
@@ -63,6 +64,13 @@ def main():
         ),
         "bluetoothbridge": subprocess.Popen(
             [str(python_bin), str(project_root / "bluetoothbridge" / "bluetoothbridge.py")],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        ),
+        "espbridge": subprocess.Popen(
+            [str(python_bin), str(project_root / "espbridge" / "espbridge.py")],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

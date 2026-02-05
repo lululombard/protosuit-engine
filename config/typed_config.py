@@ -110,6 +110,14 @@ class AnimationConfig:
 
 
 @dataclass
+class ESP32Config:
+    """ESP32 bridge configuration"""
+
+    serial_port: str = "/dev/ttyUSB0"
+    baud_rate: int = 921600
+
+
+@dataclass
 class NetworkingInterfacesConfig:
     """Networking interface configuration"""
     
