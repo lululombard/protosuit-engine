@@ -160,12 +160,23 @@ class RingDingGame:
         self.target_arc_size = 0.0
         self.rotation_speed = ROTATION_SPEED
         self.state_timer = 0
+        self.was_in_target = False  # Track if marker was in target zone last frame
+        self.validated_this_pass = False  # Track if player validated during this target pass
+        self.pass_count = 0  # Track number of passes through target
+        self.feedback_text = None  # Current feedback text to show
+        self.feedback_color = None  # Color of feedback
+        self.feedback_alpha = 0  # Alpha for fade effect
 
     def start_game(self):
         self.state = GameState.PLAYING
         self.current_level = 1
         self.score = 0
         self.marker_angle = 0.0
+        self.was_in_target = False
+        self.validated_this_pass = False
+        self.pass_count = 0
+        self.feedback_text = None
+        self.feedback_alpha = 0
         self.set_new_objective()
         print(f"[RingDing] Starting game - Level {self.current_level}")
 
@@ -175,6 +186,9 @@ class RingDingGame:
         self.target_arc_size = INITIAL_TARGET_ARC - (INITIAL_TARGET_ARC - FINAL_TARGET_ARC) * progress
         max_angle = 360 - self.target_arc_size
         self.target_start_angle = np.random.uniform(0, max_angle)
+        self.was_in_target = False
+        self.validated_this_pass = False
+        self.pass_count = 0
         print(f"[RingDing] Level {self.current_level}: Target={self.target_start_angle:.1f}° size={self.target_arc_size:.1f}°")
 
     def check_hit(self):
@@ -200,6 +214,8 @@ class RingDingGame:
             return
 
         if self.check_hit():
+            self.validated_this_pass = True
+            self.score += 10
             if self.current_level >= NUM_LEVELS:
                 self.state = GameState.WIN
                 self.state_timer = 0
@@ -208,7 +224,9 @@ class RingDingGame:
             else:
                 self.sounds['ding'].play()
                 self.current_level += 1
-                self.score += 10
+                self.feedback_text = "+10"
+                self.feedback_color = COLOR_WIN
+                self.feedback_alpha = 255
                 self.set_new_objective()
                 print(f"[RingDing] Level {self.current_level}")
         else:
@@ -221,6 +239,28 @@ class RingDingGame:
         if self.state == GameState.PLAYING:
             self.marker_angle += self.rotation_speed
             self.marker_angle %= 360
+
+            # Check if marker is currently in target zone
+            in_target = self.check_hit()
+
+            # Detect when marker exits target zone
+            if self.was_in_target and not in_target:
+                self.pass_count += 1
+                # Skip first pass, don't penalize
+                if self.pass_count > 1 and not self.validated_this_pass:
+                    if self.score > 0:
+                        self.score -= 1
+                        self.feedback_text = "-1 missed loop"
+                        self.feedback_color = COLOR_LOSE
+                        self.feedback_alpha = 255
+                        print(f"[RingDing] Missed target! Score: {self.score}")
+                self.validated_this_pass = False  # Reset for next pass
+
+            self.was_in_target = in_target
+
+            # Fade out feedback text
+            if self.feedback_alpha > 0:
+                self.feedback_alpha = max(0, self.feedback_alpha - 5)
         elif self.state in [GameState.WIN, GameState.LOSE]:
             self.state_timer += 1
 
@@ -274,26 +314,39 @@ class RingDingGame:
             score_rect = score_text.get_rect(center=(center_x, center_y + 25))
             surface.blit(score_text, score_rect)
 
+            # Feedback text with fade
+            if self.feedback_text and self.feedback_alpha > 0:
+                feedback_surface = self.font_small.render(self.feedback_text, True, self.feedback_color)
+                feedback_surface.set_alpha(self.feedback_alpha)
+                feedback_rect = feedback_surface.get_rect(center=(center_x, center_y + 65))
+                surface.blit(feedback_surface, feedback_rect)
+
     def draw(self):
         self.screen.fill(COLOR_BG)
 
         if self.state == GameState.IDLE:
             title = self.font_large.render("RING DING", True, COLOR_TEXT)
-            start_text = self.font_small.render("Press A to start", True, COLOR_TEXT)
-            credit_text_1 = self.font_small.render("Ported by lululombard", True, COLOR_TEXT)
-            credit_text_2 = self.font_small.render("original ESP32 LED Game by", True, COLOR_TEXT)
-            credit_text_3 = self.font_small.render("Miggy and Dharsi", True, COLOR_TEXT)
+            rule_text_1 = self.font_small.render("20 levels - Press A when green hits red zone", True, COLOR_TEXT)
+            rule_text_2 = self.font_small.render("Press outside zone = Game Over | Let it loop = -1 pt", True, COLOR_TEXT)
+            start_text = self.font_medium.render("Press A to start", True, COLOR_TEXT)
+            credit_text_1 = self.font_small.render("Original ESP32 LED game by", True, COLOR_TEXT)
+            credit_text_2 = self.font_small.render("Miggy and Dharsi", True, COLOR_TEXT)
+            credit_text_3 = self.font_small.render("Ported to Pygame by lululombard", True, COLOR_TEXT)
 
             for x_offset in [self.half_width // 2, self.half_width + self.half_width // 2]:
-                title_rect = title.get_rect(center=(x_offset, self.height // 2 - 50))
+                title_rect = title.get_rect(center=(x_offset, self.height // 2 - 180))
                 self.screen.blit(title, title_rect)
-                start_rect = start_text.get_rect(center=(x_offset, self.height // 2 + 50))
+                rule_rect_1 = rule_text_1.get_rect(center=(x_offset, self.height // 2 - 100))
+                self.screen.blit(rule_text_1, rule_rect_1)
+                rule_rect_2 = rule_text_2.get_rect(center=(x_offset, self.height // 2 - 65))
+                self.screen.blit(rule_text_2, rule_rect_2)
+                start_rect = start_text.get_rect(center=(x_offset, self.height // 2 + 20))
                 self.screen.blit(start_text, start_rect)
-                credit_rect_1 = credit_text_1.get_rect(center=(x_offset, self.height // 2 + 140))
+                credit_rect_1 = credit_text_1.get_rect(center=(x_offset, self.height // 2 + 160))
                 self.screen.blit(credit_text_1, credit_rect_1)
-                credit_rect_2 = credit_text_2.get_rect(center=(x_offset, self.height // 2 + 200))
+                credit_rect_2 = credit_text_2.get_rect(center=(x_offset, self.height // 2 + 195))
                 self.screen.blit(credit_text_2, credit_rect_2)
-                credit_rect_3 = credit_text_3.get_rect(center=(x_offset, self.height // 2 + 250))
+                credit_rect_3 = credit_text_3.get_rect(center=(x_offset, self.height // 2 + 230))
                 self.screen.blit(credit_text_3, credit_rect_3)
 
         elif self.state == GameState.PLAYING:
@@ -303,24 +356,34 @@ class RingDingGame:
         elif self.state == GameState.WIN:
             self.screen.fill(COLOR_WIN)
             win_text = self.font_large.render("YOU WIN!", True, COLOR_BG)
+            max_score = NUM_LEVELS * 10
+            score_text = self.font_medium.render(f"Score: {self.score} / {max_score}", True, COLOR_BG)
             restart_text = self.font_small.render("Press A to play again", True, COLOR_BG)
+            menu_text = self.font_small.render("Press B for menu", True, COLOR_BG)
 
             for x_offset in [self.half_width // 2, self.half_width + self.half_width // 2]:
-                win_rect = win_text.get_rect(center=(x_offset, self.height // 2 - 50))
+                win_rect = win_text.get_rect(center=(x_offset, self.height // 2 - 70))
                 self.screen.blit(win_text, win_rect)
-                restart_rect = restart_text.get_rect(center=(x_offset, self.height // 2 + 50))
+                score_rect = score_text.get_rect(center=(x_offset, self.height // 2))
+                self.screen.blit(score_text, score_rect)
+                restart_rect = restart_text.get_rect(center=(x_offset, self.height // 2 + 70))
                 self.screen.blit(restart_text, restart_rect)
+                menu_rect = menu_text.get_rect(center=(x_offset, self.height // 2 + 110))
+                self.screen.blit(menu_text, menu_rect)
 
         elif self.state == GameState.LOSE:
             self.screen.fill(COLOR_LOSE)
             lose_text = self.font_large.render("GAME OVER", True, COLOR_BG)
             restart_text = self.font_small.render("Press A to try again", True, COLOR_BG)
+            menu_text = self.font_small.render("Press B for menu", True, COLOR_BG)
 
             for x_offset in [self.half_width // 2, self.half_width + self.half_width // 2]:
                 lose_rect = lose_text.get_rect(center=(x_offset, self.height // 2 - 50))
                 self.screen.blit(lose_text, lose_rect)
                 restart_rect = restart_text.get_rect(center=(x_offset, self.height // 2 + 50))
                 self.screen.blit(restart_text, restart_rect)
+                menu_rect = menu_text.get_rect(center=(x_offset, self.height // 2 + 90))
+                self.screen.blit(menu_text, menu_rect)
 
         pygame.display.flip()
 
@@ -341,7 +404,7 @@ class RingDingGame:
                     if event.key == pygame.K_a:
                         self.handle_hit()
                     elif event.key == pygame.K_b:
-                        if self.state == GameState.PLAYING:
+                        if self.state in [GameState.PLAYING, GameState.WIN, GameState.LOSE]:
                             print("[RingDing] Returning to main menu...")
                             self.state = GameState.IDLE
                     elif event.key == pygame.K_ESCAPE:
