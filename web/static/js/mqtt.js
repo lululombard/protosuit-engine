@@ -35,6 +35,13 @@ function connectMQTT() {
             }
         });
 
+        // Subscribe to visor/ESP32 topics
+        mqttClient.subscribe('protogen/visor/#', (err) => {
+            if (!err) {
+                logMessage('✓ Subscribed to protogen/visor/#');
+            }
+        });
+
         // Request current status from renderer
         // (No request needed - renderer publishes retained status on startup)
     });
@@ -65,6 +72,15 @@ function connectMQTT() {
             return;
         } else if (topic === 'protogen/fins/launcher/status/volume') {
             handleLauncherVolumeStatus(payload);
+            return;
+        } else if (topic === 'protogen/visor/esp/status/sensors') {
+            handleEspSensorStatus(payload);
+            return;
+        } else if (topic === 'protogen/visor/esp/status/alive') {
+            handleEspAliveStatus(payload);
+            return;
+        } else if (topic === 'protogen/visor/esp/status/fancurve') {
+            handleFanCurveStatus(payload);
             return;
         }
 

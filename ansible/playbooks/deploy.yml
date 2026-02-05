@@ -28,6 +28,7 @@
         - protosuit-web
         - protosuit-bluetoothbridge
         - protosuit-networkingbridge
+        - protosuit-espbridge
 
     - name: Test MQTT connection
       shell: |
@@ -47,6 +48,7 @@
           - Protosuit Web: Running
           - Protosuit Bluetooth Bridge: Running
           - Protosuit Networking Bridge: Running
+          - Protosuit ESP Bridge: Running
 
           Configuration:
           - Project Directory: {{ project_dir }}

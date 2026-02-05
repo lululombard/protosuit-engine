@@ -140,6 +140,19 @@
     mode: "0644"
   notify: reload systemd
 
+- name: Create protosuit-espbridge systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-espbridge.service.j2"
+    dest: /etc/systemd/system/protosuit-espbridge.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Add user to dialout group for ESP32 serial access
+  user:
+    name: "{{ pi_user }}"
+    groups: dialout
+    append: yes
+
 # Cast Bridge dependencies (AirPlay + Spotify Connect)
 - name: Install shairport-sync for AirPlay support
   apt:
@@ -490,6 +503,11 @@
     name: protosuit-castbridge
     enabled: yes
 
+- name: Enable protosuit-espbridge service
+  systemd:
+    name: protosuit-espbridge
+    enabled: yes
+
 - name: Start all protosuit services
   systemd:
     name: "{{ item }}"
@@ -501,3 +519,4 @@
     - protosuit-bluetoothbridge
     - protosuit-networkingbridge
     - protosuit-castbridge
+    - protosuit-espbridge
