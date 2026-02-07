@@ -11,7 +11,7 @@ import bisect
 import threading
 from urllib.request import urlopen, Request
 from urllib.parse import quote
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 
 class LyricsService:
@@ -23,6 +23,8 @@ class LyricsService:
         # Per-service playback state (updated from MQTT)
         self._spotify = {"playing": False, "title": "", "artist": "", "position_ms": 0, "duration_ms": 0}
         self._airplay = {"playing": False, "title": "", "artist": "", "position_ms": 0, "duration_ms": 0}
+        self._spotify_update_time = 0.0  # time.monotonic() of last position update
+        self._airplay_update_time = 0.0
 
         # Per-service lyrics and the track key they correspond to
         self._spotify_lyrics = None
@@ -94,6 +96,10 @@ class LyricsService:
         state["artist"] = data.get("artist", "")
         state["position_ms"] = data.get("position_ms", 0)
         state["duration_ms"] = data.get("duration_ms", 0)
+        if service == "spotify":
+            self._spotify_update_time = time.monotonic()
+        else:
+            self._airplay_update_time = time.monotonic()
 
         # Check if track changed — skip placeholder titles
         new_key = (state["artist"].lower().strip(), state["title"].lower().strip())
@@ -111,10 +117,16 @@ class LyricsService:
 
         # Only fetch if this is a new track AND we're not already fetching it
         if new_key != current_key and new_key != fetching:
+            # Clear old lyrics immediately and publish loading state
             if service == "spotify":
+                self._spotify_lyrics = None
                 self._spotify_fetching = new_key
             else:
+                self._airplay_lyrics = None
                 self._airplay_fetching = new_key
+            self._last_line_idx = -99
+            self._last_had_lyrics = False
+            self._publish_loading(service)
             threading.Thread(
                 target=self._fetch_and_assign,
                 args=(service, state["artist"], state["title"], new_key),
@@ -122,7 +134,20 @@ class LyricsService:
             ).start()
 
     def _fetch_and_assign(self, service, artist, title, track_key):
-        lyrics = self._fetch_lyrics(artist, title)
+        cache_key = (artist.lower().strip(), title.lower().strip())
+        lyrics = None
+        for attempt in range(3):
+            lyrics = self._fetch_lyrics(artist, title)
+            if lyrics is not None:
+                break
+            # If it's cached as not-found (404), don't retry
+            _, cached = self._cache_get(cache_key)
+            if cached:
+                break
+            if attempt < 2:
+                print(f"[Lyrics] Retry {attempt + 1}/2 for {artist} - {title}")
+                time.sleep(2)
+
         if service == "spotify":
             self._spotify_lyrics = lyrics
             self._spotify_track_key = track_key
@@ -132,7 +157,6 @@ class LyricsService:
             self._airplay_track_key = track_key
             self._airplay_fetching = ("", "")
         # Reset ticker state to force re-evaluation
-        # Use a sentinel that won't match any real index (-1, 0, 1...)
         self._last_line_idx = -99
         self._last_had_lyrics = False
         self._publish_full_lyrics()
@@ -168,26 +192,33 @@ class LyricsService:
         try:
             req = Request(url, headers={"User-Agent": "CastBridge/1.0"})
             with urlopen(req, timeout=5) as resp:
-                if resp.status == 200:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    synced = self._parse_lrc(data.get("syncedLyrics", ""))
-                    lyrics_data = {
-                        "track_name": data.get("trackName", title),
-                        "artist_name": data.get("artistName", artist),
-                        "synced": synced,
-                        "timestamps": [ts for ts, _ in synced],
-                        "plain": data.get("plainLyrics", ""),
-                        "instrumental": data.get("instrumental", False),
-                        "duration": data.get("duration", 0.0),
-                    }
-                    self._cache_put(cache_key, lyrics_data)
-                    print(f"[Lyrics] Fetched: {artist} - {title} ({len(synced)} synced lines)")
-                    return lyrics_data
+                data = json.loads(resp.read().decode("utf-8"))
+                synced = self._parse_lrc(data.get("syncedLyrics", ""))
+                lyrics_data = {
+                    "track_name": data.get("trackName", title),
+                    "artist_name": data.get("artistName", artist),
+                    "synced": synced,
+                    "timestamps": [ts for ts, _ in synced],
+                    "plain": data.get("plainLyrics", ""),
+                    "instrumental": data.get("instrumental", False),
+                    "duration": data.get("duration", 0.0),
+                }
+                self._cache_put(cache_key, lyrics_data)
+                print(f"[Lyrics] Fetched: {artist} - {title} ({len(synced)} synced lines)")
+                return lyrics_data
+        except HTTPError as e:
+            if e.code == 404:
+                # Track not found — cache so we don't retry
+                self._cache_put(cache_key, None)
+                print(f"[Lyrics] Not found: {artist} - {title}")
+            else:
+                # Server error — don't cache, allow retry
+                print(f"[Lyrics] HTTP {e.code} for {artist} - {title}")
+            return None
         except Exception as e:
-            print(f"[Lyrics] Fetch failed for {artist} - {title}: {e}")
-
-        self._cache_put(cache_key, None)
-        return None
+            # Network error — don't cache, allow retry
+            print(f"[Lyrics] Fetch error for {artist} - {title}: {e}")
+            return None
 
     # ======== LRC Parsing ========
 
@@ -227,7 +258,16 @@ class LyricsService:
 
     def _get_position(self, service):
         state = self._spotify if service == "spotify" else self._airplay
-        return state["position_ms"]
+        pos = state["position_ms"]
+        if state["playing"]:
+            update_time = self._spotify_update_time if service == "spotify" else self._airplay_update_time
+            if update_time > 0:
+                elapsed_ms = (time.monotonic() - update_time) * 1000
+                pos = int(pos + elapsed_ms)
+                duration = state["duration_ms"]
+                if duration > 0:
+                    pos = min(pos, duration)
+        return pos
 
     def _find_current_line(self, timestamps, position_ms):
         if not timestamps:
@@ -344,10 +384,15 @@ class LyricsService:
             retain=True,
         )
 
+    def _is_fetching(self, service):
+        fetching = self._spotify_fetching if service == "spotify" else self._airplay_fetching
+        return fetching != ("", "")
+
     def _publish_lyrics_status(self, service, position_ms, lyrics):
         payload = {
             "source": service,
             "playing": True,
+            "loading": self._is_fetching(service),
             "current_line": "",
             "next_line": "",
             "current_line_ts": 0,
@@ -362,6 +407,32 @@ class LyricsService:
             json.dumps(payload),
             retain=True,
         )
+
+    def _publish_loading(self, service):
+        """Publish loading state — clears old lyrics and signals fetch in progress"""
+        loading = {
+            "source": service,
+            "playing": True,
+            "loading": True,
+            "current_line": "",
+            "next_line": "",
+            "current_line_ts": 0,
+            "next_line_ts": 0,
+            "line_index": -1,
+            "total_lines": 0,
+            "position_ms": 0,
+        }
+        self.mqtt.publish("protogen/fins/castbridge/status/lyrics", json.dumps(loading), retain=True)
+        loading_full = {
+            "source": service,
+            "loading": True,
+            "track_name": "",
+            "artist_name": "",
+            "instrumental": False,
+            "synced_lines": [],
+            "plain": "",
+        }
+        self.mqtt.publish("protogen/fins/castbridge/status/lyrics/full", json.dumps(loading_full), retain=True)
 
     def _publish_clear(self):
         self._last_line_idx = -2

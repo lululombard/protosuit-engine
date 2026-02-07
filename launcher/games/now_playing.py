@@ -54,7 +54,7 @@ class NowPlayingApp:
         self._airplay = {"playing": False, "title": "", "artist": "", "album": "", "position_ms": 0, "duration_ms": 0}
 
         # Lyrics state
-        self._lyrics = {"source": "", "playing": False, "current_line": "", "next_line": "", "line_index": -1, "total_lines": 0}
+        self._lyrics = {"source": "", "playing": False, "loading": False, "current_line": "", "next_line": "", "line_index": -1, "total_lines": 0}
         self._lyrics_full = []  # [{ts, text}, ...]
 
         # Cover art surfaces
@@ -99,6 +99,7 @@ class NowPlayingApp:
                 elif topic == "protogen/fins/castbridge/status/lyrics":
                     data = json.loads(msg.payload)
                     self._lyrics.update({k: data.get(k, v) for k, v in self._lyrics.items()})
+                    self._lyrics["loading"] = data.get("loading", False)
                 elif topic == "protogen/fins/castbridge/status/lyrics/full":
                     data = json.loads(msg.payload)
                     self._lyrics_full = data.get("synced_lines", [])
@@ -230,6 +231,13 @@ class NowPlayingApp:
 
         # Lyrics
         y += 10
+
+        # Show loading indicator while fetching lyrics
+        if self._lyrics.get("loading"):
+            loading_surf = self.font_lyric.render("Loading lyrics...", True, COLOR_DIM)
+            self.screen.blit(loading_surf, loading_surf.get_rect(center=(cx, y + 45)))
+            return
+
         line_idx = self._lyrics.get("line_index", -1)
         current_line = self._lyrics.get("current_line", "")
         next_line = self._lyrics.get("next_line", "")

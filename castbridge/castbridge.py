@@ -79,6 +79,7 @@ class CastBridge:
             "prgr_start": 0,
             "prgr_end": 0,
         }
+        self._airplay_last_phbt_frame = 0  # For frame-delta tracking without prgr
 
         # Lyrics service
         self._lyrics = LyricsService()
@@ -104,6 +105,9 @@ class CastBridge:
         print("[CastBridge] Starting...")
         self.running = True
 
+        # Recover AirPlay state from retained MQTT before subscribing to shairport
+        self._recover_airplay_state()
+
         # Subscribe to MQTT topics
         self._subscribe_mqtt()
 
@@ -116,6 +120,34 @@ class CastBridge:
             self._lyrics.start(self.mqtt, self.config)
 
         print("[CastBridge] Started successfully")
+
+    def _recover_airplay_state(self):
+        """Read our own retained playback message to recover state after restart"""
+        recovered = threading.Event()
+        topic = "protogen/fins/castbridge/status/airplay/playback"
+
+        def on_msg(client, userdata, msg):
+            try:
+                data = json.loads(msg.payload)
+                if data.get("playing"):
+                    self._airplay_playback["playing"] = True
+                    self._airplay_playback["title"] = data.get("title", "")
+                    self._airplay_playback["artist"] = data.get("artist", "")
+                    self._airplay_playback["album"] = data.get("album", "")
+                    self._airplay_playback["genre"] = data.get("genre", "")
+                    self._airplay_playback["duration_ms"] = data.get("duration_ms", 0)
+                    self._airplay_playback["position_ms"] = data.get("position_ms", 0)
+                    print(f"[CastBridge] Recovered AirPlay state: {data.get('title', '')} - {data.get('artist', '')}")
+            except Exception as e:
+                print(f"[CastBridge] Failed to recover AirPlay state: {e}")
+            recovered.set()
+
+        self.mqtt.message_callback_add(topic, on_msg)
+        self.mqtt.subscribe(topic)
+        # Wait briefly for the retained message (or timeout if none)
+        recovered.wait(timeout=1.0)
+        self.mqtt.unsubscribe(topic)
+        self.mqtt.message_callback_remove(topic)
 
     def stop(self):
         """Stop the cast bridge"""
@@ -699,25 +731,39 @@ sessioncontrol = {{
                 self._airplay_playback["duration_ms"] = int((prgr_end - prgr_start) / 44100 * 1000)
                 # Set start_frame for phbt-based tracking going forward
                 self._airplay_playback["start_frame"] = prgr_current
+                self._airplay_last_phbt_frame = 0  # Reset delta tracking, using absolute now
                 self._publish_airplay_playback()
         except Exception as e:
             print(f"[CastBridge] Error parsing prgr: {e}")
 
     def _handle_airplay_phbt(self, client, userdata, msg):
         """Handle ssnc/phbt (frame position / monotonic time) - fires every second"""
-        if not self._airplay_playback["playing"]:
-            return
         try:
             payload = msg.payload.decode("utf-8", errors="replace")
             parts = payload.split("/")
-            if len(parts) == 2:
-                frame = int(parts[0])
-                prgr_start = self._airplay_playback.get("prgr_start", 0)
-                if not prgr_start:
-                    # No prgr reference yet (e.g. just resumed) — skip until prgr arrives
-                    return
-                self._airplay_playback["position_ms"] = int((frame - prgr_start) / 44100 * 1000)
+            if len(parts) != 2:
+                return
+            frame = int(parts[0])
+
+            # phbt only fires during active playback — detect playback after restart
+            if not self._airplay_playback["playing"]:
+                self._airplay_playback["playing"] = True
+                self._airplay_last_phbt_frame = frame
                 self._publish_airplay_playback()
+                return
+
+            prgr_start = self._airplay_playback.get("prgr_start", 0)
+            if prgr_start:
+                # Normal path: absolute position from prgr reference
+                self._airplay_playback["position_ms"] = int((frame - prgr_start) / 44100 * 1000)
+            elif self._airplay_last_phbt_frame:
+                # No prgr reference (e.g. after restart) — use frame delta
+                delta_ms = int((frame - self._airplay_last_phbt_frame) / 44100 * 1000)
+                if 0 < delta_ms < 5000:  # Sanity: ignore jumps > 5s
+                    self._airplay_playback["position_ms"] += delta_ms
+
+            self._airplay_last_phbt_frame = frame
+            self._publish_airplay_playback()
         except Exception as e:
             print(f"[CastBridge] Error parsing phbt: {e}")
 
