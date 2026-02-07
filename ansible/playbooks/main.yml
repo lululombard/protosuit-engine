@@ -231,8 +231,10 @@
       User={{ pi_user }}
       Group={{ pi_user }}
       DynamicUser=no
+      ProtectHome=no
       Environment=XDG_RUNTIME_DIR=/run/user/1000
       Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+      Environment=LIBRESPOT_VERBOSE="true"
     mode: '0644'
   notify: reload systemd
 

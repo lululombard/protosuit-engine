@@ -6,6 +6,8 @@ let castIsConnected = false;
 // State
 let airplayStatus = { enabled: false, device_name: 'Protosuit', password: '', running: false };
 let spotifyStatus = { enabled: false, device_name: 'Protosuit', username: '', password: '', running: false };
+let airplayPlayback = { playing: false, title: '', artist: '', album: '', duration_ms: 0, position_ms: 0 };
+let spotifyPlayback = { playing: false, title: '', artist: '', cover_url: '', track_id: '', duration_ms: 0, position_ms: 0 };
 
 
 // Initialize on page load
@@ -31,14 +33,22 @@ function connectToMQTT() {
         castIsConnected = true;
         updateStatus('Connected', true);
 
-        // Subscribe to status topics
+        // Subscribe to status and playback topics
         castMqttClient.subscribe('protogen/fins/castbridge/status/airplay');
         castMqttClient.subscribe('protogen/fins/castbridge/status/spotify');
+        castMqttClient.subscribe('protogen/fins/castbridge/status/airplay/playback');
+        castMqttClient.subscribe('protogen/fins/castbridge/status/spotify/playback');
+        castMqttClient.subscribe('protogen/fins/castbridge/status/airplay/playback/cover');
 
         console.log('[Cast] Connected to MQTT');
     });
 
     castMqttClient.on('message', (topic, message) => {
+        // Cover art is raw binary — handle before toString
+        if (topic === 'protogen/fins/castbridge/status/airplay/playback/cover') {
+            handleAirPlayCover(message);
+            return;
+        }
         handleMQTTMessage(topic, message.toString());
     });
 
@@ -67,6 +77,14 @@ function handleMQTTMessage(topic, payload) {
         else if (topic === 'protogen/fins/castbridge/status/spotify') {
             spotifyStatus = JSON.parse(payload);
             updateSpotifyUI();
+        }
+        else if (topic === 'protogen/fins/castbridge/status/airplay/playback') {
+            airplayPlayback = JSON.parse(payload);
+            updateAirPlayPlaybackUI();
+        }
+        else if (topic === 'protogen/fins/castbridge/status/spotify/playback') {
+            spotifyPlayback = JSON.parse(payload);
+            updateSpotifyPlaybackUI();
         }
     } catch (e) {
         console.error('[Cast] Error parsing MQTT message:', e);
@@ -233,6 +251,89 @@ function updateSpotifyUI() {
     if (deviceDisplay) {
         deviceDisplay.textContent = spotifyStatus.device_name || 'Protosuit';
     }
+}
+
+// ========== Playback UI ==========
+
+function formatTime(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${min}:${sec.toString().padStart(2, '0')}`;
+}
+
+let airplayCoverUrl = null;
+
+function handleAirPlayCover(data) {
+    // Revoke previous blob URL to avoid memory leaks
+    if (airplayCoverUrl) URL.revokeObjectURL(airplayCoverUrl);
+
+    if (!data || data.length === 0) {
+        airplayCoverUrl = null;
+    } else {
+        const blob = new Blob([data], { type: 'image/jpeg' });
+        airplayCoverUrl = URL.createObjectURL(blob);
+    }
+
+    // Update cover img if now-playing is visible
+    const coverImg = document.getElementById('airplay-cover-art');
+    if (airplayCoverUrl) {
+        coverImg.src = airplayCoverUrl;
+        coverImg.style.display = '';
+    } else {
+        coverImg.style.display = 'none';
+    }
+}
+
+function updateAirPlayPlaybackUI() {
+    const section = document.getElementById('airplay-now-playing');
+    const hasTrack = airplayPlayback.playing || airplayPlayback.title;
+
+    section.style.display = hasTrack ? '' : 'none';
+    if (!hasTrack) return;
+
+    document.getElementById('airplay-track-title').textContent = airplayPlayback.title || '—';
+    document.getElementById('airplay-track-artist').textContent = airplayPlayback.artist || '—';
+    document.getElementById('airplay-track-album').textContent = airplayPlayback.album || '';
+
+    const coverImg = document.getElementById('airplay-cover-art');
+    if (airplayCoverUrl) {
+        coverImg.src = airplayCoverUrl;
+        coverImg.style.display = '';
+    } else {
+        coverImg.style.display = 'none';
+    }
+
+    const progress = airplayPlayback.duration_ms > 0
+        ? (airplayPlayback.position_ms / airplayPlayback.duration_ms) * 100 : 0;
+    document.getElementById('airplay-progress-fill').style.width = `${progress}%`;
+    document.getElementById('airplay-time-current').textContent = formatTime(airplayPlayback.position_ms);
+    document.getElementById('airplay-time-total').textContent = formatTime(airplayPlayback.duration_ms);
+}
+
+function updateSpotifyPlaybackUI() {
+    const section = document.getElementById('spotify-now-playing');
+    const hasTrack = spotifyPlayback.playing || spotifyPlayback.title;
+
+    section.style.display = hasTrack ? '' : 'none';
+    if (!hasTrack) return;
+
+    document.getElementById('spotify-track-title').textContent = spotifyPlayback.title || '—';
+    document.getElementById('spotify-track-artist').textContent = spotifyPlayback.artist || '—';
+
+    const coverImg = document.getElementById('spotify-cover-art');
+    if (spotifyPlayback.cover_url) {
+        coverImg.src = spotifyPlayback.cover_url;
+        coverImg.style.display = '';
+    } else {
+        coverImg.style.display = 'none';
+    }
+
+    const progress = spotifyPlayback.duration_ms > 0
+        ? (spotifyPlayback.position_ms / spotifyPlayback.duration_ms) * 100 : 0;
+    document.getElementById('spotify-progress-fill').style.width = `${progress}%`;
+    document.getElementById('spotify-time-current').textContent = formatTime(spotifyPlayback.position_ms);
+    document.getElementById('spotify-time-total').textContent = formatTime(spotifyPlayback.duration_ms);
 }
 
 // ========== Utility Functions ==========
