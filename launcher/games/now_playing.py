@@ -62,6 +62,10 @@ class NowPlayingApp:
         self._spotify_cover = None  # pygame.Surface
         self._spotify_cover_url = ""  # currently loaded URL
 
+        # Blurred background surfaces (generated from cover art)
+        self._airplay_bg = None
+        self._spotify_bg = None
+
         # MQTT
         self._mqtt = None
         self._connect_mqtt()
@@ -111,16 +115,33 @@ class NowPlayingApp:
         self._mqtt.connect("localhost", 1883, 60)
         self._mqtt.loop_start()
 
+    def _make_bg(self, cover):
+        """Create a blurred, darkened background from cover art (Apple Music style)"""
+        if cover is None:
+            return None
+        # Scale down to tiny size for extreme blur, then back up
+        tiny = pygame.transform.smoothscale(cover, (6, 6))
+        bg = pygame.transform.smoothscale(tiny, (self.half_width, self.height))
+        # Darken so text remains readable
+        dark = pygame.Surface((self.half_width, self.height))
+        dark.fill((0, 0, 0))
+        dark.set_alpha(140)
+        bg.blit(dark, (0, 0))
+        return bg
+
     def _handle_airplay_cover(self, data):
         if not data or len(data) == 0:
             self._airplay_cover = None
+            self._airplay_bg = None
             return
         try:
             img = pygame.image.load(io.BytesIO(data))
             self._airplay_cover = pygame.transform.smoothscale(img, (ART_SIZE, ART_SIZE))
+            self._airplay_bg = self._make_bg(self._airplay_cover)
         except Exception as e:
             print(f"[NowPlaying] Failed to load AirPlay cover: {e}")
             self._airplay_cover = None
+            self._airplay_bg = None
 
     def _fetch_spotify_cover(self, url):
         try:
@@ -129,6 +150,7 @@ class NowPlayingApp:
                 data = resp.read()
             img = pygame.image.load(io.BytesIO(data))
             self._spotify_cover = pygame.transform.smoothscale(img, (ART_SIZE, ART_SIZE))
+            self._spotify_bg = self._make_bg(self._spotify_cover)
         except Exception as e:
             print(f"[NowPlaying] Failed to load Spotify cover: {e}")
 
@@ -277,6 +299,17 @@ class NowPlayingApp:
 
     def draw(self):
         self.screen.fill(COLOR_BG)
+
+        # Draw blurred album art background
+        state, cover = self._get_active()
+        bg = None
+        if state is self._spotify:
+            bg = self._spotify_bg
+        elif state is self._airplay:
+            bg = self._airplay_bg
+        if bg:
+            self.screen.blit(bg, (0, 0))
+            self.screen.blit(bg, (self.half_width, 0))
 
         left_cx = self.half_width // 2
         right_cx = self.half_width + self.half_width // 2
