@@ -132,7 +132,8 @@ class LyricsService:
             self._airplay_track_key = track_key
             self._airplay_fetching = ("", "")
         # Reset ticker state to force re-evaluation
-        self._last_line_idx = -1
+        # Use a sentinel that won't match any real index (-1, 0, 1...)
+        self._last_line_idx = -99
         self._last_had_lyrics = False
         self._publish_full_lyrics()
 
@@ -254,17 +255,15 @@ class LyricsService:
                 new_key = (service, state["artist"], state["title"])
                 if new_key != self._last_active_key:
                     self._last_active_key = new_key
-                    self._last_line_idx = -1
+                    self._last_line_idx = -99
                     self._last_had_lyrics = False
-                    self._publish_full_lyrics()
 
                 has_lyrics = lyrics is not None and bool(lyrics.get("synced"))
 
-                # If lyrics just became available (fetch completed), re-publish full
+                # If lyrics just became available (fetch completed), reset line index
                 if has_lyrics and not self._last_had_lyrics:
                     self._last_had_lyrics = True
-                    self._last_line_idx = -1
-                    self._publish_full_lyrics()
+                    self._last_line_idx = -99
 
                 if not has_lyrics:
                     self._last_had_lyrics = False
