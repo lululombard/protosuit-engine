@@ -16,6 +16,10 @@ from typing import Dict, Optional
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 import paho.mqtt.client as mqtt
+try:
+    from castbridge.lyrics import LyricsService
+except ImportError:
+    from lyrics import LyricsService
 
 
 @dataclass
@@ -76,6 +80,9 @@ class CastBridge:
             "prgr_end": 0,
         }
 
+        # Lyrics service
+        self._lyrics = LyricsService()
+
         # Load config from file
         self._load_config()
 
@@ -103,12 +110,18 @@ class CastBridge:
         # Start polling loop
         threading.Thread(target=self._poll_loop, daemon=True).start()
 
+        # Start lyrics service
+        lyrics_config = self.config.get('cast', {}).get('lyrics', {})
+        if lyrics_config.get('enabled', True):
+            self._lyrics.start(self.mqtt, self.config)
+
         print("[CastBridge] Started successfully")
 
     def stop(self):
         """Stop the cast bridge"""
         print("[CastBridge] Stopping...")
         self.running = False
+        self._lyrics.stop()
 
     # ======== Polling Loop ========
 

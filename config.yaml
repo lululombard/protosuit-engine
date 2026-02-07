@@ -93,6 +93,9 @@ cast:
     device_name: "Protosuit"
     username: ""  # Optional Spotify username (for premium features)
     password: ""  # Optional Spotify password
+  lyrics:
+    enabled: true
+    priority: ["airplay", "spotify"]  # Which service takes priority when both are playing
 
 animations:
   # Base animations (persistent, run indefinitely)
