@@ -25,7 +25,8 @@ COLOR_ACCENT = (255, 255, 255)
 COLOR_BAR_BG = (40, 40, 40)
 COLOR_BAR_FILL = (255, 255, 255)
 
-ART_SIZE = 250
+ART_SIZE = 450
+ART_BORDER_RADIUS = 450
 
 # Arc layout for circular displays
 PROGRESS_ARC_SPAN = math.radians(270)  # arc around the display
@@ -33,9 +34,10 @@ PROGRESS_ARC_WIDTH = 16
 PROGRESS_ARC_RESOLUTION = 16
 
 # Lyric carousel layout
-LYRIC_ARC_RADIUS = 280
+LYRIC_ARC_RADIUS = 320
 LYRIC_ARC_MAX_ANGLE = math.radians(100)
 LYRIC_ANIM_DURATION = 0.3
+LYRICS_SIDE_SCALE = 0.8
 
 DEBUG = os.environ.get("DEBUG", "0") == "1"
 
@@ -160,6 +162,16 @@ class NowPlayingApp:
         self._mqtt.connect("localhost", 1883, 60)
         self._mqtt.loop_start()
 
+    @staticmethod
+    def _round_corners(surface, radius):
+        """Return a copy of surface with rounded corners (SRCALPHA)."""
+        w, h = surface.get_size()
+        rounded = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(rounded, (255, 255, 255, 255), (0, 0, w, h), border_radius=radius)
+        result = surface.copy().convert_alpha()
+        result.blit(rounded, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        return result
+
     def _make_bg(self, cover):
         """Create a blurred, darkened background from cover art (Apple Music style)"""
         if cover is None:
@@ -175,16 +187,17 @@ class NowPlayingApp:
         return bg
 
     def _draw_arc_text(self, text, font, color, cx, cy, radius, max_angle=math.radians(120),
-                       hq_font=None):
-        """Draw text along a circular arc centered at the top of the circle.
+                       hq_font=None, angle_offset=0):
+        """Draw text along a circular arc centered at angle_offset.
         Convention: 0 = top (12 o'clock), angle increases clockwise.
+        angle_offset: radians to shift the center of the text (0=top).
         Caches the rendered result — rotozoom only runs when text changes."""
         if not text:
             return
 
         scale = 2 if hq_font else 1
         render_font = hq_font if hq_font else font
-        cache_key = (text, id(render_font), color, radius, max_angle)
+        cache_key = (text, id(render_font), color, radius, max_angle, angle_offset)
 
         if cache_key not in self._arc_text_cache:
             # Render each character (at HQ resolution if available)
@@ -221,7 +234,7 @@ class NowPlayingApp:
             tmp = pygame.Surface((cache_size, cache_size), pygame.SRCALPHA)
             cache_c = cache_size // 2
 
-            angle = -span / 2
+            angle = angle_offset - span / 2
             for surf in char_surfs:
                 char_span = (surf.get_width() / scale) / radius
                 char_center = angle + char_span / 2
@@ -248,18 +261,23 @@ class NowPlayingApp:
         cached, ox, oy = self._arc_text_cache[cache_key]
         self.screen.blit(cached, (cx + ox, cy + oy))
 
-    def _render_lyric_arc(self, text):
+    def _render_lyric_arc(self, text, radius=None, font_scale=1.0):
         """Render lyric text curved at the bottom of the circle (inner convention).
+        radius: arc radius (default LYRIC_ARC_RADIUS).
+        font_scale: text size multiplier (< 1.0 for smaller side text).
         Returns (srcalpha_surface, center_dx, center_dy) or None."""
         if not text:
             return None
-        if text in self._lyric_arc_cache:
-            return self._lyric_arc_cache[text]
+        if radius is None:
+            radius = LYRIC_ARC_RADIUS
+        cache_key = (text, radius, font_scale)
+        if cache_key in self._lyric_arc_cache:
+            return self._lyric_arc_cache[cache_key]
 
-        scale = 2
+        hq_scale = 2
         render_font = self.font_lyric_hq
-        radius = LYRIC_ARC_RADIUS
         color = COLOR_WHITE
+        ds = font_scale / hq_scale  # final downscale factor
 
         # Render each character at HQ
         char_surfs = []
@@ -271,12 +289,12 @@ class NowPlayingApp:
         if total_width == 0:
             return None
 
-        display_width = total_width / scale
+        display_width = total_width * ds
         span = display_width / radius
 
         # Compress if too wide
         if span > LYRIC_ARC_MAX_ANGLE:
-            target_width = LYRIC_ARC_MAX_ANGLE * radius * scale
+            target_width = LYRIC_ARC_MAX_ANGLE * radius / ds
             ratio = target_width / total_width
             compressed = []
             for surf in char_surfs:
@@ -285,7 +303,7 @@ class NowPlayingApp:
                     surf, (new_w, surf.get_height())))
             char_surfs = compressed
             total_width = sum(s.get_width() for s in char_surfs)
-            display_width = total_width / scale
+            display_width = total_width * ds
             span = display_width / radius
 
         # Render onto center-relative SRCALPHA surface
@@ -297,13 +315,13 @@ class NowPlayingApp:
         # Inner convention at bottom: start at π + span/2 (left on screen), traverse CCW
         angle = math.pi + span / 2
         for surf in char_surfs:
-            char_span = (surf.get_width() / scale) / radius
+            char_span = (surf.get_width() * ds) / radius
             char_center = angle - char_span / 2
 
             x = cache_c + radius * math.sin(char_center)
             y = cache_c - radius * math.cos(char_center)
             rot_deg = 180 - math.degrees(char_center)
-            rotated = pygame.transform.rotozoom(surf, rot_deg, 1.0 / scale)
+            rotated = pygame.transform.rotozoom(surf, rot_deg, ds)
             rect = rotated.get_rect(center=(int(x), int(y)))
             tmp.blit(rotated, rect)
             angle -= char_span
@@ -314,16 +332,16 @@ class NowPlayingApp:
         center_dx = (bounds.x + bounds.width / 2) - cache_c
         center_dy = (bounds.y + bounds.height / 2) - cache_c
 
-        if len(self._lyric_arc_cache) > 50:
+        if len(self._lyric_arc_cache) > 100:
             self._lyric_arc_cache.clear()
-        self._lyric_arc_cache[text] = (cropped, center_dx, center_dy)
+        self._lyric_arc_cache[cache_key] = (cropped, center_dx, center_dy)
         return (cropped, center_dx, center_dy)
 
-    def _blit_rotated_lyric(self, text, pos_angle, alpha, cx, cy):
+    def _blit_rotated_lyric(self, text, pos_angle, alpha, cx, cy, scale=1.0):
         """Blit a lyric surface at any position around the circle (inner convention).
         pos_angle: position on circle (radians). 0=bottom, +π/2=left, -π/2=right.
-        Text orientation auto-computed: vis_angle = -pos_angle (always faces center)."""
-        cached = self._render_lyric_arc(text)
+        scale: text size multiplier (< 1.0 for side positions). Position stays at full radius."""
+        cached = self._render_lyric_arc(text, radius=LYRIC_ARC_RADIUS, font_scale=scale)
         if cached is None:
             return
         surf, center_dx, center_dy = cached
@@ -350,7 +368,7 @@ class NowPlayingApp:
         if self._lyrics.get("loading"):
             loading_surf = self.font_lyric.render("Loading lyrics...", True, COLOR_DIM)
             self.screen.blit(loading_surf, loading_surf.get_rect(
-                center=(cx, cy + LYRIC_ARC_RADIUS)))
+                center=(cx, cy + LYRIC_ARC_RADIUS - 35)))
             return
 
         line_idx = self._lyrics.get("line_index", -1)
@@ -390,39 +408,44 @@ class NowPlayingApp:
             if t >= 1.0:
                 carousel['anim_t'] = None
             else:
-                # Old current: bottom(0) → left(+π/2)
                 if carousel['old_curr']:
                     alpha = int(255 - (255 - 80) * t_e)
+                    sc = 1.0 - (1.0 - LYRICS_SIDE_SCALE) * t_e
                     self._blit_rotated_lyric(
-                        carousel['old_curr'], rot_delta, alpha, cx, cy)
+                        carousel['old_curr'], rot_delta, alpha, cx, cy, scale=sc)
 
-                # Old next: right(-π/2) → bottom(0)
+                # Old next: right(SIDE) → bottom(1.0)
                 if carousel['old_next']:
                     alpha = int(80 + (255 - 80) * t_e)
+                    sc = LYRICS_SIDE_SCALE + (1.0 - LYRICS_SIDE_SCALE) * t_e
                     self._blit_rotated_lyric(
-                        carousel['old_next'], -math.pi / 2 + rot_delta, alpha, cx, cy)
+                        carousel['old_next'], -math.pi / 2 + rot_delta, alpha, cx, cy,
+                        scale=sc)
 
-                # Old prev: left(+π/2) → further(+π), fades out
+                # Old prev: left(SIDE) → further, fades out
                 if carousel['old_prev']:
                     alpha = int(80 * (1.0 - t_e))
                     self._blit_rotated_lyric(
-                        carousel['old_prev'], math.pi / 2 + rot_delta, alpha, cx, cy)
+                        carousel['old_prev'], math.pi / 2 + rot_delta, alpha, cx, cy,
+                        scale=LYRICS_SIDE_SCALE)
 
                 # New next: enters from far right
                 if carousel['next_text'] and carousel['next_text'] != carousel['old_next']:
                     alpha = int(80 * t_e)
                     entry_rot = -(math.pi / 2 + math.pi / 6 * (1 - t_e))
                     self._blit_rotated_lyric(
-                        carousel['next_text'], entry_rot, alpha, cx, cy)
+                        carousel['next_text'], entry_rot, alpha, cx, cy, scale=LYRICS_SIDE_SCALE)
                 return
 
         # === Idle state ===
         if carousel['curr_text']:
             self._blit_rotated_lyric(carousel['curr_text'], 0, 255, cx, cy)
         if carousel['prev_text']:
-            self._blit_rotated_lyric(carousel['prev_text'], math.pi / 2, 80, cx, cy)
+            self._blit_rotated_lyric(
+                carousel['prev_text'], math.pi / 2, 80, cx, cy, scale=LYRICS_SIDE_SCALE)
         if carousel['next_text']:
-            self._blit_rotated_lyric(carousel['next_text'], -math.pi / 2, 80, cx, cy)
+            self._blit_rotated_lyric(
+                carousel['next_text'], -math.pi / 2, 80, cx, cy, scale=LYRICS_SIDE_SCALE)
 
     def _draw_arc_raw(self, surface, cx, cy, radius, start_deg, end_deg, color, width):
         """Draw arc as filled polygon with rounded end caps (smooth edges for supersampling)."""
@@ -525,17 +548,21 @@ class NowPlayingApp:
             if self._arc_fill_cache is not None:
                 self.screen.blit(self._arc_fill_cache, blit_pos)
 
-        # Time labels (drawn directly, text is already AA)
-        label_r = radius - 35
-        lx = int(cx + label_r * math.cos(math.radians(end_deg)))
-        ly = int(cy + label_r * math.sin(math.radians(end_deg)))
-        time_cur = self.font_time.render(self._format_time(position_ms), True, COLOR_GRAY)
-        self.screen.blit(time_cur, time_cur.get_rect(center=(lx, ly)))
-
-        rx = int(cx + label_r * math.cos(math.radians(start_deg)))
-        ry = int(cy + label_r * math.sin(math.radians(start_deg)))
-        time_tot = self.font_time.render('-' + self._format_time(duration_ms - position_ms), True, COLOR_GRAY)
-        self.screen.blit(time_tot, time_tot.get_rect(center=(rx, ry)))
+        # Time labels as arc text at progress bar endpoints
+        time_r = radius - 10
+        # Convert progress arc degrees to arc text convention (0=top, CW+)
+        # arc_text uses: x = sin(θ), y = -cos(θ); progress uses: x = cos(d), y = sin(d)
+        # So: θ = atan2(cos(d), -sin(d))
+        d_left = math.radians(end_deg)
+        left_arc = math.atan2(math.cos(d_left), -math.sin(d_left)) + 0.12
+        d_right = math.radians(start_deg)
+        right_arc = math.atan2(math.cos(d_right), -math.sin(d_right)) - 0.12
+        self._draw_arc_text(self._format_time(position_ms),
+                            self.font_time, COLOR_GRAY, cx, cy, time_r,
+                            max_angle=math.radians(40), angle_offset=left_arc)
+        self._draw_arc_text('-' + self._format_time(duration_ms - position_ms),
+                            self.font_time, COLOR_GRAY, cx, cy, time_r,
+                            max_angle=math.radians(40), angle_offset=right_arc)
 
     def _handle_airplay_cover(self, data):
         if not data or len(data) == 0:
@@ -544,8 +571,9 @@ class NowPlayingApp:
             return
         try:
             img = pygame.image.load(io.BytesIO(data))
-            self._airplay_cover = pygame.transform.smoothscale(img, (ART_SIZE, ART_SIZE))
-            self._airplay_bg = self._make_bg(self._airplay_cover)
+            scaled = pygame.transform.smoothscale(img, (ART_SIZE, ART_SIZE))
+            self._airplay_cover = self._round_corners(scaled, ART_BORDER_RADIUS)
+            self._airplay_bg = self._make_bg(scaled)
         except Exception as e:
             print(f"[NowPlaying] Failed to load AirPlay cover: {e}")
             self._airplay_cover = None
@@ -557,8 +585,9 @@ class NowPlayingApp:
             with urlopen(req, timeout=5) as resp:
                 data = resp.read()
             img = pygame.image.load(io.BytesIO(data))
-            self._spotify_cover = pygame.transform.smoothscale(img, (ART_SIZE, ART_SIZE))
-            self._spotify_bg = self._make_bg(self._spotify_cover)
+            scaled = pygame.transform.smoothscale(img, (ART_SIZE, ART_SIZE))
+            self._spotify_cover = self._round_corners(scaled, 20)
+            self._spotify_bg = self._make_bg(scaled)
         except Exception as e:
             print(f"[NowPlaying] Failed to load Spotify cover: {e}")
 
@@ -622,11 +651,10 @@ class NowPlayingApp:
                                 max_angle=math.radians(80), hq_font=self.font_artist_hq)
 
         # === Album art (centered, slightly above circle center) ===
-        art_y = cy - 80
         if cover:
-            self.screen.blit(cover, cover.get_rect(center=(cx, art_y)))
+            self.screen.blit(cover, cover.get_rect(center=(cx, cy)))
         else:
-            placeholder = pygame.Rect(cx - ART_SIZE // 2, art_y - ART_SIZE // 2,
+            placeholder = pygame.Rect(cx - ART_SIZE // 2, cy - ART_SIZE // 2,
                                       ART_SIZE, ART_SIZE)
             pygame.draw.rect(self.screen, COLOR_BAR_BG, placeholder)
 

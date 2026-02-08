@@ -38,6 +38,7 @@ echo "[now_playing.sh] Launching Now Playing..."
 export DISPLAY=$X_DISPLAY
 export PROTOSUIT_DISPLAY_WIDTH=$DISPLAY_WIDTH
 export PROTOSUIT_DISPLAY_HEIGHT=$DISPLAY_HEIGHT
+export DEBUG=0
 
 if [ -f "$VENV_PYTHON" ]; then
     $VENV_PYTHON "$GAME_PATH" &
