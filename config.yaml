@@ -417,6 +417,24 @@ animations:
       colorZ: {type: "vec3", value: [0.0, 0.0, 1.0], min: 0.0, max: 1.0, step: 0.01}  # Blue (Z-axis)
       backgroundColor: {type: "vec3", value: [0.5, 0.5, 0.5], min: 0.0, max: 1.0, step: 0.01}  # Gray
 
+  infinite_mirror:
+    type: base
+    name: "Infinite Mirror"
+    emoji: "🪞"
+    left_shader: "infinite_mirror.glsl"
+    right_shader: "infinite_mirror.glsl"
+    rate: 60
+    render_scale: 0.5
+    uniforms:
+      ledCount: {type: "float", value: 53.0, min: 8.0, max: 100.0, step: 1.0}
+      travelSpeed: {type: "float", value: 0.35, min: 0.0, max: 2.0, step: 0.05}
+      rotateSpeed: {type: "float", value: 0.08, min: -0.5, max: 0.5, step: 0.01}
+      depthFade: {type: "float", value: 0.70, min: 0.1, max: 0.99, step: 0.01}
+      glowStrength: {type: "float", value: 4.5, min: 0.0, max: 10.0, step: 0.1}
+      brightness: {type: "float", value: 0.85, min: 0.1, max: 2.0, step: 0.05}
+      colorA: {type: "vec3", value: [0.00, 0.85, 1.00], min: 0.0, max: 1.0, step: 0.01}
+      colorB: {type: "vec3", value: [1.00, 0.20, 0.70], min: 0.0, max: 1.0, step: 0.01}
+
   echo_signal:
     type: base
     name: "Echo Signal"
