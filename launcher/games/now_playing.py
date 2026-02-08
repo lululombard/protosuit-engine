@@ -34,7 +34,7 @@ PROGRESS_ARC_WIDTH = 16
 PROGRESS_ARC_RESOLUTION = 16
 
 # Lyric carousel layout
-LYRIC_ARC_RADIUS = 320
+LYRIC_ARC_RADIUS = 300
 LYRIC_ARC_MAX_ANGLE = math.radians(90)
 LYRIC_ANIM_DURATION = 0.3
 LYRICS_SIDE_SCALE = 1
@@ -68,7 +68,7 @@ class NowPlayingApp:
         # HQ fonts for arc text (2x for supersampled anti-aliasing)
         self.font_title_hq = pygame.font.Font(None, 104)
         self.font_artist_hq = pygame.font.Font(None, 76)
-        self.font_lyric_hq = pygame.font.Font(None, 80)
+        self.font_lyric_hq = pygame.font.Font(None, 100)
 
         # Playback state
         self._spotify = {"playing": False, "title": "", "artist": "", "cover_url": "", "position_ms": 0, "duration_ms": 0}
@@ -333,7 +333,8 @@ class NowPlayingApp:
         center_dy = (bounds.y + bounds.height / 2) - cache_c
 
         if len(self._lyric_arc_cache) > 100:
-            self._lyric_arc_cache.clear()
+            # Keep the 50 most recent entries
+            self._lyric_arc_cache = dict(list(self._lyric_arc_cache.items())[-50:])
         self._lyric_arc_cache[cache_key] = (cropped, center_dx, center_dy)
         return (cropped, center_dx, center_dy)
 
