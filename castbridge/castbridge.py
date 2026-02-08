@@ -1,25 +1,37 @@
 """
 Cast Bridge - AirPlay and Spotify Connect Management Service
-Manages shairport-sync (AirPlay) and raspotify (Spotify Connect) via MQTT
+Manages shairport-sync (AirPlay) and raspotify (Spotify Connect) via systemd/D-Bus and MQTT
 """
 
 import os
-import subprocess
+import sys
 import json
 import time
 import threading
 import signal
 import re
-import yaml
+import logging
 from dataclasses import dataclass, asdict
 from typing import Dict, Optional
 from urllib.request import urlopen, Request
 from urllib.error import URLError
-import paho.mqtt.client as mqtt
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config.loader import ConfigLoader
+from utils.mqtt_client import create_mqtt_client
+from utils.logger import setup_logger, get_logger
+from utils.service_controller import ServiceController
+
 try:
     from castbridge.lyrics import LyricsService
 except ImportError:
     from lyrics import LyricsService
+
+logger = get_logger(__name__)
+
+SHAIRPORT_CONFIG_PATH = "/etc/shairport-sync.conf"
+RASPOTIFY_CONFIG_PATH = "/etc/raspotify/conf"
 
 
 @dataclass
@@ -44,6 +56,10 @@ class CastBridge:
         self.config = config
         self.mqtt = mqtt_client
         self.running = False
+
+        # Service controllers (D-Bus, no MQTT dependency)
+        self._airplay_svc = ServiceController("shairport-sync")
+        self._spotify_svc = ServiceController("raspotify")
 
         # State
         self.airplay_status = AirPlayStatus()
@@ -84,13 +100,14 @@ class CastBridge:
         # Lyrics service
         self._lyrics = LyricsService()
 
-        # Load config from file
+        # Load defaults from config.yaml, then override with actual service configs
         self._load_config()
 
     def _load_config(self):
-        """Load configuration from config file"""
+        """Load configuration: defaults from config.yaml, then parse actual service configs"""
         cast_config = self.config.get('cast', {})
 
+        # Defaults from config.yaml
         airplay = cast_config.get('airplay', {})
         self.airplay_status.device_name = airplay.get('device_name', 'Protosuit')
         self.airplay_status.password = airplay.get('password', '')
@@ -100,13 +117,57 @@ class CastBridge:
         self.spotify_status.username = spotify.get('username', '')
         self.spotify_status.password = spotify.get('password', '')
 
+        # Override with actual service config files (source of truth after first configure)
+        self._parse_shairport_config()
+        self._parse_raspotify_config()
+
+    def _parse_shairport_config(self):
+        """Parse /etc/shairport-sync.conf to recover device_name and password"""
+        content = self._airplay_svc.read_config(SHAIRPORT_CONFIG_PATH)
+        if content is None:
+            return
+
+        # Extract name from: name = "DeviceName";
+        match = re.search(r'name\s*=\s*"([^"]*)"', content)
+        if match:
+            self.airplay_status.device_name = match.group(1)
+
+        # Password is implied by presence of sessioncontrol block
+        self.airplay_status.password = ""
+        if "sessioncontrol" in content:
+            # We store password in config.yaml, sessioncontrol just indicates it's set
+            pass
+
+    def _parse_raspotify_config(self):
+        """Parse /etc/raspotify/conf to recover device_name, username, password"""
+        content = self._spotify_svc.read_config(RASPOTIFY_CONFIG_PATH)
+        if content is None:
+            return
+
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith("LIBRESPOT_NAME="):
+                match = re.search(r'LIBRESPOT_NAME="([^"]*)"', line)
+                if match:
+                    self.spotify_status.device_name = match.group(1)
+            elif line.startswith("LIBRESPOT_USERNAME="):
+                match = re.search(r'LIBRESPOT_USERNAME="([^"]*)"', line)
+                if match:
+                    self.spotify_status.username = match.group(1)
+            elif line.startswith("LIBRESPOT_PASSWORD="):
+                match = re.search(r'LIBRESPOT_PASSWORD="([^"]*)"', line)
+                if match:
+                    self.spotify_status.password = match.group(1)
+
+    # ======== Startup ========
+
     def start(self):
         """Start the cast bridge"""
-        print("[CastBridge] Starting...")
+        logger.info("Starting...")
         self.running = True
 
-        # Recover AirPlay state from retained MQTT before subscribing to shairport
-        self._recover_airplay_state()
+        # Systemd is the source of truth for service state
+        self._sync_service_state()
 
         # Subscribe to MQTT topics
         self._subscribe_mqtt()
@@ -114,68 +175,70 @@ class CastBridge:
         # Start polling loop
         threading.Thread(target=self._poll_loop, daemon=True).start()
 
+        # Start log streaming for enabled services
+        if self.airplay_status.enabled:
+            self._start_log_stream("airplay")
+        if self.spotify_status.enabled:
+            self._start_log_stream("spotify")
+
         # Start lyrics service
         lyrics_config = self.config.get('cast', {}).get('lyrics', {})
         if lyrics_config.get('enabled', True):
             self._lyrics.start(self.mqtt, self.config)
 
-        print("[CastBridge] Started successfully")
+        logger.info("Started successfully")
 
-    def _recover_airplay_state(self):
-        """Read our own retained playback message to recover state after restart"""
-        recovered = threading.Event()
-        topic = "protogen/fins/castbridge/status/airplay/playback"
+    def _sync_service_state(self):
+        """Read systemd state at startup — systemd is the source of truth"""
+        airplay_health = self._airplay_svc.get_health()
+        self.airplay_status.enabled = airplay_health.is_enabled
+        self.airplay_status.running = airplay_health.is_active
+        logger.info(
+            f"AirPlay: enabled={airplay_health.is_enabled}, "
+            f"active={airplay_health.is_active}, "
+            f"state={airplay_health.active_state}/{airplay_health.sub_state}"
+        )
 
-        def on_msg(client, userdata, msg):
-            try:
-                data = json.loads(msg.payload)
-                if data.get("playing"):
-                    self._airplay_playback["playing"] = True
-                    self._airplay_playback["title"] = data.get("title", "")
-                    self._airplay_playback["artist"] = data.get("artist", "")
-                    self._airplay_playback["album"] = data.get("album", "")
-                    self._airplay_playback["genre"] = data.get("genre", "")
-                    self._airplay_playback["duration_ms"] = data.get("duration_ms", 0)
-                    self._airplay_playback["position_ms"] = data.get("position_ms", 0)
-                    print(f"[CastBridge] Recovered AirPlay state: {data.get('title', '')} - {data.get('artist', '')}")
-            except Exception as e:
-                print(f"[CastBridge] Failed to recover AirPlay state: {e}")
-            recovered.set()
+        spotify_health = self._spotify_svc.get_health()
+        self.spotify_status.enabled = spotify_health.is_enabled
+        self.spotify_status.running = spotify_health.is_active
+        logger.info(
+            f"Spotify: enabled={spotify_health.is_enabled}, "
+            f"active={spotify_health.is_active}, "
+            f"state={spotify_health.active_state}/{spotify_health.sub_state}"
+        )
 
-        self.mqtt.message_callback_add(topic, on_msg)
-        self.mqtt.subscribe(topic)
-        # Wait briefly for the retained message (or timeout if none)
-        recovered.wait(timeout=1.0)
-        self.mqtt.unsubscribe(topic)
-        self.mqtt.message_callback_remove(topic)
+        # Publish initial status
+        self._publish_airplay_status()
+        self._publish_spotify_status()
+        self._publish_service_health("airplay", airplay_health)
+        self._publish_service_health("spotify", spotify_health)
 
     def stop(self):
         """Stop the cast bridge"""
-        print("[CastBridge] Stopping...")
+        logger.info("Stopping...")
         self.running = False
+        self._stop_log_stream("airplay")
+        self._stop_log_stream("spotify")
         self._lyrics.stop()
 
     # ======== Polling Loop ========
 
     def _poll_loop(self):
         """Poll service status every 10 seconds"""
-        # Publish initial status on startup
-        self._publish_airplay_status()
-        self._publish_spotify_status()
-
         while self.running:
             try:
                 self._update_airplay_status()
                 self._update_spotify_status()
             except Exception as e:
-                print(f"[CastBridge] Error in poll loop: {e}")
+                logger.error(f"Error in poll loop: {e}")
             time.sleep(10)
 
     # ======== AirPlay (shairport-sync) Management ========
 
     def _configure_shairport(self):
-        """Write shairport-sync configuration file"""
-        print(f"[CastBridge] Configuring shairport-sync: name={self.airplay_status.device_name}")
+        """Write shairport-sync configuration to /etc/shairport-sync.conf"""
+        logger.info(f"Configuring shairport-sync: name={self.airplay_status.device_name}")
 
         mqtt_config = self.config.get('mqtt', {})
         mqtt_host = mqtt_config.get('broker', 'localhost')
@@ -209,81 +272,75 @@ sessioncontrol = {{
 }};
 '''
 
-        # Write config to temp file
-        config_path = "/tmp/shairport-sync.conf"
-        try:
-            with open(config_path, 'w') as f:
-                f.write(config)
-            # Make config readable by shairport-sync user
-            os.chmod(config_path, 0o644)
-            # Set DAEMON_ARGS to use our config file (requires sudo)
-            subprocess.run(
-                ["sudo", "tee", "/etc/default/shairport-sync"],
-                input=f'DAEMON_ARGS="-c {config_path}"\n',
-                capture_output=True, text=True
-            )
-            print("[CastBridge] shairport-sync config written")
-            return True
-        except Exception as e:
-            print(f"[CastBridge] Failed to write shairport-sync config: {e}")
+        if not self._airplay_svc.write_config(SHAIRPORT_CONFIG_PATH, config):
+            logger.error("Failed to write shairport-sync config")
             return False
+
+        logger.info("shairport-sync config written")
+        return True
 
     def _enable_airplay(self, enable: bool) -> bool:
         """Enable or disable AirPlay (shairport-sync)"""
-        print(f"[CastBridge] {'Enabling' if enable else 'Disabling'} AirPlay...")
+        logger.info(f"{'Enabling' if enable else 'Disabling'} AirPlay...")
 
         if enable:
-            # Configure first
             if not self._configure_shairport():
+                self._publish_notification("airplay", "error", "Failed to configure AirPlay")
                 return False
 
-            # Unmask and start the service
-            subprocess.run(
-                ["sudo", "systemctl", "unmask", "shairport-sync"],
-                capture_output=True
-            )
-            result = subprocess.run(
-                ["sudo", "systemctl", "start", "shairport-sync"],
-                capture_output=True, text=True
-            )
-
-            if result.returncode != 0:
-                print(f"[CastBridge] Failed to start shairport-sync: {result.stderr}")
+            if not self._airplay_svc.enable():
+                logger.error("Failed to enable shairport-sync")
+                self._publish_notification("airplay", "error", "Failed to enable AirPlay")
                 return False
 
-            print("[CastBridge] AirPlay enabled successfully")
+            logger.info("AirPlay enabled successfully")
             self.airplay_status.enabled = True
+            self.airplay_status.running = True
+            self._start_log_stream("airplay")
+            self._publish_notification("airplay", "enabled", "AirPlay enabled")
         else:
-            # Stop the service
-            subprocess.run(
-                ["sudo", "systemctl", "stop", "shairport-sync"],
-                capture_output=True
-            )
+            self._stop_log_stream("airplay")
 
-            print("[CastBridge] AirPlay disabled successfully")
+            if not self._airplay_svc.disable():
+                logger.error("Failed to disable shairport-sync")
+                return False
+
+            logger.info("AirPlay disabled successfully")
             self.airplay_status.enabled = False
+            self.airplay_status.running = False
+            self._publish_notification("airplay", "disabled", "AirPlay disabled")
 
         self._publish_airplay_status()
         return True
 
     def _update_airplay_status(self):
-        """Check if shairport-sync is running"""
-        result = subprocess.run(
-            ["systemctl", "is-active", "shairport-sync"],
-            capture_output=True, text=True
-        )
+        """Check shairport-sync status via D-Bus"""
+        health = self._airplay_svc.get_health()
+        changed = False
 
-        is_running = result.stdout.strip() == "active"
+        if health.is_active != self.airplay_status.running:
+            self.airplay_status.running = health.is_active
+            changed = True
+            if not health.is_active and self.airplay_status.enabled:
+                self._publish_notification(
+                    "airplay", "stopped",
+                    f"AirPlay stopped unexpectedly ({health.active_state}/{health.sub_state})"
+                )
 
-        if is_running != self.airplay_status.running:
-            self.airplay_status.running = is_running
+        if health.is_enabled != self.airplay_status.enabled:
+            self.airplay_status.enabled = health.is_enabled
+            changed = True
+
+        if changed:
             self._publish_airplay_status()
+
+        self._publish_service_health("airplay", health)
 
     # ======== Spotify (raspotify) Management ========
 
     def _configure_raspotify(self):
-        """Write raspotify configuration file"""
-        print(f"[CastBridge] Configuring raspotify: name={self.spotify_status.device_name}")
+        """Write raspotify configuration to /etc/raspotify/conf"""
+        logger.info(f"Configuring raspotify: name={self.spotify_status.device_name}")
 
         event_script = os.path.join(os.path.dirname(__file__), "spotify_event.sh")
 
@@ -295,88 +352,81 @@ sessioncontrol = {{
             f'LIBRESPOT_ONEVENT="{event_script}"',
         ]
 
-        # Add credentials if provided
         if self.spotify_status.username and self.spotify_status.password:
             config_lines.append(f'LIBRESPOT_USERNAME="{self.spotify_status.username}"')
             config_lines.append(f'LIBRESPOT_PASSWORD="{self.spotify_status.password}"')
 
         config = '\n'.join(config_lines) + '\n'
 
-        # Write config to raspotify's config location (requires sudo)
-        try:
-            subprocess.run(
-                ["sudo", "mkdir", "-p", "/etc/raspotify"],
-                capture_output=True
-            )
-            subprocess.run(
-                ["sudo", "tee", "/etc/raspotify/conf"],
-                input=config,
-                capture_output=True, text=True
-            )
-            print("[CastBridge] raspotify config written")
-            return True
-        except Exception as e:
-            print(f"[CastBridge] Failed to write raspotify config: {e}")
+        self._spotify_svc.mkdir_p("/etc/raspotify")
+        if not self._spotify_svc.write_config(RASPOTIFY_CONFIG_PATH, config):
+            logger.error("Failed to write raspotify config")
             return False
+
+        logger.info("raspotify config written")
+        return True
 
     def _enable_spotify(self, enable: bool) -> bool:
         """Enable or disable Spotify Connect (raspotify)"""
-        print(f"[CastBridge] {'Enabling' if enable else 'Disabling'} Spotify...")
+        logger.info(f"{'Enabling' if enable else 'Disabling'} Spotify...")
 
         if enable:
-            # Clear playback state before starting
             self._reset_spotify_playback()
 
-            # Configure first
             if not self._configure_raspotify():
+                self._publish_notification("spotify", "error", "Failed to configure Spotify")
                 return False
 
-            # Unmask and start the service
-            subprocess.run(
-                ["sudo", "systemctl", "unmask", "raspotify"],
-                capture_output=True
-            )
-            result = subprocess.run(
-                ["sudo", "systemctl", "start", "raspotify"],
-                capture_output=True, text=True
-            )
-
-            if result.returncode != 0:
-                print(f"[CastBridge] Failed to start raspotify: {result.stderr}")
+            if not self._spotify_svc.enable():
+                logger.error("Failed to enable raspotify")
+                self._publish_notification("spotify", "error", "Failed to enable Spotify")
                 return False
 
-            print("[CastBridge] Spotify enabled successfully")
+            logger.info("Spotify enabled successfully")
             self.spotify_status.enabled = True
+            self.spotify_status.running = True
+            self._start_log_stream("spotify")
+            self._publish_notification("spotify", "enabled", "Spotify Connect enabled")
         else:
-            # Stop ticker and clear playback state
             self._stop_spotify_ticker()
             self._reset_spotify_playback()
             self._publish_spotify_playback()
+            self._stop_log_stream("spotify")
 
-            # Stop the service
-            subprocess.run(
-                ["sudo", "systemctl", "stop", "raspotify"],
-                capture_output=True
-            )
+            if not self._spotify_svc.disable():
+                logger.error("Failed to disable raspotify")
+                return False
 
-            print("[CastBridge] Spotify disabled successfully")
+            logger.info("Spotify disabled successfully")
             self.spotify_status.enabled = False
+            self.spotify_status.running = False
+            self._publish_notification("spotify", "disabled", "Spotify Connect disabled")
 
         self._publish_spotify_status()
         return True
 
     def _update_spotify_status(self):
-        """Check if raspotify is running"""
-        result = subprocess.run(
-            ["systemctl", "is-active", "raspotify"],
-            capture_output=True, text=True
-        )
+        """Check raspotify status via D-Bus"""
+        health = self._spotify_svc.get_health()
+        changed = False
 
-        is_running = result.stdout.strip() == "active"
+        if health.is_active != self.spotify_status.running:
+            self.spotify_status.running = health.is_active
+            changed = True
+            if not health.is_active and self.spotify_status.enabled:
+                self._publish_notification(
+                    "spotify", "stopped",
+                    f"Spotify stopped unexpectedly ({health.active_state}/{health.sub_state})"
+                )
 
-        if is_running != self.spotify_status.running:
-            self.spotify_status.running = is_running
+        if health.is_enabled != self.spotify_status.enabled:
+            self.spotify_status.enabled = health.is_enabled
+            changed = True
+
+        if changed:
             self._publish_spotify_status()
+
+        self._publish_service_health("spotify", health)
 
     def _reset_spotify_playback(self):
         """Reset all Spotify playback state"""
@@ -410,7 +460,7 @@ sessioncontrol = {{
                 html,
             )
             if not match:
-                print(f"[CastBridge] No __NEXT_DATA__ found for track {track_id}")
+                logger.warning(f"No __NEXT_DATA__ found for track {track_id}")
                 return None
 
             data = json.loads(match.group(1))
@@ -431,11 +481,11 @@ sessioncontrol = {{
             }
 
             self._spotify_metadata_cache[track_id] = metadata
-            print(f"[CastBridge] Spotify metadata: {metadata['artist']} - {metadata['title']}")
+            logger.info(f"Spotify metadata: {metadata['artist']} - {metadata['title']}")
             return metadata
 
         except (URLError, json.JSONDecodeError, KeyError) as e:
-            print(f"[CastBridge] Failed to fetch Spotify metadata for {track_id}: {e}")
+            logger.error(f"Failed to fetch Spotify metadata for {track_id}: {e}")
             return None
 
     def _handle_spotify_event(self, client, userdata, msg):
@@ -475,7 +525,7 @@ sessioncontrol = {{
                     args=(track_id,),
                     daemon=True,
                 ).start()
-            print(f"[CastBridge] Spotify track: {artists} - {name}")
+            logger.info(f"Spotify track: {artists} - {name}")
             return  # Don't publish yet, playing event follows
 
         elif event in ("playing", "started"):
@@ -602,7 +652,7 @@ sessioncontrol = {{
 
         for topic in topics + playback_topics:
             self.mqtt.subscribe(topic)
-            print(f"[CastBridge] Subscribed to {topic}")
+            logger.debug(f"Subscribed to {topic}")
 
         # Set up message callbacks
         self.mqtt.message_callback_add(
@@ -635,7 +685,6 @@ sessioncontrol = {{
             "protogen/fins/castbridge/spotify/event",
             self._handle_spotify_event,
         )
-        print("[CastBridge] Subscribed to protogen/fins/castbridge/spotify/event")
 
         # AirPlay playback callbacks
         for field in ["title", "artist", "album", "genre", "track_id"]:
@@ -676,6 +725,8 @@ sessioncontrol = {{
             self._handle_airplay_cover
         )
 
+        logger.info("Subscribed to all MQTT topics")
+
     # ======== AirPlay Playback Tracking ========
 
     def _handle_airplay_metadata(self, client, userdata, msg):
@@ -713,7 +764,7 @@ sessioncontrol = {{
                 self._airplay_playback["duration_ms"] = duration_ms
                 self._publish_airplay_playback()
         except Exception as e:
-            print(f"[CastBridge] Error parsing astm: {e}")
+            logger.error(f"Error parsing astm: {e}")
 
     def _handle_airplay_prgr(self, client, userdata, msg):
         """Handle ssnc/prgr (start/current/end RTP timestamps) - fires on track start and seek"""
@@ -734,7 +785,7 @@ sessioncontrol = {{
                 self._airplay_last_phbt_frame = 0  # Reset delta tracking, using absolute now
                 self._publish_airplay_playback()
         except Exception as e:
-            print(f"[CastBridge] Error parsing prgr: {e}")
+            logger.error(f"Error parsing prgr: {e}")
 
     def _handle_airplay_phbt(self, client, userdata, msg):
         """Handle ssnc/phbt (frame position / monotonic time) - fires every second"""
@@ -765,7 +816,7 @@ sessioncontrol = {{
             self._airplay_last_phbt_frame = frame
             self._publish_airplay_playback()
         except Exception as e:
-            print(f"[CastBridge] Error parsing phbt: {e}")
+            logger.error(f"Error parsing phbt: {e}")
 
     def _handle_airplay_cover(self, client, userdata, msg):
         """Re-publish cover art with retain flag so it persists across page loads"""
@@ -793,38 +844,38 @@ sessioncontrol = {{
             retain=True
         )
 
+    # ======== Config Update Handlers ========
+
     def _handle_airplay_config(self, data: Dict):
         """Handle AirPlay configuration update"""
-        print(f"[CastBridge] Updating AirPlay config: {data}")
+        logger.info(f"Updating AirPlay config: {data}")
 
         self.airplay_status.device_name = data.get('device_name', self.airplay_status.device_name)
         self.airplay_status.password = data.get('password', self.airplay_status.password)
 
-        # If service is running, restart with new config
         if self.airplay_status.running:
-            print("[CastBridge] Restarting AirPlay with new config...")
-            self._enable_airplay(False)
-            time.sleep(1)
-            self._enable_airplay(True)
-        else:
-            self._publish_airplay_status()
+            logger.info("Restarting AirPlay with new config...")
+            self._configure_shairport()
+            self._airplay_svc.restart()
+            self._publish_notification("airplay", "restarted", "AirPlay restarted with new config")
+
+        self._publish_airplay_status()
 
     def _handle_spotify_config(self, data: Dict):
         """Handle Spotify configuration update"""
-        print(f"[CastBridge] Updating Spotify config: {data}")
+        logger.info(f"Updating Spotify config: {data}")
 
         self.spotify_status.device_name = data.get('device_name', self.spotify_status.device_name)
         self.spotify_status.username = data.get('username', self.spotify_status.username)
         self.spotify_status.password = data.get('password', self.spotify_status.password)
 
-        # If service is running, restart with new config
         if self.spotify_status.running:
-            print("[CastBridge] Restarting Spotify with new config...")
-            self._enable_spotify(False)
-            time.sleep(1)
-            self._enable_spotify(True)
-        else:
-            self._publish_spotify_status()
+            logger.info("Restarting Spotify with new config...")
+            self._configure_raspotify()
+            self._spotify_svc.restart()
+            self._publish_notification("spotify", "restarted", "Spotify restarted with new config")
+
+        self._publish_spotify_status()
 
     # ======== MQTT Publishers ========
 
@@ -844,66 +895,100 @@ sessioncontrol = {{
             retain=True
         )
 
+    def _publish_service_health(self, service: str, health):
+        """Publish service health data for monitoring"""
+        self.mqtt.publish(
+            f"protogen/fins/castbridge/status/{service}/health",
+            json.dumps(health.to_dict()),
+            retain=True,
+        )
+
+    def _publish_notification(self, service: str, event: str, message: str):
+        """Publish a notification event to the visor notification topic"""
+        payload = {
+            "type": "cast",
+            "event": event,
+            "service": service,
+            "message": message,
+            "timestamp": time.time(),
+        }
+        self.mqtt.publish(
+            "protogen/visor/notifications",
+            json.dumps(payload),
+        )
+        logger.info(f"Notification: [{service}] {event} - {message}")
+
+    # ======== Log Streaming ========
+
+    def _start_log_stream(self, service: str):
+        """Start streaming journal logs for a service to MQTT"""
+        svc = self._airplay_svc if service == "airplay" else self._spotify_svc
+        topic = f"protogen/fins/castbridge/status/{service}/logs"
+
+        def on_log_entry(entry):
+            log_msg = {
+                "message": entry.get("MESSAGE", ""),
+                "priority": int(entry.get("PRIORITY", 6)),
+                "timestamp": entry.get("__REALTIME_TIMESTAMP", ""),
+                "pid": entry.get("_PID", ""),
+            }
+            self.mqtt.publish(topic, json.dumps(log_msg))
+
+        svc.start_log_stream(on_log_entry)
+
+    def _stop_log_stream(self, service: str):
+        """Stop journal log streaming for a service"""
+        svc = self._airplay_svc if service == "airplay" else self._spotify_svc
+        svc.stop_log_stream()
+
+    # ======== Lifecycle ========
+
     def cleanup(self):
         """Cleanup on shutdown"""
-        print("[CastBridge] Stopping...")
+        logger.info("Cleaning up...")
         self.running = False
+        self._stop_log_stream("airplay")
+        self._stop_log_stream("spotify")
+        self._lyrics.stop()
         self.mqtt.loop_stop()
         self.mqtt.disconnect()
-        print("[CastBridge] Stopped")
+        logger.info("Stopped")
 
     def run(self):
         """Main run loop"""
-        print("[CastBridge] Starting cast bridge...")
+        logger.info("Starting cast bridge...")
 
-        # Set up signal handlers
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
-        # Start the bridge
         self.start()
 
-        print("[CastBridge] Cast bridge is running. Press Ctrl+C to exit.")
+        logger.info("Cast bridge is running. Press Ctrl+C to exit.")
 
-        # Keep running
         try:
             while self.running:
                 signal.pause()
         except KeyboardInterrupt:
-            print("\n[CastBridge] Keyboard interrupt received")
+            logger.info("Keyboard interrupt received")
 
         self.cleanup()
 
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals"""
-        print(f"\n[CastBridge] Received signal {signum}")
+        logger.info(f"Received signal {signum}")
         self.running = False
 
 
 def main():
     """Main entry point"""
-    # Load config
-    with open('/home/proto/protosuit-engine/config.yaml', 'r') as f:
-        config = yaml.safe_load(f)
+    setup_logger("castbridge")
 
-    # Create MQTT client
-    mqtt_client = mqtt.Client(
-        client_id="protosuit-castbridge",
-        clean_session=True
-    )
+    config_loader = ConfigLoader()
+    config = config_loader.config
 
-    # Connect to MQTT broker
-    mqtt_config = config['mqtt']
-    mqtt_client.connect(
-        mqtt_config['broker'],
-        mqtt_config['port'],
-        mqtt_config['keepalive']
-    )
-
-    # Start MQTT loop
+    mqtt_client = create_mqtt_client(config_loader)
     mqtt_client.loop_start()
 
-    # Create and run bridge
     bridge = CastBridge(config, mqtt_client)
     bridge.run()
 

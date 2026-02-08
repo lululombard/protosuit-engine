@@ -13,6 +13,14 @@
     state: present
     update_cache: yes
 
+- name: Install PyGObject/pydbus build dependencies for D-Bus integration
+  apt:
+    name:
+      - libgirepository-2.0-dev
+      - libcairo2-dev
+      - pkg-config
+    state: present
+
 - name: Configure Mosquitto for WebSocket support
   copy:
     dest: /etc/mosquitto/conf.d/websockets.conf
@@ -183,13 +191,6 @@
     state: present
     update_cache: yes
 
-- name: Disable and mask shairport-sync service (we manage it ourselves)
-  systemd:
-    name: shairport-sync
-    enabled: no
-    state: stopped
-    masked: yes
-  ignore_errors: yes
 
 - name: Create shairport-sync systemd override directory
   file:
@@ -209,13 +210,6 @@
     mode: '0644'
   notify: reload systemd
 
-- name: Disable and mask raspotify service (we manage it ourselves)
-  systemd:
-    name: raspotify
-    enabled: no
-    state: stopped
-    masked: yes
-  ignore_errors: yes
 
 - name: Create raspotify systemd override directory
   file:
@@ -238,26 +232,54 @@
     mode: '0644'
   notify: reload systemd
 
-- name: Allow user to manage cast services without password
+- name: Reset shairport-sync defaults (clear DAEMON_ARGS override)
+  copy:
+    dest: /etc/default/shairport-sync
+    content: |
+      # shairport-sync uses /etc/shairport-sync.conf by default
+      DAEMON_ARGS=""
+    mode: '0644'
+
+- name: Deploy default shairport-sync config
+  template:
+    src: "{{ playbook_dir }}/../templates/shairport-sync.conf.j2"
+    dest: /etc/shairport-sync.conf
+    mode: '0644'
+    force: yes
+
+- name: Create raspotify config directory
+  file:
+    path: /etc/raspotify
+    state: directory
+    mode: '0755'
+
+- name: Deploy default raspotify config
+  template:
+    src: "{{ playbook_dir }}/../templates/raspotify.conf.j2"
+    dest: /etc/raspotify/conf
+    mode: '0644'
+    force: yes
+
+- name: Create polkit rule for cast service management via D-Bus
+  template:
+    src: "{{ playbook_dir }}/../templates/50-protosuit-cast.rules.j2"
+    dest: /etc/polkit-1/rules.d/50-protosuit-cast.rules
+    mode: '0644'
+
+- name: Allow user to write cast service config files without password
   copy:
     dest: /etc/sudoers.d/protosuit-cast
     content: |
-      # Allow protosuit user to manage AirPlay and Spotify services without password
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl start shairport-sync
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl stop shairport-sync
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart shairport-sync
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl status shairport-sync
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl unmask shairport-sync
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl mask shairport-sync
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/default/shairport-sync
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl start raspotify
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl stop raspotify
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart raspotify
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl status raspotify
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl unmask raspotify
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/systemctl mask raspotify
+      # Allow protosuit user to read/write config files for cast services
+      # systemctl operations are handled via D-Bus + polkit (no sudo needed)
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/shairport-sync.conf
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/cat /etc/shairport-sync.conf
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/chmod 644 /etc/shairport-sync.conf
       {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/mkdir -p /etc/raspotify
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/chmod 755 /etc/raspotify
       {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/raspotify/conf
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/cat /etc/raspotify/conf
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/chmod 644 /etc/raspotify/conf
     mode: '0440'
     validate: 'visudo -cf %s'
 

@@ -574,8 +574,9 @@ mosquitto_sub -t "protogen/fins/castbridge/status/#" -v
 ```
 
 **Notes:**
-- Services are disabled and masked by default (managed by castbridge, not systemd)
-- Enabling a service unmasks it and starts it with the configured settings
+- Services are managed via D-Bus (pydbus) with a polkit rule for authorization
+- Enabling a service uses systemd enable+start (persists across reboots)
+- Disabling uses systemd disable+stop; service state is read from systemd at boot
 - Configuration changes restart the service automatically if it's running
 - Audio is routed through PulseAudio, respecting current audio device selection
 

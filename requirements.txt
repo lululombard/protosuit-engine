@@ -11,3 +11,5 @@ evdev>=1.6.0
 qrcode[pil]>=7.4.0
 pyserial>=3.5
 platformio>=6.1
+PyGObject>=3.50.0
+pydbus>=0.6.0

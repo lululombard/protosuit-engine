@@ -1,0 +1,21 @@
+// Shairport-sync configuration - managed by CastBridge
+// Deployed by Ansible with defaults, CastBridge overwrites at runtime
+general = {
+    name = "Protosuit";
+    output_backend = "pa";
+    mdns_backend = "avahi";
+};
+
+metadata = {
+    progress_interval = 1.0;
+};
+
+mqtt = {
+    enabled = "yes";
+    hostname = "localhost";
+    port = 1883;
+    topic = "protogen/fins/castbridge/airplay/playback";
+    publish_parsed = "yes";
+    publish_raw = "yes";
+    publish_cover = "yes";
+};
