@@ -148,6 +148,13 @@ class LyricsService:
                 print(f"[Lyrics] Retry {attempt + 1}/2 for {artist} - {title}")
                 time.sleep(2)
 
+        # Only assign if this track is still the one we're waiting for
+        # (prevents stale fetches from overwriting after rapid track skips)
+        current_fetching = self._spotify_fetching if service == "spotify" else self._airplay_fetching
+        if track_key != current_fetching:
+            print(f"[Lyrics] Discarding stale fetch for {artist} - {title}")
+            return
+
         if service == "spotify":
             self._spotify_lyrics = lyrics
             self._spotify_track_key = track_key
