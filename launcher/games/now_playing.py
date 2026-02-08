@@ -32,6 +32,11 @@ PROGRESS_ARC_SPAN = math.radians(270)  # arc around the display
 PROGRESS_ARC_WIDTH = 16
 PROGRESS_ARC_RESOLUTION = 16
 
+# Lyric carousel layout
+LYRIC_ARC_RADIUS = 280
+LYRIC_ARC_MAX_ANGLE = math.radians(100)
+LYRIC_ANIM_DURATION = 0.3
+
 DEBUG = os.environ.get("DEBUG", "0") == "1"
 
 
@@ -60,6 +65,7 @@ class NowPlayingApp:
         # HQ fonts for arc text (2x for supersampled anti-aliasing)
         self.font_title_hq = pygame.font.Font(None, 104)
         self.font_artist_hq = pygame.font.Font(None, 76)
+        self.font_lyric_hq = pygame.font.Font(None, 80)
 
         # Playback state
         self._spotify = {"playing": False, "title": "", "artist": "", "cover_url": "", "position_ms": 0, "duration_ms": 0}
@@ -91,6 +97,14 @@ class NowPlayingApp:
 
         # Cached arc text renders (keyed by text content)
         self._arc_text_cache = {}
+
+        # Lyric carousel state
+        self._lyric_arc_cache = {}
+        self._lyric_carousel = {
+            'prev_text': '', 'curr_text': '', 'next_text': '',
+            'line_index': -1, 'anim_t': None,
+            'old_prev': '', 'old_curr': '', 'old_next': '',
+        }
 
         # MQTT
         self._mqtt = None
@@ -135,6 +149,9 @@ class NowPlayingApp:
                 elif topic == "protogen/fins/castbridge/status/lyrics/full":
                     data = json.loads(msg.payload)
                     self._lyrics_full = data.get("synced_lines", [])
+                    self._lyric_arc_cache.clear()
+                    self._lyric_carousel['line_index'] = -1
+                    self._lyric_carousel['anim_t'] = None
             except Exception as e:
                 print(f"[NowPlaying] MQTT parse error: {e}")
 
@@ -230,6 +247,182 @@ class NowPlayingApp:
 
         cached, ox, oy = self._arc_text_cache[cache_key]
         self.screen.blit(cached, (cx + ox, cy + oy))
+
+    def _render_lyric_arc(self, text):
+        """Render lyric text curved at the bottom of the circle (inner convention).
+        Returns (srcalpha_surface, center_dx, center_dy) or None."""
+        if not text:
+            return None
+        if text in self._lyric_arc_cache:
+            return self._lyric_arc_cache[text]
+
+        scale = 2
+        render_font = self.font_lyric_hq
+        radius = LYRIC_ARC_RADIUS
+        color = COLOR_WHITE
+
+        # Render each character at HQ
+        char_surfs = []
+        total_width = 0
+        for ch in text:
+            surf = render_font.render(ch, True, color)
+            char_surfs.append(surf)
+            total_width += surf.get_width()
+        if total_width == 0:
+            return None
+
+        display_width = total_width / scale
+        span = display_width / radius
+
+        # Compress if too wide
+        if span > LYRIC_ARC_MAX_ANGLE:
+            target_width = LYRIC_ARC_MAX_ANGLE * radius * scale
+            ratio = target_width / total_width
+            compressed = []
+            for surf in char_surfs:
+                new_w = max(int(surf.get_width() * ratio), 1)
+                compressed.append(pygame.transform.smoothscale(
+                    surf, (new_w, surf.get_height())))
+            char_surfs = compressed
+            total_width = sum(s.get_width() for s in char_surfs)
+            display_width = total_width / scale
+            span = display_width / radius
+
+        # Render onto center-relative SRCALPHA surface
+        margin = 60
+        cache_size = int((radius + margin) * 2)
+        tmp = pygame.Surface((cache_size, cache_size), pygame.SRCALPHA)
+        cache_c = cache_size // 2
+
+        # Inner convention at bottom: start at π + span/2 (left on screen), traverse CCW
+        angle = math.pi + span / 2
+        for surf in char_surfs:
+            char_span = (surf.get_width() / scale) / radius
+            char_center = angle - char_span / 2
+
+            x = cache_c + radius * math.sin(char_center)
+            y = cache_c - radius * math.cos(char_center)
+            rot_deg = 180 - math.degrees(char_center)
+            rotated = pygame.transform.rotozoom(surf, rot_deg, 1.0 / scale)
+            rect = rotated.get_rect(center=(int(x), int(y)))
+            tmp.blit(rotated, rect)
+            angle -= char_span
+
+        # Crop to bounding rect (keep as SRCALPHA for clean rotozoom)
+        bounds = tmp.get_bounding_rect()
+        cropped = tmp.subsurface(bounds).copy()
+        center_dx = (bounds.x + bounds.width / 2) - cache_c
+        center_dy = (bounds.y + bounds.height / 2) - cache_c
+
+        if len(self._lyric_arc_cache) > 50:
+            self._lyric_arc_cache.clear()
+        self._lyric_arc_cache[text] = (cropped, center_dx, center_dy)
+        return (cropped, center_dx, center_dy)
+
+    def _blit_rotated_lyric(self, text, pos_angle, alpha, cx, cy):
+        """Blit a lyric surface at any position around the circle (inner convention).
+        pos_angle: position on circle (radians). 0=bottom, +π/2=left, -π/2=right.
+        Text orientation auto-computed: vis_angle = -pos_angle (always faces center)."""
+        cached = self._render_lyric_arc(text)
+        if cached is None:
+            return
+        surf, center_dx, center_dy = cached
+
+        vis_angle = -pos_angle  # inner convention: text always faces center
+
+        if abs(vis_angle) < 0.001:
+            display = surf.copy()
+            display.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
+            rect = display.get_rect(center=(int(cx + center_dx), int(cy + center_dy)))
+            self.screen.blit(display, rect)
+        else:
+            rotated = pygame.transform.rotozoom(surf, math.degrees(vis_angle), 1.0)
+            rotated.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
+            cos_a = math.cos(pos_angle)
+            sin_a = math.sin(pos_angle)
+            new_cdx = center_dx * cos_a - center_dy * sin_a
+            new_cdy = center_dx * sin_a + center_dy * cos_a
+            rect = rotated.get_rect(center=(int(cx + new_cdx), int(cy + new_cdy)))
+            self.screen.blit(rotated, rect)
+
+    def _draw_lyrics_carousel(self, cx, cy):
+        """Draw the rotating lyric carousel around the circular display."""
+        if self._lyrics.get("loading"):
+            loading_surf = self.font_lyric.render("Loading lyrics...", True, COLOR_DIM)
+            self.screen.blit(loading_surf, loading_surf.get_rect(
+                center=(cx, cy + LYRIC_ARC_RADIUS)))
+            return
+
+        line_idx = self._lyrics.get("line_index", -1)
+        current_line = self._lyrics.get("current_line", "")
+        next_line = self._lyrics.get("next_line", "")
+        prev_line = ""
+        if self._lyrics_full and line_idx > 0:
+            prev_line = self._lyrics_full[line_idx - 1].get("text", "")
+
+        carousel = self._lyric_carousel
+
+        # Detect line change -> start animation
+        if line_idx != carousel['line_index'] and line_idx >= 0:
+            carousel['old_prev'] = carousel['prev_text']
+            carousel['old_curr'] = carousel['curr_text']
+            carousel['old_next'] = carousel['next_text']
+            carousel['prev_text'] = prev_line
+            carousel['curr_text'] = current_line
+            carousel['next_text'] = next_line
+            carousel['line_index'] = line_idx
+            carousel['anim_t'] = time.monotonic()
+
+        # Update texts silently when not animating
+        if carousel['anim_t'] is None:
+            carousel['prev_text'] = prev_line
+            carousel['curr_text'] = current_line
+            carousel['next_text'] = next_line
+
+        now = time.monotonic()
+
+        if carousel['anim_t'] is not None:
+            elapsed = now - carousel['anim_t']
+            t = min(elapsed / LYRIC_ANIM_DURATION, 1.0)
+            t_e = 1.0 - (1.0 - t) ** 3  # cubic ease-out
+            rot_delta = t_e * (math.pi / 2)
+
+            if t >= 1.0:
+                carousel['anim_t'] = None
+            else:
+                # Old current: bottom(0) → left(+π/2)
+                if carousel['old_curr']:
+                    alpha = int(255 - (255 - 80) * t_e)
+                    self._blit_rotated_lyric(
+                        carousel['old_curr'], rot_delta, alpha, cx, cy)
+
+                # Old next: right(-π/2) → bottom(0)
+                if carousel['old_next']:
+                    alpha = int(80 + (255 - 80) * t_e)
+                    self._blit_rotated_lyric(
+                        carousel['old_next'], -math.pi / 2 + rot_delta, alpha, cx, cy)
+
+                # Old prev: left(+π/2) → further(+π), fades out
+                if carousel['old_prev']:
+                    alpha = int(80 * (1.0 - t_e))
+                    self._blit_rotated_lyric(
+                        carousel['old_prev'], math.pi / 2 + rot_delta, alpha, cx, cy)
+
+                # New next: enters from far right
+                if carousel['next_text'] and carousel['next_text'] != carousel['old_next']:
+                    alpha = int(80 * t_e)
+                    entry_rot = -(math.pi / 2 + math.pi / 6 * (1 - t_e))
+                    self._blit_rotated_lyric(
+                        carousel['next_text'], entry_rot, alpha, cx, cy)
+                return
+
+        # === Idle state ===
+        if carousel['curr_text']:
+            self._blit_rotated_lyric(carousel['curr_text'], 0, 255, cx, cy)
+        if carousel['prev_text']:
+            self._blit_rotated_lyric(carousel['prev_text'], math.pi / 2, 80, cx, cy)
+        if carousel['next_text']:
+            self._blit_rotated_lyric(carousel['next_text'], -math.pi / 2, 80, cx, cy)
 
     def _draw_arc_raw(self, surface, cx, cy, radius, start_deg, end_deg, color, width):
         """Draw arc as filled polygon with rounded end caps (smooth edges for supersampling)."""
@@ -437,44 +630,8 @@ class NowPlayingApp:
                                       ART_SIZE, ART_SIZE)
             pygame.draw.rect(self.screen, COLOR_BAR_BG, placeholder)
 
-        # === Lyrics (below art) ===
-        lyrics_y = art_y + ART_SIZE // 2 + 30
-        max_lyric_w = self.half_width - 80
-
-        if self._lyrics.get("loading"):
-            loading_surf = self.font_lyric.render("Loading lyrics...", True, COLOR_DIM)
-            self.screen.blit(loading_surf, loading_surf.get_rect(center=(cx, lyrics_y + 40)))
-        else:
-            line_idx = self._lyrics.get("line_index", -1)
-            current_line = self._lyrics.get("current_line", "")
-            next_line = self._lyrics.get("next_line", "")
-
-            prev_line = ""
-            if self._lyrics_full and line_idx > 0:
-                prev_line = self._lyrics_full[line_idx - 1].get("text", "")
-
-            if prev_line:
-                prev_surf = self.font_lyric.render(prev_line, True, COLOR_DIM)
-                if prev_surf.get_width() > max_lyric_w:
-                    prev_surf = pygame.transform.smoothscale(
-                        prev_surf, (max_lyric_w, prev_surf.get_height()))
-                self.screen.blit(prev_surf, prev_surf.get_rect(center=(cx, lyrics_y)))
-            lyrics_y += 40
-
-            if current_line:
-                curr_surf = self.font_lyric_current.render(current_line, True, COLOR_ACCENT)
-                if curr_surf.get_width() > max_lyric_w:
-                    curr_surf = pygame.transform.smoothscale(
-                        curr_surf, (max_lyric_w, curr_surf.get_height()))
-                self.screen.blit(curr_surf, curr_surf.get_rect(center=(cx, lyrics_y)))
-            lyrics_y += 50
-
-            if next_line:
-                next_surf = self.font_lyric.render(next_line, True, COLOR_DIM)
-                if next_surf.get_width() > max_lyric_w:
-                    next_surf = pygame.transform.smoothscale(
-                        next_surf, (max_lyric_w, next_surf.get_height()))
-                self.screen.blit(next_surf, next_surf.get_rect(center=(cx, lyrics_y)))
+        # === Lyrics carousel (around the circle edge) ===
+        self._draw_lyrics_carousel(cx, cy)
 
         # === Progress arc (bottom) ===
         duration = state.get("duration_ms", 0)
