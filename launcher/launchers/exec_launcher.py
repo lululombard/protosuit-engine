@@ -52,7 +52,7 @@ class ExecLauncher(BaseLauncher):
 
         # Setup signaling for scripts that need extended initialization time
         self._setup_started = False
-        self._setup_topic = "protosuit/launcher/setup"
+        self._setup_topic = "protogen/fins/launcher/setup"
         self._setup_listener = None
 
     def launch(self) -> bool:

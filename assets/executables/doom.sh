@@ -5,7 +5,7 @@
 set -e
 
 # Signal to launcher that we need extended setup time
-mosquitto_pub -t protosuit/launcher/setup -m "started"
+mosquitto_pub -t protogen/fins/launcher/setup -m "started"
 
 # Get display config from environment (set by ExecLauncher)
 DISPLAY_WIDTH="${PROTOSUIT_DISPLAY_WIDTH:-720}"
@@ -155,7 +155,7 @@ xdotool mousemove 2000 2000 2>/dev/null || true
 sleep 1
 
 # Signal to launcher that setup is complete and inputs can be processed
-mosquitto_pub -t protosuit/launcher/setup -m "ready"
+mosquitto_pub -t protogen/fins/launcher/setup -m "ready"
 echo "[doom.sh] Signaled ready for inputs"
 
 # Wait for processes to exit
