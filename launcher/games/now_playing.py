@@ -32,8 +32,7 @@ PROGRESS_ARC_SPAN = math.radians(270)  # arc around the display
 PROGRESS_ARC_WIDTH = 16
 PROGRESS_ARC_RESOLUTION = 16
 
-# DEBUG = os.environ.get("DEBUG", "0") == "1"
-DEBUG = 1
+DEBUG = os.environ.get("DEBUG", "0") == "1"
 
 
 class NowPlayingApp:
@@ -185,18 +184,16 @@ class NowPlayingApp:
             display_width = total_width / scale
             span = display_width / radius
 
-            # Truncate with ellipsis if too wide
+            # Compress characters horizontally if too wide (like lyrics)
             if span > max_angle:
-                ellipsis_surf = render_font.render("…", True, color)
-                max_width = max_angle * radius * scale
-                truncated = []
-                w = 0
+                target_width = max_angle * radius * scale
+                ratio = target_width / total_width
+                compressed = []
                 for surf in char_surfs:
-                    if w + surf.get_width() + ellipsis_surf.get_width() > max_width:
-                        break
-                    truncated.append(surf)
-                    w += surf.get_width()
-                char_surfs = truncated + [ellipsis_surf]
+                    new_w = max(int(surf.get_width() * ratio), 1)
+                    compressed.append(pygame.transform.smoothscale(
+                        surf, (new_w, surf.get_height())))
+                char_surfs = compressed
                 total_width = sum(s.get_width() for s in char_surfs)
                 display_width = total_width / scale
                 span = display_width / radius
