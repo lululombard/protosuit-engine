@@ -11,6 +11,7 @@ LEFT_X="${PROTOSUIT_LEFT_X:-0}"
 RIGHT_X="${PROTOSUIT_RIGHT_X:-720}"
 POS_Y="${PROTOSUIT_Y:-0}"
 X_DISPLAY="${DISPLAY:-:0}"
+ACCENT_COLOR="${ACCENT_COLOR:-255,165,0}"
 
 echo "[now_playing.sh] Starting Now Playing launcher"
 echo "[now_playing.sh] Display: ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}"
@@ -38,7 +39,7 @@ echo "[now_playing.sh] Launching Now Playing..."
 export DISPLAY=$X_DISPLAY
 export PROTOSUIT_DISPLAY_WIDTH=$DISPLAY_WIDTH
 export PROTOSUIT_DISPLAY_HEIGHT=$DISPLAY_HEIGHT
-export DEBUG=0
+export PROTOSUIT_ACCENT_COLOR=$ACCENT_COLOR
 
 if [ -f "$VENV_PYTHON" ]; then
     $VENV_PYTHON "$GAME_PATH" &

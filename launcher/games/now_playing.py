@@ -16,14 +16,24 @@ from urllib.request import urlopen, Request
 import paho.mqtt.client as mqtt
 
 
+def _parse_color(env_var, default):
+    val = os.environ.get(env_var, "")
+    if val:
+        try:
+            parts = [int(x.strip()) for x in val.split(",")]
+            if len(parts) == 3:
+                return tuple(parts)
+        except ValueError:
+            pass
+    return default
+
 # Colors
 COLOR_BG = (0, 0, 0)
 COLOR_WHITE = (255, 255, 255)
 COLOR_GRAY = (160, 160, 160)
 COLOR_DIM = (80, 80, 80)
-COLOR_ACCENT = (255, 255, 255)
+COLOR_ACCENT = _parse_color("PROTOSUIT_ACCENT_COLOR", (255, 255, 255))
 COLOR_BAR_BG = (40, 40, 40)
-COLOR_BAR_FILL = (255, 255, 255)
 
 ART_SIZE = 500
 ART_BORDER_RADIUS = 500
@@ -505,7 +515,7 @@ class NowPlayingApp:
             # Full fill arc (white) — keep as SRCALPHA for true AA
             ss.fill((0, 0, 0, 0))
             self._draw_arc_raw(ss, ss_size // 2, ss_size // 2, radius * SCALE,
-                               start_deg, end_deg, COLOR_BAR_FILL, PROGRESS_ARC_WIDTH * SCALE)
+                               start_deg, end_deg, COLOR_ACCENT, PROGRESS_ARC_WIDTH * SCALE)
             self._arc_fill_full = pygame.transform.smoothscale(ss, (bbox, bbox))
 
             # Pre-allocate work surfaces (SRCALPHA)
