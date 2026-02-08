@@ -411,7 +411,7 @@ class NowPlayingApp:
             else:
                 # Old current: bottom(0) → left(+SIDE_ANG)
                 if carousel['old_curr']:
-                    alpha = int(255 - (255 - 80) * t_e)
+                    alpha = int(255 - (255 - 20) * t_e)
                     sc = 1.0 - (1.0 - LYRICS_SIDE_SCALE) * t_e
                     self._blit_rotated_lyric(
                         carousel['old_curr'], rot_delta, alpha, cx, cy, scale=sc)
@@ -446,7 +446,7 @@ class NowPlayingApp:
             self._blit_rotated_lyric(carousel['curr_text'], 0, 255, cx, cy)
         if carousel['prev_text']:
             self._blit_rotated_lyric(
-                carousel['prev_text'], SIDE_ANG, 80, cx, cy, scale=LYRICS_SIDE_SCALE)
+                carousel['prev_text'], SIDE_ANG, 20, cx, cy, scale=LYRICS_SIDE_SCALE)
         if carousel['next_text']:
             self._blit_rotated_lyric(
                 carousel['next_text'], -SIDE_ANG, 80, cx, cy, scale=LYRICS_SIDE_SCALE)
