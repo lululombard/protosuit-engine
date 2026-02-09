@@ -33,4 +33,4 @@
 
 // Serial baud rates
 #define PI_BAUD 921600
-#define TEENSY_BAUD 115200
+#define TEENSY_BAUD 921600

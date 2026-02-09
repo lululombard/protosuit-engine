@@ -18,12 +18,14 @@ void teensyCommProcess() {
         char c = Serial1.read();
         if (c == '\n') {
             if (inputBuffer.length() > 0 && onMessage) {
+                Serial.print("[TEENSY] ");
+                Serial.println(inputBuffer);
                 onMessage(inputBuffer);
             }
             inputBuffer = "";
         } else if (c != '\r') {
             inputBuffer += c;
-            if (inputBuffer.length() > 256) {
+            if (inputBuffer.length() > 512) {
                 inputBuffer = "";
             }
         }

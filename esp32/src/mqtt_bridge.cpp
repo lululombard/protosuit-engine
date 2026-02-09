@@ -13,6 +13,46 @@ static TeensyMenu teensyMenu;
 static FanSpeedCallback onFanSpeed = nullptr;
 static TeensyCommandCallback onTeensyCommand = nullptr;
 
+// Mapping between Pi camelCase param names and Teensy protocol uppercase names
+struct ParamMapping {
+    const char* camel;
+    const char* proto;
+    uint8_t TeensyMenu::* field;
+};
+
+static const ParamMapping paramMap[] = {
+    {"face",           "FACE",   &TeensyMenu::face},
+    {"bright",         "BRIGHT", &TeensyMenu::bright},
+    {"accentBright",   "ABRIGHT",&TeensyMenu::accentBright},
+    {"microphone",     "MIC",    &TeensyMenu::microphone},
+    {"micLevel",       "MICLVL", &TeensyMenu::micLevel},
+    {"boopSensor",     "BOOP",   &TeensyMenu::boopSensor},
+    {"spectrumMirror", "SPEC",   &TeensyMenu::spectrumMirror},
+    {"faceSize",       "SIZE",   &TeensyMenu::faceSize},
+    {"color",          "COLOR",  &TeensyMenu::color},
+    {"hueF",           "HUEF",   &TeensyMenu::hueF},
+    {"hueB",           "HUEB",   &TeensyMenu::hueB},
+    {"effect",         "EFFECT", &TeensyMenu::effect},
+    {"fanSpeed",       "FAN",    &TeensyMenu::fanSpeed},
+};
+static const int paramMapSize = sizeof(paramMap) / sizeof(paramMap[0]);
+
+static const ParamMapping* findByCamel(const String& name) {
+    for (int i = 0; i < paramMapSize; i++) {
+        if (name == paramMap[i].camel) return &paramMap[i];
+    }
+    return nullptr;
+}
+
+static const ParamMapping* findByProto(const String& name) {
+    String upper = name;
+    upper.toUpperCase();
+    for (int i = 0; i < paramMapSize; i++) {
+        if (upper == paramMap[i].proto) return &paramMap[i];
+    }
+    return nullptr;
+}
+
 void mqttBridgeInit() {
     Serial.begin(PI_BAUD);
     inputBuffer.reserve(512);
@@ -86,37 +126,34 @@ static void processMessage(const String& topic, const String& payload) {
             controllerCount = count;
         }
     }
-    else if (topic.startsWith("protogen/visor/teensy/menu/set")) {
+    else if (topic == "protogen/visor/teensy/menu/set") {
         JsonDocument doc;
         if (deserializeJson(doc, payload) == DeserializationError::Ok) {
             const char* param = doc["param"];
             int value = doc["value"];
 
             if (param) {
-                String p = param;
-                if (p == "face") teensyMenu.face = value;
-                else if (p == "bright") teensyMenu.bright = value;
-                else if (p == "accentBright") teensyMenu.accentBright = value;
-                else if (p == "microphone") teensyMenu.microphone = value;
-                else if (p == "micLevel") teensyMenu.micLevel = value;
-                else if (p == "boopSensor") teensyMenu.boopSensor = value;
-                else if (p == "spectrumMirror") teensyMenu.spectrumMirror = value;
-                else if (p == "faceSize") teensyMenu.faceSize = value;
-                else if (p == "color") teensyMenu.color = value;
-                else if (p == "hueF") teensyMenu.hueF = value;
-                else if (p == "hueB") teensyMenu.hueB = value;
-                else if (p == "effect") teensyMenu.effect = value;
-                else if (p == "fanSpeed") {
-                    teensyMenu.fanSpeed = value;
-                    if (onFanSpeed) onFanSpeed(value * 10);
-                }
+                const ParamMapping* m = findByCamel(String(param));
+                if (m) {
+                    teensyMenu.*(m->field) = value;
 
-                if (onTeensyCommand) {
-                    String cmd = "M:" + p + "=" + String(value);
-                    onTeensyCommand(cmd);
+                    if (strcmp(m->camel, "fanSpeed") == 0 && onFanSpeed) {
+                        onFanSpeed(value * 10);
+                    }
+
+                    if (onTeensyCommand) {
+                        String cmd = "SET " + String(m->proto) + " " + String(value);
+                        onTeensyCommand(cmd);
+                    }
                 }
             }
         }
+    }
+    else if (topic == "protogen/visor/teensy/menu/get") {
+        if (onTeensyCommand) onTeensyCommand("GET ALL");
+    }
+    else if (topic == "protogen/visor/teensy/menu/save") {
+        if (onTeensyCommand) onTeensyCommand("SAVE");
     }
 }
 
@@ -163,4 +200,46 @@ int mqttBridgeGetControllerCount() {
 
 const TeensyMenu& mqttBridgeGetMenu() {
     return teensyMenu;
+}
+
+void mqttBridgeHandleTeensyResponse(const String& msg) {
+    if (msg.startsWith("OK SAVED")) {
+        mqttBridgePublish("protogen/visor/teensy/menu/status", "{\"saved\":true}");
+        return;
+    }
+    if (msg.startsWith("ERR")) {
+        JsonDocument doc;
+        doc["error"] = msg;
+        char buffer[128];
+        serializeJson(doc, buffer);
+        mqttBridgePublish("protogen/visor/teensy/menu/status", buffer);
+        return;
+    }
+
+    int eqIdx = msg.indexOf('=');
+    if (eqIdx > 0) {
+        String protoParam = msg.substring(0, eqIdx);
+        protoParam.trim();
+        int value = msg.substring(eqIdx + 1).toInt();
+
+        const ParamMapping* m = findByProto(protoParam);
+        if (m) {
+            teensyMenu.*(m->field) = value;
+
+            if (strcmp(m->camel, "fanSpeed") == 0 && onFanSpeed) {
+                onFanSpeed(value * 10);
+            }
+
+            JsonDocument doc;
+            doc["param"] = m->camel;
+            doc["value"] = value;
+            char buffer[64];
+            serializeJson(doc, buffer);
+            mqttBridgePublish("protogen/visor/teensy/menu/status", buffer);
+        }
+    }
+}
+
+void mqttBridgeRequestTeensySync() {
+    if (onTeensyCommand) onTeensyCommand("GET ALL");
 }

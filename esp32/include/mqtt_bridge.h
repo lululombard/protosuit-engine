@@ -33,3 +33,5 @@ unsigned long mqttBridgeGetLastHeartbeat();
 const String& mqttBridgeGetShader();
 int mqttBridgeGetControllerCount();
 const TeensyMenu& mqttBridgeGetMenu();
+void mqttBridgeHandleTeensyResponse(const String& msg);
+void mqttBridgeRequestTeensySync();

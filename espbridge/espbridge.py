@@ -56,6 +56,8 @@ class ESPBridge:
         "protogen/fins/renderer/status/shader",
         "protogen/fins/bluetoothbridge/status/devices",
         "protogen/visor/teensy/menu/set",
+        "protogen/visor/teensy/menu/get",
+        "protogen/visor/teensy/menu/save",
     ]
 
     def __init__(self, serial_port: str = "/dev/ttyUSB0", baud_rate: int = 921600):

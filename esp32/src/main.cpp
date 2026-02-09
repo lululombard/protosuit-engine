@@ -13,6 +13,7 @@ static unsigned long lastSensorPublish = 0;
 static unsigned long lastConfigPublish = 0;
 
 static void onTeensyMessage(const String& msg) {
+    mqttBridgeHandleTeensyResponse(msg);
     mqttBridgePublish("protogen/visor/teensy/raw", msg.c_str());
 }
 
@@ -67,6 +68,7 @@ void setup() {
 
     mqttBridgePublish("protogen/visor/esp/status/alive", "true");
     mqttBridgePublish("protogen/visor/esp/status/fancurve", fanCurveConfigToJson().c_str());
+    mqttBridgeRequestTeensySync();
     updateDisplayData();
 }
 
