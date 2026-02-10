@@ -16,7 +16,6 @@ struct TeensyMenu {
     uint8_t hueF = 0;
     uint8_t hueB = 0;
     uint8_t effect = 0;
-    uint8_t fanSpeed = 0;
 };
 
 // Callback type for menu changes that need fan control
@@ -35,3 +34,4 @@ int mqttBridgeGetControllerCount();
 const TeensyMenu& mqttBridgeGetMenu();
 void mqttBridgeHandleTeensyResponse(const String& msg);
 void mqttBridgeRequestTeensySync();
+void mqttBridgePublishSchema();

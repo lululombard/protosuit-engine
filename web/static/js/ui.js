@@ -11,6 +11,9 @@ function logMessage(message, type = 'info') {
     const entry = document.createElement('div');
     entry.textContent = `[${timestamp}] ${message}`;
     log.appendChild(entry);
+    while (log.childElementCount > 100) {
+        log.removeChild(log.firstChild);
+    }
     log.scrollTop = log.scrollHeight;
 }
 

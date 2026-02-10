@@ -13,27 +13,41 @@ static TeensyMenu teensyMenu;
 static FanSpeedCallback onFanSpeed = nullptr;
 static TeensyCommandCallback onTeensyCommand = nullptr;
 
+// Value label arrays for params with named options
+static const char* const faceLabels[] = {
+    "DEFAULT","ANGRY","DOUBT","FROWN","LOOKUP","SAD","AUDIO1","AUDIO2","AUDIO3"
+};
+static const char* const colorLabels[] = {
+    "BASE","YELLOW","ORANGE","WHITE","GREEN","PURPLE","RED","BLUE",
+    "RAINBOW","RAINBOWNOISE","HORIZONTALRAINBOW","BLACK"
+};
+static const char* const effectLabels[] = {
+    "NONE","PHASEY","PHASEX","PHASER","GLITCHX",
+    "MAGNET","FISHEYE","HBLUR","VBLUR","RBLUR"
+};
+static const char* const toggleLabels[] = {"OFF","ON"};
 // Mapping between Pi camelCase param names and Teensy protocol uppercase names
 struct ParamMapping {
     const char* camel;
     const char* proto;
     uint8_t TeensyMenu::* field;
+    uint8_t maxVal;
+    const char* const* labels;  // NULL for numeric-only params
 };
 
 static const ParamMapping paramMap[] = {
-    {"face",           "FACE",   &TeensyMenu::face},
-    {"bright",         "BRIGHT", &TeensyMenu::bright},
-    {"accentBright",   "ABRIGHT",&TeensyMenu::accentBright},
-    {"microphone",     "MIC",    &TeensyMenu::microphone},
-    {"micLevel",       "MICLVL", &TeensyMenu::micLevel},
-    {"boopSensor",     "BOOP",   &TeensyMenu::boopSensor},
-    {"spectrumMirror", "SPEC",   &TeensyMenu::spectrumMirror},
-    {"faceSize",       "SIZE",   &TeensyMenu::faceSize},
-    {"color",          "COLOR",  &TeensyMenu::color},
-    {"hueF",           "HUEF",   &TeensyMenu::hueF},
-    {"hueB",           "HUEB",   &TeensyMenu::hueB},
-    {"effect",         "EFFECT", &TeensyMenu::effect},
-    {"fanSpeed",       "FAN",    &TeensyMenu::fanSpeed},
+    {"face",           "FACE",   &TeensyMenu::face,           8,  faceLabels},
+    {"bright",         "BRIGHT", &TeensyMenu::bright,         10, nullptr},
+    {"accentBright",   "ABRIGHT",&TeensyMenu::accentBright,   10, nullptr},
+    {"microphone",     "MIC",    &TeensyMenu::microphone,     1,  toggleLabels},
+    {"micLevel",       "MICLVL", &TeensyMenu::micLevel,       10, nullptr},
+    {"boopSensor",     "BOOP",   &TeensyMenu::boopSensor,     1,  toggleLabels},
+    {"spectrumMirror", "SPEC",   &TeensyMenu::spectrumMirror, 1,  toggleLabels},
+    {"faceSize",       "SIZE",   &TeensyMenu::faceSize,       10, nullptr},
+    {"color",          "COLOR",  &TeensyMenu::color,          11, colorLabels},
+    {"hueF",           "HUEF",   &TeensyMenu::hueF,           10, nullptr},
+    {"hueB",           "HUEB",   &TeensyMenu::hueB,           10, nullptr},
+    {"effect",         "EFFECT", &TeensyMenu::effect,          9,  effectLabels},
 };
 static const int paramMapSize = sizeof(paramMap) / sizeof(paramMap[0]);
 
@@ -137,10 +151,6 @@ static void processMessage(const String& topic, const String& payload) {
                 if (m) {
                     teensyMenu.*(m->field) = value;
 
-                    if (strcmp(m->camel, "fanSpeed") == 0 && onFanSpeed) {
-                        onFanSpeed(value * 10);
-                    }
-
                     if (onTeensyCommand) {
                         String cmd = "SET " + String(m->proto) + " " + String(value);
                         onTeensyCommand(cmd);
@@ -150,6 +160,7 @@ static void processMessage(const String& topic, const String& payload) {
         }
     }
     else if (topic == "protogen/visor/teensy/menu/get") {
+        mqttBridgePublishSchema();
         if (onTeensyCommand) onTeensyCommand("GET ALL");
     }
     else if (topic == "protogen/visor/teensy/menu/save") {
@@ -202,9 +213,21 @@ const TeensyMenu& mqttBridgeGetMenu() {
     return teensyMenu;
 }
 
+static void publishParamStatus(const ParamMapping* m, uint8_t value) {
+    String topic = "protogen/visor/teensy/menu/status/" + String(m->camel);
+    JsonDocument doc;
+    doc["value"] = value;
+    if (m->labels && value <= m->maxVal) {
+        doc["label"] = m->labels[value];
+    }
+    char buffer[96];
+    serializeJson(doc, buffer);
+    mqttBridgePublish(topic.c_str(), buffer);
+}
+
 void mqttBridgeHandleTeensyResponse(const String& msg) {
     if (msg.startsWith("OK SAVED")) {
-        mqttBridgePublish("protogen/visor/teensy/menu/status", "{\"saved\":true}");
+        mqttBridgePublish("protogen/visor/teensy/menu/saved", "true");
         return;
     }
     if (msg.startsWith("ERR")) {
@@ -212,7 +235,7 @@ void mqttBridgeHandleTeensyResponse(const String& msg) {
         doc["error"] = msg;
         char buffer[128];
         serializeJson(doc, buffer);
-        mqttBridgePublish("protogen/visor/teensy/menu/status", buffer);
+        mqttBridgePublish("protogen/visor/teensy/menu/error", buffer);
         return;
     }
 
@@ -226,18 +249,31 @@ void mqttBridgeHandleTeensyResponse(const String& msg) {
         if (m) {
             teensyMenu.*(m->field) = value;
 
-            if (strcmp(m->camel, "fanSpeed") == 0 && onFanSpeed) {
-                onFanSpeed(value * 10);
-            }
-
-            JsonDocument doc;
-            doc["param"] = m->camel;
-            doc["value"] = value;
-            char buffer[64];
-            serializeJson(doc, buffer);
-            mqttBridgePublish("protogen/visor/teensy/menu/status", buffer);
+            publishParamStatus(m, value);
         }
     }
+}
+
+void mqttBridgePublishSchema() {
+    JsonDocument doc;
+    for (int i = 0; i < paramMapSize; i++) {
+        const ParamMapping& m = paramMap[i];
+        JsonObject param = doc[m.camel].to<JsonObject>();
+        param["min"] = 0;
+        param["max"] = m.maxVal;
+        if (m.labels) {
+            param["type"] = (m.maxVal <= 1) ? "toggle" : "select";
+            JsonArray options = param["options"].to<JsonArray>();
+            for (int j = 0; j <= m.maxVal; j++) {
+                options.add(m.labels[j]);
+            }
+        } else {
+            param["type"] = "range";
+        }
+    }
+    String output;
+    serializeJson(doc, output);
+    mqttBridgePublish("protogen/visor/teensy/menu/schema", output.c_str());
 }
 
 void mqttBridgeRequestTeensySync() {

@@ -316,6 +316,8 @@ class ESPBridge:
                 # Forward retained messages now that ESP32 is confirmed alive
                 if not self.retained_forwarded:
                     threading.Timer(0.5, self._forward_retained_messages).start()
+                # Request Teensy menu sync after ESP32 settles
+                threading.Timer(2.0, self._request_teensy_sync).start()
 
             # Parse: topic\tpayload
             if self.MSG_SEPARATOR in message:
@@ -323,11 +325,22 @@ class ESPBridge:
 
                 # Publish to MQTT
                 if self.mqtt_client:
-                    retain = topic.endswith("/alive") or topic.endswith("/sensors") or topic.endswith("/fancurve")
+                    retain = (
+                        topic.endswith("/alive") or
+                        topic.endswith("/sensors") or
+                        topic.endswith("/fancurve") or
+                        topic.startswith("protogen/visor/teensy/menu/status/") or
+                        topic == "protogen/visor/teensy/menu/schema"
+                    )
                     self.mqtt_client.publish(topic, payload, retain=retain)
 
         except Exception as e:
             print(f"[ESPBridge] Error processing ESP message: {e}")
+
+    def _request_teensy_sync(self):
+        """Request Teensy menu state + schema from ESP32"""
+        if self.esp_connected:
+            self.mqtt_to_serial_queue.put(("protogen/visor/teensy/menu/get", ""))
 
     def _publish_esp_status(self, connected: bool):
         """Publish ESP32 connection status"""

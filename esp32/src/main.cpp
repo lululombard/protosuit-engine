@@ -11,6 +11,7 @@
 static unsigned long lastSensorUpdate = 0;
 static unsigned long lastSensorPublish = 0;
 static unsigned long lastConfigPublish = 0;
+static bool initialSyncDone = false;
 
 static void onTeensyMessage(const String& msg) {
     mqttBridgeHandleTeensyResponse(msg);
@@ -68,7 +69,6 @@ void setup() {
 
     mqttBridgePublish("protogen/visor/esp/status/alive", "true");
     mqttBridgePublish("protogen/visor/esp/status/fancurve", fanCurveConfigToJson().c_str());
-    mqttBridgeRequestTeensySync();
     updateDisplayData();
 }
 
@@ -103,6 +103,13 @@ void loop() {
     if (now - lastConfigPublish >= 30000) {
         mqttBridgePublish("protogen/visor/esp/status/fancurve", fanCurveConfigToJson().c_str());
         lastConfigPublish = now;
+    }
+
+    // Delayed initial sync (give espbridge time to connect)
+    if (!initialSyncDone && now >= 3000) {
+        initialSyncDone = true;
+        mqttBridgePublishSchema();
+        mqttBridgeRequestTeensySync();
     }
 
     // Process serial communications

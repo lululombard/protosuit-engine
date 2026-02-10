@@ -83,7 +83,7 @@ h1 {
 /* Grid layout */
 .grid-container {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 30px;
     padding: 0 40px 40px;
     max-width: 1800px;
@@ -164,6 +164,16 @@ h2::after {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 10px;
+}
+
+.button-grid button {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    clip-path: none;
 }
 
 /* Input groups */
@@ -804,4 +814,79 @@ small {
 
 .file-list::-webkit-scrollbar-thumb:hover {
     background: var(--accent-secondary);
+}
+
+/* Teensy Menu Controls */
+.teensy-param {
+    margin-bottom: 12px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--accent-primary);
+}
+
+.teensy-param-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.teensy-param-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    font-size: 0.9em;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+}
+
+.teensy-param-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85em;
+    color: var(--accent-primary);
+}
+
+.teensy-toggle-row {
+    display: flex;
+    gap: 8px;
+}
+
+.teensy-toggle-btn {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 0.85em;
+    margin: 0;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.teensy-toggle-btn.active {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    border-color: var(--accent-secondary);
+    box-shadow: 0 0 10px rgba(243, 156, 18, 0.4);
+}
+
+.teensy-select-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 6px;
+}
+
+.teensy-select-btn {
+    padding: 6px 8px;
+    font-size: 0.8em;
+    margin: 0;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.teensy-select-btn.active {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    border-color: var(--accent-secondary);
+    box-shadow: 0 0 10px rgba(243, 156, 18, 0.4);
 }

@@ -82,6 +82,16 @@ function connectMQTT() {
         } else if (topic === 'protogen/visor/esp/status/fancurve') {
             handleFanCurveStatus(payload);
             return;
+        } else if (topic === 'protogen/visor/teensy/menu/schema') {
+            handleTeensySchema(payload);
+            return;
+        } else if (topic.startsWith('protogen/visor/teensy/menu/status/')) {
+            const param = topic.replace('protogen/visor/teensy/menu/status/', '');
+            handleTeensyParamStatus(param, payload);
+            return;
+        } else if (topic === 'protogen/visor/teensy/menu/saved') {
+            handleTeensySaved();
+            return;
         }
 
         logMessage(`← ${topic}: ${payload}`);

@@ -197,6 +197,18 @@
                 </div>
             </section>
 
+            <!-- Teensy Menu -->
+            <section class="panel">
+                <h2>Teensy Menu</h2>
+                <div id="teensyMenuControls">
+                    <p><em>Waiting for schema...</em></p>
+                </div>
+                <div class="button-group" style="margin-top: 15px;">
+                    <button onclick="teensyRefresh()">Refresh</button>
+                    <button onclick="teensySave()" id="teensySaveBtn">Save to EEPROM</button>
+                </div>
+            </section>
+
             <!-- Display Preview -->
             <section class="panel">
                 <h2>Display Preview</h2>
@@ -262,6 +274,7 @@
     <script src="{{ url_for('static', filename='js/preview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/fps-monitor.js') }}"></script>
     <script src="{{ url_for('static', filename='js/file_browser.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/teensy.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 
