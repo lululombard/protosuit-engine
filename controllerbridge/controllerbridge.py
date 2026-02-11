@@ -169,10 +169,15 @@ class ControllerBridge:
             return
 
         try:
-            # Wait for evdev device to appear
-            time.sleep(3)
+            # Retry evdev discovery — kernel may need time to create the input device
+            evdev_path = None
+            for attempt in range(5):
+                time.sleep(2)
+                evdev_path = self._find_evdev_device(mac, name)
+                if evdev_path:
+                    break
+                print(f"[ControllerBridge] evdev not found for {mac}, retrying ({attempt + 1}/5)...")
 
-            evdev_path = self._find_evdev_device(mac, name)
             if evdev_path:
                 self.connected_devices[mac] = {
                     "name": name,
@@ -185,7 +190,7 @@ class ControllerBridge:
                 publish_notification(self.mqtt_client, "controller", "connected",
                                      "gamepad", f"Controller connected: {name}")
             else:
-                print(f"[ControllerBridge] Could not find evdev device for {mac}")
+                print(f"[ControllerBridge] Could not find evdev device for {mac} after 5 attempts")
 
         except Exception as e:
             print(f"[ControllerBridge] Error handling connected controller: {e}")
@@ -232,28 +237,43 @@ class ControllerBridge:
 
             expected_name = (name or "").lower()
             print(f"[ControllerBridge] Looking for evdev device for {mac} (name: {expected_name})")
+            for d in devices:
+                caps = d.capabilities()
+                has_keys = ecodes.EV_KEY in caps
+                has_abs = ecodes.EV_ABS in caps
+                if has_keys or has_abs:
+                    print(f"[ControllerBridge]   evdev: {d.path} name={d.name!r} phys={d.phys!r}")
 
-            # Pass 1: MAC in phys field
+            # Pass 1: MAC in uniq field (device's actual BT address)
+            mac_normalized = mac.replace(":", "").lower()
             for device in devices:
                 if device.path in already_assigned:
                     continue
                 caps = device.capabilities()
                 if ecodes.EV_KEY in caps or ecodes.EV_ABS in caps:
-                    phys = device.phys
-                    if phys and mac.replace(":", "").lower() in phys.lower().replace(":", ""):
-                        print(f"[ControllerBridge] Found by MAC: {device.path} ({device.name})")
+                    uniq = device.uniq
+                    if uniq and mac_normalized == uniq.replace(":", "").lower():
+                        print(f"[ControllerBridge] Found by MAC (uniq): {device.path} ({device.name})")
                         return device.path
 
-            # Pass 2: exact name match
+            # Pass 2: exact name match, then substring
             if expected_name:
+                substring_match = None
                 for device in devices:
                     if device.path in already_assigned:
                         continue
                     caps = device.capabilities()
                     if ecodes.EV_KEY in caps and ecodes.EV_ABS in caps:
-                        if expected_name == device.name.lower():
-                            print(f"[ControllerBridge] Found by name: {device.path} ({device.name})")
+                        dev_name = device.name.lower()
+                        if expected_name == dev_name:
+                            print(f"[ControllerBridge] Found by exact name: {device.path} ({device.name})")
                             return device.path
+                        if not substring_match and (expected_name in dev_name or dev_name in expected_name):
+                            substring_match = device
+
+                if substring_match:
+                    print(f"[ControllerBridge] Found by substring name: {substring_match.path} ({substring_match.name})")
+                    return substring_match.path
 
             # Pass 3: single unassigned gamepad fallback
             unassigned = []

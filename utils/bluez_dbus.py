@@ -9,7 +9,7 @@ import logging
 from typing import Optional, Callable, Dict, List
 
 from pydbus import SystemBus
-from gi.repository import GLib
+from gi.repository import GLib, Gio
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,57 @@ BLUEZ_SERVICE = "org.bluez"
 BLUEZ_ADAPTER_IFACE = "org.bluez.Adapter1"
 BLUEZ_DEVICE_IFACE = "org.bluez.Device1"
 OBJECT_MANAGER_IFACE = "org.freedesktop.DBus.ObjectManager"
+AGENT_PATH = "/org/bluez/protosuit_agent"
+
+# Agent1 introspection XML — auto-accept all pairing requests
+AGENT_XML = """
+<node>
+  <interface name="org.bluez.Agent1">
+    <method name="Release"/>
+    <method name="RequestPinCode">
+      <arg direction="in" type="o" name="device"/>
+      <arg direction="out" type="s"/>
+    </method>
+    <method name="DisplayPinCode">
+      <arg direction="in" type="o" name="device"/>
+      <arg direction="in" type="s" name="pincode"/>
+    </method>
+    <method name="RequestPasskey">
+      <arg direction="in" type="o" name="device"/>
+      <arg direction="out" type="u"/>
+    </method>
+    <method name="DisplayPasskey">
+      <arg direction="in" type="o" name="device"/>
+      <arg direction="in" type="u" name="passkey"/>
+      <arg direction="in" type="q" name="entered"/>
+    </method>
+    <method name="RequestConfirmation">
+      <arg direction="in" type="o" name="device"/>
+      <arg direction="in" type="u" name="passkey"/>
+    </method>
+    <method name="RequestAuthorization">
+      <arg direction="in" type="o" name="device"/>
+    </method>
+    <method name="AuthorizeService">
+      <arg direction="in" type="o" name="device"/>
+      <arg direction="in" type="s" name="uuid"/>
+    </method>
+    <method name="Cancel"/>
+  </interface>
+</node>
+"""
+
+
+def _agent_method_call(connection, sender, object_path, interface_name,
+                       method_name, parameters, invocation):
+    """Handle Agent1 method calls — auto-accept everything."""
+    logger.info(f"Agent: {method_name}")
+    if method_name == "RequestPinCode":
+        invocation.return_value(GLib.Variant("(s)", ("0000",)))
+    elif method_name == "RequestPasskey":
+        invocation.return_value(GLib.Variant("(u)", (0,)))
+    else:
+        invocation.return_value(None)
 PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
 
 # Device categorization keywords
@@ -271,6 +322,23 @@ class BluezManager:
         self._loop_thread: Optional[threading.Thread] = None
         self._subscriptions: List = []
         self._adapters: Dict[str, BluezAdapter] = {}
+        self._agent_reg_id = None
+
+    def register_agent(self):
+        """Register a NoInputNoOutput pairing agent with BlueZ."""
+        try:
+            node_info = Gio.DBusNodeInfo.new_for_xml(AGENT_XML)
+            self._agent_reg_id = self.bus.con.register_object(
+                AGENT_PATH,
+                node_info.interfaces[0],
+                _agent_method_call,
+            )
+            agent_manager = self.bus.get(BLUEZ_SERVICE, "/org/bluez")
+            agent_manager.RegisterAgent(AGENT_PATH, "NoInputNoOutput")
+            agent_manager.RequestDefaultAgent(AGENT_PATH)
+            logger.info("Pairing agent registered")
+        except Exception as e:
+            logger.error(f"Failed to register pairing agent: {e}")
 
     def get_adapter(self, name: str = "hci0") -> BluezAdapter:
         """Get or create an adapter wrapper."""

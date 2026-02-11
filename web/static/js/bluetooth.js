@@ -233,6 +233,12 @@ function initBluetooth() {
         }
     });
 
+    // Forget Disconnected button
+    const forgetBtn = document.getElementById('forget-disconnected-btn');
+    forgetBtn.addEventListener('click', () => {
+        forgetDisconnected();
+    });
+
     // Assignment selects
     const leftSelect = document.getElementById('left-select');
     const rightSelect = document.getElementById('right-select');
@@ -330,6 +336,14 @@ function removeAssignment(display) {
     const message = JSON.stringify({ mac: null, display: display });
     bluetoothMqttClient.publish('protogen/fins/controllerbridge/assign', message);
     console.log('[Bluetooth] Removed assignment for', display);
+}
+
+// Forget disconnected devices
+function forgetDisconnected() {
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
+
+    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/forget_disconnected', '');
+    console.log('[Bluetooth] Forgetting disconnected devices');
 }
 
 // Restart Bluetooth service

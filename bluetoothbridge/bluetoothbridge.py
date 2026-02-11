@@ -103,6 +103,11 @@ class BluetoothBridge:
         if BLUEZ_DEVICE_IFACE not in interfaces:
             return
 
+        # Only track devices on configured adapters
+        adapter = dbus_path_adapter(path)
+        if adapter not in (self.gamepad_adapter, self.audio_adapter):
+            return
+
         props = interfaces[BLUEZ_DEVICE_IFACE]
         mac = dbus_path_to_mac(path)
         if not mac:
@@ -153,7 +158,7 @@ class BluetoothBridge:
                 del self.audio_devices[mac]
                 self.publish_audio_devices_status()
 
-    def _on_properties_changed(self, sender, obj, iface, signal_name, params):
+    def _on_properties_changed(self, connection, sender, obj, iface, signal_name, params):
         """Handle PropertiesChanged signal (connection state, name updates)."""
         iface_name, changed, invalidated = params
 
@@ -169,6 +174,38 @@ class BluetoothBridge:
             # Handle connection state changes
             if "Connected" in changed:
                 connected = bool(changed["Connected"])
+
+                # If device isn't tracked yet but just connected, look it up and add it
+                if connected and mac not in self.discovered_devices and mac not in self.audio_devices:
+                    try:
+                        adapter_name = dbus_path_adapter(path)
+                        device = self.bluez.get_device(adapter_name or self.gamepad_adapter, mac)
+                        name = device.name
+                        icon = device.icon
+                        paired = device.paired
+
+                        if is_gamepad(name, icon):
+                            self.discovered_devices[mac] = {
+                                "mac": mac, "name": name,
+                                "paired": paired, "connected": True,
+                            }
+                            print(f"[BluetoothBridge] Gamepad connected (new): {name} ({mac})")
+                            publish_notification(self.mqtt_client, "bluetooth", "connected",
+                                                 "gamepad", f"Controller connected: {name}")
+                            self.publish_devices_status()
+                        elif is_audio_device(name, icon):
+                            self.audio_devices[mac] = {
+                                "mac": mac, "name": name,
+                                "paired": paired, "connected": True, "type": "audio",
+                            }
+                            print(f"[BluetoothBridge] Audio device connected (new): {name} ({mac})")
+                            self.publish_last_audio_device(mac)
+                            publish_notification(self.mqtt_client, "bluetooth", "connected",
+                                                 "speaker", f"Speaker connected: {name}")
+                            self.publish_audio_devices_status()
+
+                    except Exception as e:
+                        print(f"[BluetoothBridge] Could not look up new device {mac}: {e}")
 
                 if mac in self.discovered_devices:
                     old_state = self.discovered_devices[mac].get("connected", False)
@@ -236,6 +273,7 @@ class BluetoothBridge:
                 "protogen/fins/bluetoothbridge/disconnect",
                 "protogen/fins/bluetoothbridge/unpair",
                 "protogen/fins/bluetoothbridge/bluetooth/restart",
+                "protogen/fins/bluetoothbridge/forget_disconnected",
                 "protogen/fins/bluetoothbridge/status/last_audio_device",
             ]
             for topic in topics:
@@ -274,10 +312,44 @@ class BluetoothBridge:
                     self.unpair_device(mac)
             elif topic == "protogen/fins/bluetoothbridge/bluetooth/restart":
                 self.restart_bluetooth()
+            elif topic == "protogen/fins/bluetoothbridge/forget_disconnected":
+                self.forget_disconnected()
             elif topic == "protogen/fins/bluetoothbridge/status/last_audio_device":
                 self._restore_last_audio_device(payload)
         except Exception as e:
             print(f"[BluetoothBridge] Error handling MQTT: {e}")
+
+    # ======== Forget Disconnected ========
+
+    def forget_disconnected(self):
+        """Remove all disconnected devices from BlueZ and internal state."""
+        print("[BluetoothBridge] Forgetting disconnected devices...")
+        to_remove = set()
+
+        with self._state_lock:
+            for mac, info in list(self.discovered_devices.items()):
+                if not info.get("connected"):
+                    to_remove.add(mac)
+                    del self.discovered_devices[mac]
+
+            for mac, info in list(self.audio_devices.items()):
+                if not info.get("connected"):
+                    to_remove.add(mac)
+                    del self.audio_devices[mac]
+
+            self.publish_devices_status()
+            self.publish_audio_devices_status()
+
+        # Remove from BlueZ — try all configured adapters
+        adapters = {self.gamepad_adapter, self.audio_adapter}
+        for mac in to_remove:
+            for adapter_name in adapters:
+                try:
+                    adapter = self.bluez.get_adapter(adapter_name)
+                    adapter.remove_device(mac)
+                    print(f"[BluetoothBridge] Removed {mac} from {adapter_name}")
+                except Exception:
+                    pass
 
     # ======== Scanning ========
 
@@ -286,6 +358,20 @@ class BluetoothBridge:
         if self.scanning:
             return
         print("[BluetoothBridge] Starting scan...")
+
+        # Discard previous scan results (keep paired/connected devices)
+        with self._state_lock:
+            self.discovered_devices = {
+                mac: info for mac, info in self.discovered_devices.items()
+                if info.get("paired") or info.get("connected")
+            }
+            self.audio_devices = {
+                mac: info for mac, info in self.audio_devices.items()
+                if info.get("paired") or info.get("connected")
+            }
+            self.publish_devices_status()
+            self.publish_audio_devices_status()
+
         self.scanning = True
         self.publish_scanning_status()
 
@@ -342,29 +428,40 @@ class BluetoothBridge:
             if not device.trusted:
                 device.trust()
 
-            # Pair if needed
-            if not device.paired:
-                device.pair()
+            # BLE devices can't pair while connected — disconnect first
+            if not device.paired and device.connected:
+                print(f"[BluetoothBridge] Disconnecting {mac} before pairing...")
+                device.disconnect()
                 time.sleep(1)
 
-            # Connect
-            device.connect()
+            # Pair if needed (don't let pair failure block connect)
+            if not device.paired:
+                try:
+                    device.pair()
+                    time.sleep(1)
+                except Exception as e:
+                    print(f"[BluetoothBridge] Pair failed for {mac}, trying connect: {e}")
 
-            # Update state
+            # Connect
+            if not device.connected:
+                device.connect()
+
+            # Update state from actual device properties
             name = device.name
+            paired = device.paired
             with self._state_lock:
                 icon = device.icon
                 if is_audio_device(name, icon):
                     self.audio_devices[mac] = {
                         "mac": mac, "name": name,
-                        "paired": True, "connected": True, "type": "audio",
+                        "paired": paired, "connected": True, "type": "audio",
                     }
                     self.publish_audio_devices_status()
                     self.publish_last_audio_device(mac)
                 else:
                     self.discovered_devices[mac] = {
                         "mac": mac, "name": name,
-                        "paired": True, "connected": True,
+                        "paired": paired, "connected": True,
                     }
                     self.publish_devices_status()
 
@@ -524,6 +621,17 @@ class BluetoothBridge:
             if not device.trusted:
                 device.trust()
             device.connect()
+
+            # Update state directly (don't rely on D-Bus signal alone)
+            with self._state_lock:
+                if mac in self.discovered_devices:
+                    self.discovered_devices[mac]["connected"] = True
+                    self.publish_devices_status()
+                if mac in self.audio_devices:
+                    self.audio_devices[mac]["connected"] = True
+                    self.publish_audio_devices_status()
+                    self.publish_last_audio_device(mac)
+
             print(f"[BluetoothBridge] Reconnected: {mac}")
         except Exception as e:
             print(f"[BluetoothBridge] Reconnect failed for {mac}: {e}")
@@ -624,6 +732,54 @@ class BluetoothBridge:
         self.publish_devices_status()
         self.publish_audio_devices_status()
 
+    # ======== State Sync ========
+
+    def _poll_device_states(self):
+        """Periodically sync device states from BlueZ to catch missed signals."""
+        while self.running:
+            time.sleep(5)
+            try:
+                self._sync_device_states()
+            except Exception as e:
+                print(f"[BluetoothBridge] Poll error: {e}")
+
+    def _sync_device_states(self):
+        """Query BlueZ for actual device states and update dicts."""
+        changed_gamepads = False
+        changed_audio = False
+
+        with self._state_lock:
+            for mac, info in list(self.discovered_devices.items()):
+                try:
+                    adapter = self._get_adapter_for_device(mac)
+                    device = self.bluez.get_device(adapter, mac)
+                    connected = device.connected
+                    paired = device.paired
+                    if connected != info.get("connected") or paired != info.get("paired"):
+                        info["connected"] = connected
+                        info["paired"] = paired
+                        changed_gamepads = True
+                except Exception:
+                    pass
+
+            for mac, info in list(self.audio_devices.items()):
+                try:
+                    adapter = self._get_adapter_for_device(mac)
+                    device = self.bluez.get_device(adapter, mac)
+                    connected = device.connected
+                    paired = device.paired
+                    if connected != info.get("connected") or paired != info.get("paired"):
+                        info["connected"] = connected
+                        info["paired"] = paired
+                        changed_audio = True
+                except Exception:
+                    pass
+
+            if changed_gamepads:
+                self.publish_devices_status()
+            if changed_audio:
+                self.publish_audio_devices_status()
+
     # ======== Lifecycle ========
 
     def cleanup(self):
@@ -643,6 +799,17 @@ class BluetoothBridge:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
+        self.running = True
+
+        # Subscribe to D-Bus signals FIRST so we catch everything during startup
+        self.bluez.subscribe_interfaces_added(self._on_interfaces_added)
+        self.bluez.subscribe_interfaces_removed(self._on_interfaces_removed)
+        self.bluez.subscribe_properties_changed(self._on_properties_changed)
+        self.bluez.start()
+
+        # Initialize MQTT (needed before publish calls in signal handlers)
+        self.init_mqtt()
+
         # Restart Bluetooth for clean state
         try:
             result = subprocess.run(
@@ -654,6 +821,9 @@ class BluetoothBridge:
                 time.sleep(3)
         except Exception as e:
             print(f"[BluetoothBridge] Bluetooth restart warning: {e}")
+
+        # Register pairing agent (required for BlueZ to handle pair requests)
+        self.bluez.register_agent()
 
         # Unblock and power on adapters via D-Bus
         try:
@@ -671,18 +841,7 @@ class BluetoothBridge:
         except Exception as e:
             print(f"[BluetoothBridge] Adapter setup warning: {e}")
 
-        self.running = True
-
-        # Subscribe to D-Bus signals
-        self.bluez.subscribe_interfaces_added(self._on_interfaces_added)
-        self.bluez.subscribe_interfaces_removed(self._on_interfaces_removed)
-        self.bluez.subscribe_properties_changed(self._on_properties_changed)
-        self.bluez.start()
-
-        # Initialize MQTT
-        self.init_mqtt()
-
-        # Load paired devices
+        # Snapshot paired devices now that adapters are up
         self._load_paired_devices()
 
         # Auto-reconnect
@@ -690,6 +849,9 @@ class BluetoothBridge:
 
         # Publish initial status
         self.publish_all_status()
+
+        # Start periodic state sync
+        threading.Thread(target=self._poll_device_states, daemon=True).start()
 
         print("[BluetoothBridge] Running. Press Ctrl+C to exit.")
 

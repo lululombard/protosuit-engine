@@ -71,7 +71,7 @@ bluetoothbridge:
   # Use different adapters for gamepads and audio to avoid bandwidth conflicts
   # Run 'bluetoothctl list' to see available adapters
   adapters:
-    gamepads: "hci0"    # Bluetooth adapter for gamepads (usually built-in)
+    gamepads: "hci1"    # Bluetooth adapter for gamepads (usually built-in)
     audio: "hci1"       # Bluetooth adapter for audio devices (usually USB dongle)
 
 # ControllerBridge configuration (gamepad input forwarding)
@@ -81,7 +81,6 @@ controllerbridge:
     BTN_EAST: "b"       # B button (PlayStation Circle, Xbox B)
     ABS_HAT0X: "dpad_x" # D-pad X axis
     ABS_HAT0Y: "dpad_y" # D-pad Y axis
-  dead_zone: 0.2        # Analog stick dead zone
 
 # ESP32 bridge configuration
 esp32:
