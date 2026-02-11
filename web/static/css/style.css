@@ -1,6 +1,52 @@
 /* Protosuit Engine - Cyberpunk Industrial UI */
 
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+@font-face {
+    font-family: 'Rajdhani';
+    font-style: normal;
+    font-weight: 300;
+    font-display: swap;
+    src: url('../fonts/rajdhani-300.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Rajdhani';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../fonts/rajdhani-400.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Rajdhani';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('../fonts/rajdhani-500.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Rajdhani';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('../fonts/rajdhani-600.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Rajdhani';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('../fonts/rajdhani-700.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Share Tech Mono';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../fonts/share-tech-mono-400.woff2') format('woff2');
+}
 
 :root {
     --bg-primary: #0a0a0a;
@@ -498,31 +544,6 @@ input[type="text"]:focus,
 input[type="number"]:focus {
     border-color: var(--accent-primary);
     box-shadow: 0 0 10px rgba(243, 156, 18, 0.3);
-}
-
-/* Message log */
-#messageLog {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 0.8em;
-    color: var(--text-secondary);
-    padding: 15px;
-    height: 250px;
-    overflow-y: auto;
-    margin-bottom: 10px;
-    clip-path: polygon(0 0,
-            calc(100% - 10px) 0,
-            100% 10px,
-            100% 100%,
-            10px 100%,
-            0 calc(100% - 10px));
-}
-
-#messageLog div {
-    border-left: 2px solid var(--border-color);
-    padding-left: 10px;
-    margin: 5px 0;
 }
 
 /* Shader panel - taller */

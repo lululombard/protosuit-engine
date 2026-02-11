@@ -545,6 +545,7 @@ function handleRendererUniformStatus(payload) {
             }
 
             // Update our tracked value
+            if (actualValue === undefined || actualValue === null) continue;
             currentUniformValues[uniformName] = actualValue;
 
             // Update slider UI (if it exists)
@@ -553,14 +554,14 @@ function handleRendererUniformStatus(payload) {
                 const valueSpan = document.getElementById(`value_${uniformName}`);
                 if (slider && valueSpan) {
                     slider.value = actualValue;
-                    valueSpan.textContent = actualValue.toFixed(3);
+                    valueSpan.textContent = Number(actualValue).toFixed(3);
                 }
             } else if (uniformType === 'int') {
                 const slider = document.getElementById(`uniform_${uniformName}`);
                 const valueSpan = document.getElementById(`value_${uniformName}`);
                 if (slider && valueSpan) {
                     slider.value = actualValue;
-                    valueSpan.textContent = actualValue.toString();
+                    valueSpan.textContent = Number(actualValue).toString();
                 }
             } else if (uniformType === 'vec3' && Array.isArray(actualValue)) {
                 const sliderR = document.getElementById(`uniform_${uniformName}_r`);

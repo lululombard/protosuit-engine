@@ -229,7 +229,7 @@ function setVolume(value) {
 
     if (mqttClient && mqttClient.connected) {
         const payload = JSON.stringify({ volume: volume });
-        mqttClient.publish('protogen/fins/launcher/volume/set', payload);
+        mqttClient.publish('protogen/fins/audiobridge/volume/set', payload);
         trackMessageSent();
     }
 }

@@ -8,7 +8,7 @@
     <title>{% block title %}Protosuit Engine{% endblock %}</title>
 
     <!-- MQTT.js library -->
-    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+    <script src="{{ url_for('static', filename='js/vendor/mqtt.min.js') }}"></script>
 
     {% block extra_head %}{% endblock %}
 

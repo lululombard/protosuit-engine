@@ -5,8 +5,8 @@
 // Teensy menu state (mirrors ProtoTracer Menu)
 struct TeensyMenu {
     uint8_t face = 0;
-    uint8_t bright = 3;
-    uint8_t accentBright = 5;
+    uint8_t bright = 75;
+    uint8_t accentBright = 127;
     uint8_t microphone = 1;
     uint8_t micLevel = 5;
     uint8_t boopSensor = 1;

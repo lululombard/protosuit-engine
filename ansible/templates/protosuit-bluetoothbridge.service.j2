@@ -28,10 +28,9 @@ ReadWritePaths={{ project_dir }}
 ReadWritePaths=/home/{{ service_user }}/.config
 ReadWritePaths=/home/{{ service_user }}/.cache
 ReadWritePaths=/tmp
-ReadWritePaths=/dev/input
 
-# Allow access to Bluetooth and input devices
-SupplementaryGroups=bluetooth input
+# Allow access to Bluetooth
+SupplementaryGroups=bluetooth
 
 [Install]
 WantedBy=graphical.target

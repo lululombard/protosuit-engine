@@ -1,0 +1,38 @@
+[Unit]
+Description=Protosuit Engine Audio Bridge (Volume/Device Management)
+After=network.target mosquitto.service
+Wants=mosquitto.service
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User={{ service_user }}
+Group={{ service_group }}
+WorkingDirectory={{ project_dir }}
+Environment=PYTHONPATH={{ project_dir }}
+Environment=PYTHONUNBUFFERED=1
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+ExecStartPre=/bin/bash -c 'until [ -S /run/user/1000/pulse/native ]; do sleep 1; done'
+ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/audiobridge/audiobridge.py
+Restart={{ service_config.restart_policy }}
+RestartSec={{ service_config.restart_sec }}
+TimeoutStopSec={{ service_config.timeout_stop_sec }}
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths={{ project_dir }}
+ReadWritePaths=/home/{{ service_user }}/.config
+ReadWritePaths=/home/{{ service_user }}/.cache
+ReadWritePaths=/tmp
+
+# Allow access to audio
+SupplementaryGroups=audio
+
+[Install]
+WantedBy=graphical.target

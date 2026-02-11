@@ -37,6 +37,16 @@
     mode: "0644"
   notify: restart mosquitto
 
+- name: Disable NetworkManager-wait-online to avoid boot timeout without WiFi
+  systemd:
+    name: NetworkManager-wait-online.service
+    enabled: no
+    masked: yes
+
+- name: Enable lingering for user so PulseAudio starts at boot without login
+  command: loginctl enable-linger {{ pi_user }}
+  changed_when: false
+
 - name: Ensure mosquitto service is enabled and started
   systemd:
     name: mosquitto
@@ -148,6 +158,20 @@
     mode: "0644"
   notify: reload systemd
 
+- name: Create protosuit-controllerbridge systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-controllerbridge.service.j2"
+    dest: /etc/systemd/system/protosuit-controllerbridge.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Create protosuit-audiobridge systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-audiobridge.service.j2"
+    dest: /etc/systemd/system/protosuit-audiobridge.service
+    mode: "0644"
+  notify: reload systemd
+
 - name: Create protosuit-espbridge systemd service file
   template:
     src: "{{ playbook_dir }}/../templates/protosuit-espbridge.service.j2"
@@ -202,11 +226,17 @@
   copy:
     dest: /etc/systemd/system/shairport-sync.service.d/override.conf
     content: |
+      [Unit]
+      After=mosquitto.service
+      Wants=mosquitto.service
+      StartLimitBurst=0
+
       [Service]
       User={{ pi_user }}
       Group={{ pi_user }}
       Environment=XDG_RUNTIME_DIR=/run/user/1000
       Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+      RestartSec=3
     mode: '0644'
   notify: reload systemd
 
@@ -221,11 +251,18 @@
   copy:
     dest: /etc/systemd/system/raspotify.service.d/override.conf
     content: |
+      [Unit]
+      After=mosquitto.service
+      Wants=mosquitto.service
+      StartLimitBurst=0
+
       [Service]
       User={{ pi_user }}
       Group={{ pi_user }}
       DynamicUser=no
       ProtectHome=no
+      Restart=on-failure
+      RestartSec=3
       Environment=XDG_RUNTIME_DIR=/run/user/1000
       Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
       Environment=LIBRESPOT_VERBOSE="true"
@@ -288,6 +325,12 @@
     name: "{{ pi_user }}"
     groups: audio
     append: yes
+
+- name: Install audio capture dependencies for FFT visualization
+  apt:
+    name:
+      - libportaudio2
+    state: present
 
 - name: Install networking packages for AP mode
   apt:
@@ -527,6 +570,16 @@
     name: protosuit-castbridge
     enabled: yes
 
+- name: Enable protosuit-controllerbridge service
+  systemd:
+    name: protosuit-controllerbridge
+    enabled: yes
+
+- name: Enable protosuit-audiobridge service
+  systemd:
+    name: protosuit-audiobridge
+    enabled: yes
+
 - name: Enable protosuit-espbridge service
   systemd:
     name: protosuit-espbridge
@@ -541,6 +594,8 @@
     - protosuit-launcher
     - protosuit-web
     - protosuit-bluetoothbridge
+    - protosuit-controllerbridge
+    - protosuit-audiobridge
     - protosuit-networkingbridge
     - protosuit-castbridge
     - protosuit-espbridge

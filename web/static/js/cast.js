@@ -13,38 +13,53 @@ let spotifyPlayback = { playing: false, title: '', artist: '', cover_url: '', tr
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initCast();
-    connectToMQTT();
+    setTimeout(connectToMQTT, 100);
+});
+
+// Reconnect when Safari restores page from back-forward cache
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted && !castIsConnected) {
+        if (castMqttClient) castMqttClient.end(true);
+        castMqttClient = null;
+        setTimeout(connectToMQTT, 100);
+    }
 });
 
 // Connect to MQTT
+let _castReconnectTimer = null;
+
 function connectToMQTT() {
+    if (castMqttClient) return;
+
     const mqttHost = window.location.hostname || 'localhost';
     const mqttUrl = `ws://${mqttHost}:9001`;
 
     updateStatus('Connecting...', false);
 
-    castMqttClient = mqtt.connect(mqttUrl, {
+    const client = mqtt.connect(mqttUrl, {
         clientId: 'protosuit-cast-' + Math.random().toString(16).substr(2, 8),
         clean: true,
-        reconnectPeriod: 1000
+        reconnectPeriod: 2000,
+        connectTimeout: 5000
     });
+    castMqttClient = client;
 
-    castMqttClient.on('connect', () => {
+    client.on('connect', () => {
+        if (client !== castMqttClient) return;
         castIsConnected = true;
         updateStatus('Connected', true);
 
-        // Subscribe to status and playback topics
-        castMqttClient.subscribe('protogen/fins/castbridge/status/airplay');
-        castMqttClient.subscribe('protogen/fins/castbridge/status/spotify');
-        castMqttClient.subscribe('protogen/fins/castbridge/status/airplay/playback');
-        castMqttClient.subscribe('protogen/fins/castbridge/status/spotify/playback');
-        castMqttClient.subscribe('protogen/fins/castbridge/status/airplay/playback/cover');
+        client.subscribe('protogen/fins/castbridge/status/airplay');
+        client.subscribe('protogen/fins/castbridge/status/spotify');
+        client.subscribe('protogen/fins/castbridge/status/airplay/playback');
+        client.subscribe('protogen/fins/castbridge/status/spotify/playback');
+        client.subscribe('protogen/fins/castbridge/status/airplay/playback/cover');
 
         console.log('[Cast] Connected to MQTT');
     });
 
-    castMqttClient.on('message', (topic, message) => {
-        // Cover art is raw binary — handle before toString
+    client.on('message', (topic, message) => {
+        if (client !== castMqttClient) return;
         if (topic === 'protogen/fins/castbridge/status/airplay/playback/cover') {
             handleAirPlayCover(message);
             return;
@@ -52,17 +67,31 @@ function connectToMQTT() {
         handleMQTTMessage(topic, message.toString());
     });
 
-    castMqttClient.on('error', () => {
+    client.on('error', () => {
+        if (client !== castMqttClient) return;
         castIsConnected = false;
-        updateStatus('Error', false);
+        updateStatus('Reconnecting...', false);
     });
 
-    castMqttClient.on('close', () => {
+    client.on('close', () => {
+        if (client !== castMqttClient) return;
         castIsConnected = false;
-        updateStatus('Disconnected', false);
+        updateStatus('Reconnecting...', false);
+        if (!_castReconnectTimer) {
+            _castReconnectTimer = setTimeout(() => {
+                _castReconnectTimer = null;
+                if (!castIsConnected) {
+                    const old = castMqttClient;
+                    castMqttClient = null;
+                    if (old) try { old.end(true); } catch (e) { /* ignore */ }
+                    connectToMQTT();
+                }
+            }, 500);
+        }
     });
 
-    castMqttClient.on('reconnect', () => {
+    client.on('reconnect', () => {
+        if (client !== castMqttClient) return;
         updateStatus('Reconnecting...', false);
     });
 }
@@ -369,5 +398,5 @@ function showNotification(message, type = 'info') {
     setTimeout(() => {
         notification.classList.remove('show');
         setTimeout(() => notification.remove(), 300);
-    }, 3000);
+    }, 500);
 }

@@ -15,55 +15,83 @@ let currentAudioDevice = null;
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initBluetooth();
-    connectToMQTT();
+    setTimeout(connectToMQTT, 100);
+});
+
+// Reconnect when Safari restores page from back-forward cache
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted && !bluetoothIsConnected) {
+        if (bluetoothMqttClient) bluetoothMqttClient.end(true);
+        bluetoothMqttClient = null;
+        setTimeout(connectToMQTT, 100);
+    }
 });
 
 // Connect to MQTT
+let _btReconnectTimer = null;
+
 function connectToMQTT() {
+    if (bluetoothMqttClient) return;
+
     const mqttHost = window.location.hostname || 'localhost';
     const mqttUrl = `ws://${mqttHost}:9001`;
 
     updateStatus('Connecting...', false);
 
-    bluetoothMqttClient = mqtt.connect(mqttUrl, {
+    const client = mqtt.connect(mqttUrl, {
         clientId: 'protosuit-bluetooth-' + Math.random().toString(16).substr(2, 8),
         clean: true,
-        reconnectPeriod: 1000
+        reconnectPeriod: 2000,
+        connectTimeout: 5000
     });
+    bluetoothMqttClient = client;
 
-    bluetoothMqttClient.on('connect', () => {
+    client.on('connect', () => {
+        if (client !== bluetoothMqttClient) return;
         bluetoothIsConnected = true;
         updateStatus('Connected ✓', true);
 
-        // Subscribe to status topics
-        bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/scanning');
-        bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/devices');
-        bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/audio_devices');
-        bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/assignments');
-        bluetoothMqttClient.subscribe('protogen/fins/bluetoothbridge/status/connection');
-        
-        // Subscribe to launcher audio device topics
-        bluetoothMqttClient.subscribe('protogen/fins/launcher/status/audio_devices');
-        bluetoothMqttClient.subscribe('protogen/fins/launcher/status/audio_device/current');
+        client.subscribe('protogen/fins/bluetoothbridge/status/scanning');
+        client.subscribe('protogen/fins/bluetoothbridge/status/devices');
+        client.subscribe('protogen/fins/bluetoothbridge/status/audio_devices');
+        client.subscribe('protogen/fins/bluetoothbridge/status/connection');
+        client.subscribe('protogen/fins/controllerbridge/status/assignments');
+        client.subscribe('protogen/fins/audiobridge/status/audio_devices');
+        client.subscribe('protogen/fins/audiobridge/status/audio_device/current');
 
         console.log('[Bluetooth] Connected to MQTT');
     });
 
-    bluetoothMqttClient.on('message', (topic, message) => {
+    client.on('message', (topic, message) => {
+        if (client !== bluetoothMqttClient) return;
         handleMQTTMessage(topic, message.toString());
     });
 
-    bluetoothMqttClient.on('error', () => {
+    client.on('error', () => {
+        if (client !== bluetoothMqttClient) return;
         bluetoothIsConnected = false;
-        updateStatus('Error ✗', false);
+        updateStatus('Reconnecting...', false);
     });
 
-    bluetoothMqttClient.on('close', () => {
+    client.on('close', () => {
+        if (client !== bluetoothMqttClient) return;
         bluetoothIsConnected = false;
-        updateStatus('Disconnected ✗', false);
+        updateStatus('Reconnecting...', false);
+        if (!_btReconnectTimer) {
+            _btReconnectTimer = setTimeout(() => {
+                _btReconnectTimer = null;
+                if (!bluetoothIsConnected) {
+                    const old = bluetoothMqttClient;
+                    bluetoothMqttClient = null;
+                    if (old) try { old.end(true); } catch (e) { /* ignore */ }
+                    connectToMQTT();
+                }
+            }, 500);
+        }
     });
 
-    bluetoothMqttClient.on('reconnect', () => {
+    client.on('reconnect', () => {
+        if (client !== bluetoothMqttClient) return;
         updateStatus('Reconnecting...', false);
     });
 }
@@ -84,18 +112,18 @@ function handleMQTTMessage(topic, payload) {
             discoveredAudioDevices = JSON.parse(payload);
             updateDevicesList();  // Refresh the discovered devices list
         }
-        else if (topic === 'protogen/fins/bluetoothbridge/status/assignments') {
+        else if (topic === 'protogen/fins/controllerbridge/status/assignments') {
             bluetoothAssignments = JSON.parse(payload);
             updateAssignments();
         }
-        else if (topic === 'protogen/fins/launcher/status/audio_devices') {
+        else if (topic === 'protogen/fins/audiobridge/status/audio_devices') {
             audioDevices = JSON.parse(payload);
             updateAudioDevicesList();
         }
         else if (topic === 'protogen/fins/bluetoothbridge/status/connection') {
             handleConnectionStatus(JSON.parse(payload));
         }
-        else if (topic === 'protogen/fins/launcher/status/audio_device/current') {
+        else if (topic === 'protogen/fins/audiobridge/status/audio_device/current') {
             currentAudioDevice = JSON.parse(payload);
             updateCurrentAudioDevice();
         }
@@ -175,7 +203,7 @@ function showNotification(message, type = 'info') {
     setTimeout(() => {
         notification.classList.remove('show');
         setTimeout(() => notification.remove(), 300);
-    }, 3000);
+    }, 500);
 }
 
 // Update status display
@@ -291,7 +319,7 @@ function assignController(mac, display) {
     if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
     const message = JSON.stringify({ mac: mac, display: display });
-    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/assign', message);
+    bluetoothMqttClient.publish('protogen/fins/controllerbridge/assign', message);
     console.log('[Bluetooth] Assigned', mac, 'to', display);
 }
 
@@ -300,7 +328,7 @@ function removeAssignment(display) {
     if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
     const message = JSON.stringify({ mac: null, display: display });
-    bluetoothMqttClient.publish('protogen/fins/bluetoothbridge/assign', message);
+    bluetoothMqttClient.publish('protogen/fins/controllerbridge/assign', message);
     console.log('[Bluetooth] Removed assignment for', display);
 }
 
@@ -318,7 +346,7 @@ function restartBluetooth() {
     
     setTimeout(() => {
         scanStatus.textContent = '';
-    }, 3000);
+    }, 500);
 }
 
 // Update scan UI
@@ -564,7 +592,7 @@ function selectAudioDevice(deviceName) {
     if (!bluetoothMqttClient || !bluetoothIsConnected) return;
 
     const message = JSON.stringify({ device: deviceName });
-    bluetoothMqttClient.publish('protogen/fins/launcher/audio/device/set', message);
+    bluetoothMqttClient.publish('protogen/fins/audiobridge/audio/device/set', message);
     console.log('[Bluetooth] Selected audio device:', deviceName);
 }
 

@@ -14,53 +14,83 @@ let scanning = false;
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initNetworking();
-    connectToMQTT();
+    setTimeout(connectToMQTT, 100);
+});
+
+// Reconnect when Safari restores page from back-forward cache
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted && !networkingIsConnected) {
+        if (networkingMqttClient) networkingMqttClient.end(true);
+        networkingMqttClient = null;
+        setTimeout(connectToMQTT, 100);
+    }
 });
 
 // Connect to MQTT
+let _netReconnectTimer = null;
+
 function connectToMQTT() {
+    if (networkingMqttClient) return;
+
     const mqttHost = window.location.hostname || 'localhost';
     const mqttUrl = `ws://${mqttHost}:9001`;
 
     updateStatus('Connecting...', false);
 
-    networkingMqttClient = mqtt.connect(mqttUrl, {
+    const client = mqtt.connect(mqttUrl, {
         clientId: 'protosuit-networking-' + Math.random().toString(16).substr(2, 8),
         clean: true,
-        reconnectPeriod: 1000
+        reconnectPeriod: 2000,
+        connectTimeout: 5000
     });
+    networkingMqttClient = client;
 
-    networkingMqttClient.on('connect', () => {
+    client.on('connect', () => {
+        if (client !== networkingMqttClient) return;
         networkingIsConnected = true;
         updateStatus('Connected', true);
 
-        // Subscribe to status topics
-        networkingMqttClient.subscribe('protogen/fins/networkingbridge/status/interfaces');
-        networkingMqttClient.subscribe('protogen/fins/networkingbridge/status/client');
-        networkingMqttClient.subscribe('protogen/fins/networkingbridge/status/ap');
-        networkingMqttClient.subscribe('protogen/fins/networkingbridge/status/scan');
-        networkingMqttClient.subscribe('protogen/fins/networkingbridge/status/scanning');
-        networkingMqttClient.subscribe('protogen/fins/networkingbridge/status/qrcode');
-        networkingMqttClient.subscribe('protogen/fins/networkingbridge/status/connection');
+        client.subscribe('protogen/fins/networkingbridge/status/interfaces');
+        client.subscribe('protogen/fins/networkingbridge/status/client');
+        client.subscribe('protogen/fins/networkingbridge/status/ap');
+        client.subscribe('protogen/fins/networkingbridge/status/scan');
+        client.subscribe('protogen/fins/networkingbridge/status/scanning');
+        client.subscribe('protogen/fins/networkingbridge/status/qrcode');
+        client.subscribe('protogen/fins/networkingbridge/status/connection');
 
         console.log('[Networking] Connected to MQTT');
     });
 
-    networkingMqttClient.on('message', (topic, message) => {
+    client.on('message', (topic, message) => {
+        if (client !== networkingMqttClient) return;
         handleMQTTMessage(topic, message.toString());
     });
 
-    networkingMqttClient.on('error', () => {
+    client.on('error', () => {
+        if (client !== networkingMqttClient) return;
         networkingIsConnected = false;
-        updateStatus('Error', false);
+        updateStatus('Reconnecting...', false);
     });
 
-    networkingMqttClient.on('close', () => {
+    client.on('close', () => {
+        if (client !== networkingMqttClient) return;
         networkingIsConnected = false;
-        updateStatus('Disconnected', false);
+        updateStatus('Reconnecting...', false);
+        if (!_netReconnectTimer) {
+            _netReconnectTimer = setTimeout(() => {
+                _netReconnectTimer = null;
+                if (!networkingIsConnected) {
+                    const old = networkingMqttClient;
+                    networkingMqttClient = null;
+                    if (old) try { old.end(true); } catch (e) { /* ignore */ }
+                    connectToMQTT();
+                }
+            }, 500);
+        }
     });
 
-    networkingMqttClient.on('reconnect', () => {
+    client.on('reconnect', () => {
+        if (client !== networkingMqttClient) return;
         updateStatus('Reconnecting...', false);
     });
 }
@@ -576,7 +606,7 @@ function showNotification(message, type = 'info') {
     setTimeout(() => {
         notification.classList.remove('show');
         setTimeout(() => notification.remove(), 300);
-    }, 3000);
+    }, 500);
 }
 
 // Escape HTML helper

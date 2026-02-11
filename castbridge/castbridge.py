@@ -22,6 +22,7 @@ from config.loader import ConfigLoader
 from utils.mqtt_client import create_mqtt_client
 from utils.logger import setup_logger, get_logger
 from utils.service_controller import ServiceController
+from utils.notifications import publish_notification
 
 try:
     from castbridge.lyrics import LyricsService
@@ -905,17 +906,7 @@ sessioncontrol = {{
 
     def _publish_notification(self, service: str, event: str, message: str):
         """Publish a notification event to the visor notification topic"""
-        payload = {
-            "type": "cast",
-            "event": event,
-            "service": service,
-            "message": message,
-            "timestamp": time.time(),
-        }
-        self.mqtt.publish(
-            "protogen/visor/notifications",
-            json.dumps(payload),
-        )
+        publish_notification(self.mqtt, "cast", event, service, message)
         logger.info(f"Notification: [{service}] {event} - {message}")
 
     # ======== Log Streaming ========

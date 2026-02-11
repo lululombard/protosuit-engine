@@ -5,7 +5,7 @@ Serves static web interface and provides display preview API.
 Browser connects directly to MQTT broker via WebSocket.
 """
 
-from flask import Flask, render_template, Response
+from flask import Flask, render_template, Response, url_for
 import os
 import sys
 import subprocess
@@ -15,6 +15,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.loader import ConfigLoader
 
 app = Flask(__name__)
+
+
+@app.context_processor
+def cache_bust():
+    """Override url_for to append file mtime to static URLs, busting browser caches."""
+
+    def versioned_url_for(endpoint, **values):
+        if endpoint == "static":
+            filename = values.get("filename", "")
+            filepath = os.path.join(app.static_folder, filename)
+            try:
+                values["v"] = int(os.stat(filepath).st_mtime)
+            except OSError:
+                pass
+        return url_for(endpoint, **values)
+
+    return dict(url_for=versioned_url_for)
 
 # Initialize config loader
 config_loader = ConfigLoader()

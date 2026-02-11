@@ -93,6 +93,7 @@ def compile_shader(
             "start_time": time.time(),
             "frame": 0,
             "source": shader_source,  # Store source for recompilation
+            "uses_audio_texture": "iChannel0" in program,
         }
     except Exception as e:
         print(f"Shader compilation error: {e}")

@@ -6,19 +6,7 @@ let mqttMessagesDown = 0; // Incoming messages
 let mqttRateInterval = null;
 
 function logMessage(message, type = 'info') {
-    const log = document.getElementById('messageLog');
-    const timestamp = new Date().toLocaleTimeString();
-    const entry = document.createElement('div');
-    entry.textContent = `[${timestamp}] ${message}`;
-    log.appendChild(entry);
-    while (log.childElementCount > 100) {
-        log.removeChild(log.firstChild);
-    }
-    log.scrollTop = log.scrollHeight;
-}
-
-function clearLog() {
-    document.getElementById('messageLog').innerHTML = 'Log cleared...';
+    console.log(`[MQTT] ${message}`);
 }
 
 function startMQTTRateMonitor() {
@@ -50,21 +38,18 @@ function trackMessageReceived() {
     mqttMessagesDown++;
 }
 
-function updateConnectionStatus(connected) {
+function updateConnectionStatus(connected, connecting) {
     const statusText = document.getElementById('statusText');
-    const connectBtn = document.getElementById('connectBtn');
-    const disconnectBtn = document.getElementById('disconnectBtn');
 
     if (connected) {
-        statusText.textContent = 'Connected (MQTT via WebSocket)';
+        statusText.textContent = 'Connected';
         statusText.style.color = '#51cf66';
-        connectBtn.style.display = 'none';
-        disconnectBtn.style.display = 'inline-block';
+    } else if (connecting) {
+        statusText.textContent = 'Connecting...';
+        statusText.style.color = '#ffd93d';
     } else {
         statusText.textContent = 'Disconnected';
         statusText.style.color = '#ff6b6b';
-        connectBtn.style.display = 'inline-block';
-        disconnectBtn.style.display = 'none';
     }
 }
 

@@ -3,125 +3,122 @@
 let mqttClient = null;
 let isConnected = false;
 let lastMessages = {};
+let _reconnectTimer = null;
 
 function connectMQTT() {
-    if (mqttClient && isConnected) {
-        logMessage('Already connected to MQTT');
-        return;
-    }
+    if (mqttClient) return;
 
-    logMessage('Connecting to MQTT broker via WebSocket...');
-
-    // Connect directly to broker via WebSocket (use current hostname so it works remotely)
-    const mqttHost = window.location.hostname || 'localhost';
-    const mqttUrl = `ws://${mqttHost}:9001`;
-    logMessage(`Connecting to ${mqttUrl}...`);
-
-    mqttClient = mqtt.connect(mqttUrl, {
+    const host = window.location.hostname || 'localhost';
+    const client = mqtt.connect(`ws://${host}:9001`, {
         clientId: 'protosuit-web-' + Math.random().toString(16).substr(2, 8),
         clean: true,
-        reconnectPeriod: 1000
+        reconnectPeriod: 2000,
+        connectTimeout: 5000
     });
+    mqttClient = client;
 
-    mqttClient.on('connect', () => {
+    client.on('connect', () => {
+        if (client !== mqttClient) return;
         isConnected = true;
         updateConnectionStatus(true);
-        logMessage('✓ Connected to MQTT broker via WebSocket');
 
-        // Subscribe to status topics
-        mqttClient.subscribe('protogen/fins/#', (err) => {
-            if (!err) {
-                logMessage('✓ Subscribed to protogen/fins/#');
-            }
-        });
-
-        // Subscribe to visor/ESP32 topics
-        mqttClient.subscribe('protogen/visor/#', (err) => {
-            if (!err) {
-                logMessage('✓ Subscribed to protogen/visor/#');
-            }
-        });
-
-        // Request current status from renderer
-        // (No request needed - renderer publishes retained status on startup)
+        client.subscribe('protogen/fins/#');
+        client.subscribe('protogen/visor/#');
     });
 
-    mqttClient.on('message', (topic, message) => {
-        const payload = message.toString();
-        lastMessages[topic] = payload;
-        trackMessageReceived();
+    client.on('message', (topic, message) => {
+        if (client !== mqttClient) return;
+        try {
+            trackMessageReceived();
 
-        // Update UI based on messages
-        if (topic === 'protogen/fins/renderer/status/shader') {
-            handleRendererShaderStatus(payload);
-            return; // Don't log the full JSON payload
-        } else if (topic === 'protogen/fins/renderer/status/uniform') {
-            handleRendererUniformStatus(payload);
-            return; // Don't log the full JSON payload
-        } else if (topic === 'protogen/fins/renderer/status/performance') {
-            handleFpsMessage(topic, payload);
-            return; // Don't log the full JSON payload
-        } else if (topic === 'protogen/fins/launcher/status/audio') {
-            handleLauncherAudioStatus(payload);
-            return;
-        } else if (topic === 'protogen/fins/launcher/status/video') {
-            handleLauncherVideoStatus(payload);
-            return;
-        } else if (topic === 'protogen/fins/launcher/status/exec') {
-            handleLauncherExecStatus(payload);
-            return;
-        } else if (topic === 'protogen/fins/launcher/status/volume') {
-            handleLauncherVolumeStatus(payload);
-            return;
-        } else if (topic === 'protogen/visor/esp/status/sensors') {
-            handleEspSensorStatus(payload);
-            return;
-        } else if (topic === 'protogen/visor/esp/status/alive') {
-            handleEspAliveStatus(payload);
-            return;
-        } else if (topic === 'protogen/visor/esp/status/fancurve') {
-            handleFanCurveStatus(payload);
-            return;
-        } else if (topic === 'protogen/visor/teensy/menu/schema') {
-            handleTeensySchema(payload);
-            return;
-        } else if (topic.startsWith('protogen/visor/teensy/menu/status/')) {
-            const param = topic.replace('protogen/visor/teensy/menu/status/', '');
-            handleTeensyParamStatus(param, payload);
-            return;
-        } else if (topic === 'protogen/visor/teensy/menu/saved') {
-            handleTeensySaved();
-            return;
+            // Skip binary/high-volume castbridge topics (cover art, log streams)
+            if (topic.includes('/playback/cover') || topic.endsWith('/logs')) {
+                return;
+            }
+
+            const payload = message.toString();
+            lastMessages[topic] = payload;
+
+            // Update UI based on messages
+            if (topic === 'protogen/fins/renderer/status/shader') {
+                handleRendererShaderStatus(payload);
+            } else if (topic === 'protogen/fins/renderer/status/uniform') {
+                handleRendererUniformStatus(payload);
+            } else if (topic === 'protogen/fins/renderer/status/performance') {
+                handleFpsMessage(topic, payload);
+            } else if (topic === 'protogen/fins/launcher/status/audio') {
+                handleLauncherAudioStatus(payload);
+            } else if (topic === 'protogen/fins/launcher/status/video') {
+                handleLauncherVideoStatus(payload);
+            } else if (topic === 'protogen/fins/launcher/status/exec') {
+                handleLauncherExecStatus(payload);
+            } else if (topic === 'protogen/fins/audiobridge/status/volume') {
+                handleLauncherVolumeStatus(payload);
+            } else if (topic === 'protogen/visor/esp/status/sensors') {
+                handleEspSensorStatus(payload);
+            } else if (topic === 'protogen/visor/esp/status/alive') {
+                handleEspAliveStatus(payload);
+            } else if (topic === 'protogen/visor/esp/status/fancurve') {
+                handleFanCurveStatus(payload);
+            } else if (topic === 'protogen/visor/teensy/menu/schema') {
+                handleTeensySchema(payload);
+            } else if (topic.startsWith('protogen/visor/teensy/menu/status/')) {
+                const param = topic.replace('protogen/visor/teensy/menu/status/', '');
+                handleTeensyParamStatus(param, payload);
+            } else if (topic === 'protogen/visor/teensy/menu/saved') {
+                handleTeensySaved();
+            }
+        } catch (e) {
+            console.error(`[MQTT] Error handling ${topic}:`, e);
         }
-
-        logMessage(`← ${topic}: ${payload}`);
     });
 
-    mqttClient.on('error', (err) => {
-        logMessage(`✗ MQTT Error: ${err.message}`);
+    client.on('error', () => {
+        if (client !== mqttClient) return;
         isConnected = false;
-        updateConnectionStatus(false);
+        updateConnectionStatus(false, true);
     });
 
-    mqttClient.on('close', () => {
-        logMessage('✗ MQTT connection closed');
+    client.on('close', () => {
+        if (client !== mqttClient) return;
         isConnected = false;
-        updateConnectionStatus(false);
+        updateConnectionStatus(false, true);
+        // Safari iOS suspends WebSockets — library retries on the dead transport.
+        // Tear down and rebuild with a fresh WebSocket.
+        _scheduleReconnect();
     });
 
-    mqttClient.on('reconnect', () => {
-        logMessage('⟳ Reconnecting to MQTT...');
+    client.on('reconnect', () => {
+        if (client !== mqttClient) return;
+        updateConnectionStatus(false, true);
     });
 }
 
+function _scheduleReconnect() {
+    if (_reconnectTimer) return;
+    _reconnectTimer = setTimeout(() => {
+        _reconnectTimer = null;
+        if (!isConnected) {
+            // Null out first so end(true) close events become no-ops via the guard
+            const old = mqttClient;
+            mqttClient = null;
+            if (old) {
+                try { old.end(true); } catch (e) { /* ignore */ }
+            }
+            connectMQTT();
+        }
+    }, 500);
+}
+
 function disconnectMQTT() {
-    if (mqttClient) {
-        mqttClient.end();
-        mqttClient = null;
-        isConnected = false;
-        updateConnectionStatus(false);
-        logMessage('✓ Disconnected from MQTT');
+    if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
+    const old = mqttClient;
+    mqttClient = null;
+    if (old) {
+        try { old.end(true); } catch (e) { /* ignore */ }
     }
+    isConnected = false;
+    updateConnectionStatus(false);
 }
 
 function sendCommand(topic, payload, silent = false) {

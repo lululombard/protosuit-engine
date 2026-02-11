@@ -11,6 +11,7 @@ Group={{ service_group }}
 WorkingDirectory={{ project_dir }}
 Environment=PYTHONPATH={{ project_dir }}
 Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/bin/bash -c 'until [ -S /run/user/1000/pulse/native ]; do sleep 1; done'
 ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/castbridge/castbridge.py
 Restart={{ service_config.restart_policy }}
 RestartSec={{ service_config.restart_sec }}

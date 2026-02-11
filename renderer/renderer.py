@@ -22,6 +22,7 @@ from renderer.shader_compiler import (
     create_blend_shader,
     create_framebuffers,
 )
+from renderer.audio_capture import AudioCapture
 
 
 class Renderer:
@@ -106,6 +107,10 @@ class Renderer:
         self.fbos = {"left": [], "right": []}
         self.blend_program = None
         self.blend_vao = None
+        self.audio_texture = None
+
+        # Audio capture for FFT shaders
+        self.audio_capture = AudioCapture()
 
         # MQTT
         self.mqtt_client = None
@@ -712,6 +717,11 @@ class Renderer:
         # Create blend shader
         self.blend_program, self.blend_vao = create_blend_shader(self.ctx)
 
+        # Create audio FFT texture (512x2, single-channel float32)
+        # Row 0 = FFT magnitudes, Row 1 = waveform data
+        self.audio_texture = self.ctx.texture((512, 2), 1, dtype="f4")
+        self.audio_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+
         print("[Renderer] OpenGL initialized")
         print(f"[Renderer] Window size: {self.total_width}x{self.total_height}")
 
@@ -934,6 +944,12 @@ class Renderer:
                 except Exception as e:
                     print(f"[Renderer] Could not set uniform '{uniform_name}': {e}")
 
+        # Bind audio texture for shaders that use it
+        if shader_obj.get("uses_audio_texture") and self.audio_texture:
+            if "iChannel0" in program:
+                self.audio_texture.use(location=2)
+                program["iChannel0"].value = 2
+
         # Render
         self.ctx.clear(0.0, 0.0, 0.0)
         shader_obj["vao"].render(moderngl.TRIANGLE_STRIP)
@@ -1070,6 +1086,12 @@ class Renderer:
         self.init_gl()
         self.init_mqtt()
 
+        # Start audio capture (non-blocking, graceful if no mic)
+        if not self.audio_capture.start():
+            print(
+                "[Renderer] No microphone found - audio-reactive shaders will show silence"
+            )
+
         clock = pygame.time.Clock()
 
         print("[Renderer] Starting main loop")
@@ -1127,6 +1149,10 @@ class Renderer:
                     except Exception as cmd_error:
                         print(f"[Renderer] Error processing command: {cmd_error}")
 
+                # Update audio texture with latest FFT data
+                if self.audio_texture and self.audio_capture.available:
+                    self.audio_texture.write(self.audio_capture.get_texture_data())
+
                 # Performance optimization: skip rendering when executable or video is running
                 if not self.exec_running and not self.video_running:
                     # Render both displays
@@ -1160,6 +1186,8 @@ class Renderer:
         print("[Renderer] Shutting down")
 
         # Cleanup
+        self.audio_capture.stop()
+
         if self.mqtt_client:
             self.mqtt_client.loop_stop()
             self.mqtt_client.disconnect()

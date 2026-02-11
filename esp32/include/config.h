@@ -26,6 +26,7 @@
 #define MSG_FROM_PI '>'
 #define MSG_TO_PI '<'
 #define MSG_SEPARATOR '\t'
+#define MSG_CRC_DELIM '*'
 
 // Timing
 #define SENSOR_PUBLISH_INTERVAL 1000
