@@ -111,7 +111,7 @@ ansible/
 - Bluetooth support
 - X11 and display utilities
 - AirPlay receiver (shairport-sync)
-- Spotify Connect (raspotify)
+- Spotify Connect (spotifyd)
 - Access point (hostapd, dnsmasq)
 
 ### Display Configuration
@@ -127,7 +127,7 @@ ansible/
 - Automatic restart on failure
 - Proper environment variables
 - Security hardening
-- Castbridge sudo permissions for managing shairport-sync and raspotify
+- Castbridge sudo permissions for managing shairport-sync and spotifyd
 - Networkingbridge sudo permissions for hostapd, dnsmasq, nmcli, and iptables
 
 ### Auto-Start Options

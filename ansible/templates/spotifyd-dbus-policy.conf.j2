@@ -1,0 +1,19 @@
+<!-- D-Bus policy for spotifyd MPRIS - Deployed by Ansible -->
+<!DOCTYPE busconfig PUBLIC
+          "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+          "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <!-- Allow protosuit user to own the spotifyd bus names -->
+  <policy user="{{ pi_user }}">
+    <allow own_prefix="org.mpris.MediaPlayer2.spotifyd"/>
+    <allow own_prefix="rs.spotifyd"/>
+  </policy>
+
+  <!-- Allow anyone to invoke methods on spotifyd -->
+  <policy context="default">
+    <allow send_destination_prefix="org.mpris.MediaPlayer2.spotifyd"/>
+    <allow send_destination_prefix="rs.spotifyd"/>
+    <allow receive_sender="org.mpris.MediaPlayer2.spotifyd"/>
+    <allow receive_sender="rs.spotifyd"/>
+  </policy>
+</busconfig>

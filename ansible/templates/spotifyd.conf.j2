@@ -1,0 +1,13 @@
+# Spotifyd configuration - managed by CastBridge
+# Deployed by Ansible with defaults, CastBridge overwrites at runtime
+[global]
+backend = "pulseaudio"
+device_name = "Protosuit"
+bitrate = 160
+no_audio_cache = true
+volume_controller = "none"
+initial_volume = 30
+volume_normalisation = false
+use_mpris = true
+dbus_type = "system"
+onevent = "{{ project_dir }}/castbridge/spotify_event.sh"

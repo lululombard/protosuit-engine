@@ -197,29 +197,47 @@
     dest: /usr/share/dbus-1/system.d/shairport-sync-dbus-policy.conf
     mode: '0644'
 
-- name: Create keyrings directory
-  file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: '0755'
-
-- name: Download raspotify GPG key
+- name: Download spotifyd binary (aarch64, PulseAudio + MPRIS)
   get_url:
-    url: https://dtcooper.github.io/raspotify/key.asc
-    dest: /etc/apt/keyrings/raspotify.asc
+    url: https://github.com/Spotifyd/spotifyd/releases/download/v0.4.2/spotifyd-linux-aarch64-full.tar.gz
+    dest: /tmp/spotifyd.tar.gz
     mode: '0644'
 
-- name: Add raspotify repository
-  apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/raspotify.asc] https://dtcooper.github.io/raspotify raspotify main"
-    state: present
-    filename: raspotify
+- name: Extract spotifyd binary
+  unarchive:
+    src: /tmp/spotifyd.tar.gz
+    dest: /usr/local/bin/
+    remote_src: yes
+    mode: '0755'
 
-- name: Install raspotify for Spotify Connect support
+- name: Remove spotifyd tarball
+  file:
+    path: /tmp/spotifyd.tar.gz
+    state: absent
+
+- name: Check if libssl1.1 is installed (needed by spotifyd pre-built binary)
+  shell: dpkg -s libssl1.1 2>/dev/null | grep -q 'Status.*installed'
+  register: libssl1_check
+  changed_when: false
+  failed_when: false
+
+- name: Install libssl1.1 from Debian 11 security repo
   apt:
-    name: raspotify
-    state: present
-    update_cache: yes
+    deb: http://security.debian.org/debian-security/pool/updates/main/o/openssl/libssl1.1_1.1.1w-0+deb11u4_arm64.deb
+  when: libssl1_check.rc != 0
+
+- name: Deploy spotifyd systemd service
+  template:
+    src: "{{ playbook_dir }}/../templates/spotifyd.service.j2"
+    dest: /etc/systemd/system/spotifyd.service
+    mode: '0644'
+  notify: reload systemd
+
+- name: Deploy spotifyd D-Bus policy for MPRIS on system bus
+  template:
+    src: "{{ playbook_dir }}/../templates/spotifyd-dbus-policy.conf.j2"
+    dest: /usr/share/dbus-1/system.d/spotifyd-dbus-policy.conf
+    mode: '0644'
 
 
 - name: Create shairport-sync systemd override directory
@@ -247,34 +265,6 @@
   notify: reload systemd
 
 
-- name: Create raspotify systemd override directory
-  file:
-    path: /etc/systemd/system/raspotify.service.d
-    state: directory
-    mode: '0755'
-
-- name: Configure raspotify to run as user with PulseAudio access
-  copy:
-    dest: /etc/systemd/system/raspotify.service.d/override.conf
-    content: |
-      [Unit]
-      After=mosquitto.service
-      Wants=mosquitto.service
-      StartLimitBurst=0
-
-      [Service]
-      User={{ pi_user }}
-      Group={{ pi_user }}
-      DynamicUser=no
-      ProtectHome=no
-      Restart=on-failure
-      RestartSec=3
-      Environment=XDG_RUNTIME_DIR=/run/user/1000
-      Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
-      Environment=LIBRESPOT_VERBOSE="true"
-    mode: '0644'
-  notify: reload systemd
-
 - name: Reset shairport-sync defaults (clear DAEMON_ARGS override)
   copy:
     dest: /etc/default/shairport-sync
@@ -290,16 +280,10 @@
     mode: '0644'
     force: yes
 
-- name: Create raspotify config directory
-  file:
-    path: /etc/raspotify
-    state: directory
-    mode: '0755'
-
-- name: Deploy default raspotify config
+- name: Deploy default spotifyd config
   template:
-    src: "{{ playbook_dir }}/../templates/raspotify.conf.j2"
-    dest: /etc/raspotify/conf
+    src: "{{ playbook_dir }}/../templates/spotifyd.conf.j2"
+    dest: /etc/spotifyd.conf
     mode: '0644'
     force: yes
 
@@ -318,11 +302,9 @@
       {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/shairport-sync.conf
       {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/cat /etc/shairport-sync.conf
       {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/chmod 644 /etc/shairport-sync.conf
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/mkdir -p /etc/raspotify
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/chmod 755 /etc/raspotify
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/raspotify/conf
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/cat /etc/raspotify/conf
-      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/chmod 644 /etc/raspotify/conf
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/spotifyd.conf
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/cat /etc/spotifyd.conf
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/chmod 644 /etc/spotifyd.conf
     mode: '0440'
     validate: 'visudo -cf %s'
 

@@ -53,7 +53,7 @@ class ServiceController:
         """
         Args:
             unit_name: systemd unit name without .service suffix,
-                       e.g. "shairport-sync" or "raspotify"
+                       e.g. "shairport-sync" or "spotifyd"
         """
         self.unit_name = unit_name
         self._full_name = f"{unit_name}.service"

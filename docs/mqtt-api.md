@@ -411,7 +411,7 @@ Unassign a display:
 
 **Topic prefix:** `protogen/fins/castbridge/`
 
-Manages AirPlay (shairport-sync) and Spotify Connect (raspotify), plus real-time lyrics.
+Manages AirPlay (shairport-sync) and Spotify Connect (spotifyd), plus real-time lyrics.
 
 ### Control Commands
 
@@ -572,7 +572,7 @@ Published every 10 seconds per service.
 | Topic | Payload | R | Description |
 |---|---|---|---|
 | `status/airplay/health` | JSON | **R** | shairport-sync systemd health |
-| `status/spotify/health` | JSON | **R** | raspotify systemd health |
+| `status/spotify/health` | JSON | **R** | spotifyd systemd health |
 
 #### Health payload format
 
@@ -595,7 +595,7 @@ Streamed from journalctl in real time. One JSON message per log line.
 | Topic | Payload | R | Description |
 |---|---|---|---|
 | `status/airplay/logs` | JSON | | shairport-sync log output |
-| `status/spotify/logs` | JSON | | raspotify log output |
+| `status/spotify/logs` | JSON | | spotifyd log output |
 
 #### Log payload format
 

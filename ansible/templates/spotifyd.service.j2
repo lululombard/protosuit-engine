@@ -1,0 +1,18 @@
+[Unit]
+Description=Spotify Connect (spotifyd)
+After=network-online.target mosquitto.service
+Wants=mosquitto.service
+StartLimitBurst=0
+
+[Service]
+Type=simple
+User={{ pi_user }}
+ExecStart=/usr/local/bin/spotifyd --no-daemon --config-path /etc/spotifyd.conf
+Restart=on-failure
+RestartSec=3
+Environment=PULSE_RUNTIME_PATH=/run/user/1000/pulse
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+
+[Install]
+WantedBy=multi-user.target

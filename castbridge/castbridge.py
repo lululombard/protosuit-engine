@@ -1,6 +1,6 @@
 """
 Cast Bridge - AirPlay and Spotify Connect Management Service
-Manages shairport-sync (AirPlay) and raspotify (Spotify Connect) via systemd/D-Bus and MQTT
+Manages shairport-sync (AirPlay) and spotifyd (Spotify Connect) via systemd/D-Bus and MQTT
 """
 
 import os
@@ -32,7 +32,7 @@ except ImportError:
 logger = get_logger("castbridge")
 
 SHAIRPORT_CONFIG_PATH = "/etc/shairport-sync.conf"
-RASPOTIFY_CONFIG_PATH = "/etc/raspotify/conf"
+SPOTIFYD_CONFIG_PATH = "/etc/spotifyd.conf"
 
 
 @dataclass
@@ -60,7 +60,7 @@ class CastBridge:
 
         # Service controllers (D-Bus, no MQTT dependency)
         self._airplay_svc = ServiceController("shairport-sync")
-        self._spotify_svc = ServiceController("raspotify")
+        self._spotify_svc = ServiceController("spotifyd")
 
         # State
         self.airplay_status = AirPlayStatus()
@@ -107,6 +107,13 @@ class CastBridge:
         self._last_system_volume = None     # int, 0..100
         self._airplay_dbus_proxy = None     # pydbus proxy for shairport-sync RemoteControl
 
+        # Spotify <-> AudioBridge volume sync
+        self._spotify_session_active = False
+        self._spotify_volume_source = None      # "spotify" | "audiobridge" | None
+        self._spotify_volume_source_time = 0
+        self._last_spotify_volume = None        # float, 0.0-1.0 MPRIS scale
+        self._spotify_mpris_proxy = None        # pydbus proxy for MPRIS Player
+
         # Lyrics service
         self._lyrics = LyricsService()
 
@@ -129,7 +136,7 @@ class CastBridge:
 
         # Override with actual service config files (source of truth after first configure)
         self._parse_shairport_config()
-        self._parse_raspotify_config()
+        self._parse_spotifyd_config()
 
     def _parse_shairport_config(self):
         """Parse /etc/shairport-sync.conf to recover device_name and password"""
@@ -148,26 +155,25 @@ class CastBridge:
             # We store password in config.yaml, sessioncontrol just indicates it's set
             pass
 
-    def _parse_raspotify_config(self):
-        """Parse /etc/raspotify/conf to recover device_name, username, password"""
-        content = self._spotify_svc.read_config(RASPOTIFY_CONFIG_PATH)
+    def _parse_spotifyd_config(self):
+        """Parse /etc/spotifyd.conf (TOML) to recover device_name, username, password"""
+        content = self._spotify_svc.read_config(SPOTIFYD_CONFIG_PATH)
         if content is None:
             return
 
         for line in content.splitlines():
             line = line.strip()
-            if line.startswith("LIBRESPOT_NAME="):
-                match = re.search(r'LIBRESPOT_NAME="([^"]*)"', line)
-                if match:
-                    self.spotify_status.device_name = match.group(1)
-            elif line.startswith("LIBRESPOT_USERNAME="):
-                match = re.search(r'LIBRESPOT_USERNAME="([^"]*)"', line)
-                if match:
-                    self.spotify_status.username = match.group(1)
-            elif line.startswith("LIBRESPOT_PASSWORD="):
-                match = re.search(r'LIBRESPOT_PASSWORD="([^"]*)"', line)
-                if match:
-                    self.spotify_status.password = match.group(1)
+            if line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"')
+            if key == "device_name":
+                self.spotify_status.device_name = value
+            elif key == "username":
+                self.spotify_status.username = value
+            elif key == "password":
+                self.spotify_status.password = value
 
     # ======== Startup ========
 
@@ -344,7 +350,7 @@ class CastBridge:
             logger.warning(f"Could not parse AirPlay volume: {msg.payload} ({e})")
 
     def _handle_audiobridge_volume(self, client, userdata, msg):
-        """Handle volume status from audiobridge — forward to AirPlay if session active."""
+        """Handle volume status from audiobridge — forward to AirPlay/Spotify if session active."""
         try:
             data = json.loads(msg.payload)
             system_vol = data.get("volume")
@@ -354,28 +360,49 @@ class CastBridge:
         except (json.JSONDecodeError, KeyError):
             return
 
-        if not self._airplay_session_active:
-            return
+        # Forward to AirPlay if active
+        if self._airplay_session_active:
+            now = time.monotonic()
+            if (self._volume_source == "airplay"
+                    and (now - self._volume_source_time) < self._volume_cooldown):
+                return
 
-        now = time.monotonic()
-        if (self._volume_source == "airplay"
-                and (now - self._volume_source_time) < self._volume_cooldown):
-            return
+            airplay_vol = self._system_to_airplay_volume(system_vol)
+            if (self._last_airplay_volume is not None
+                    and abs(airplay_vol - self._last_airplay_volume) < 0.5):
+                return
 
-        airplay_vol = self._system_to_airplay_volume(system_vol)
-        if (self._last_airplay_volume is not None
-                and abs(airplay_vol - self._last_airplay_volume) < 0.5):
-            return
+            logger.info(f"System volume: {system_vol}% -> AirPlay {airplay_vol:.1f}")
+            self._last_airplay_volume = airplay_vol
+            self._volume_source = "audiobridge"
+            self._volume_source_time = now
+            threading.Thread(
+                target=self._set_airplay_volume_dbus,
+                args=(airplay_vol,),
+                daemon=True
+            ).start()
 
-        logger.info(f"System volume: {system_vol}% -> AirPlay {airplay_vol:.1f}")
-        self._last_airplay_volume = airplay_vol
-        self._volume_source = "audiobridge"
-        self._volume_source_time = now
-        threading.Thread(
-            target=self._set_airplay_volume_dbus,
-            args=(airplay_vol,),
-            daemon=True
-        ).start()
+        # Forward to Spotify if active
+        elif self._spotify_session_active:
+            now = time.monotonic()
+            if (self._spotify_volume_source == "spotify"
+                    and (now - self._spotify_volume_source_time) < self._volume_cooldown):
+                return
+
+            mpris_vol = self._system_to_spotify_volume(system_vol)
+            if (self._last_spotify_volume is not None
+                    and abs(mpris_vol - self._last_spotify_volume) < 0.01):
+                return
+
+            logger.info(f"System volume: {system_vol}% -> Spotify MPRIS {mpris_vol:.2f}")
+            self._last_spotify_volume = mpris_vol
+            self._spotify_volume_source = "audiobridge"
+            self._spotify_volume_source_time = now
+            threading.Thread(
+                target=self._set_spotify_volume_mpris,
+                args=(mpris_vol,),
+                daemon=True
+            ).start()
 
     def _set_airplay_volume_dbus(self, airplay_vol: float):
         """Call SetAirplayVolume on shairport-sync via D-Bus."""
@@ -387,6 +414,111 @@ class CastBridge:
         except Exception as e:
             logger.warning(f"SetAirplayVolume failed: {e}")
             self._airplay_dbus_proxy = None
+
+    # ======== Spotify Volume Sync ========
+
+    @staticmethod
+    def _spotify_to_system_volume(mpris_vol: float) -> int:
+        """Convert MPRIS volume (0.0..1.0) to system volume (0..100)."""
+        return round(max(0.0, min(1.0, mpris_vol)) * 100.0)
+
+    @staticmethod
+    def _system_to_spotify_volume(system_vol: int) -> float:
+        """Convert system volume (0..100) to MPRIS volume (0.0..1.0)."""
+        return max(0, min(100, system_vol)) / 100.0
+
+    def _get_spotify_mpris(self):
+        """Get or create D-Bus proxy for spotifyd MPRIS Player.
+
+        spotifyd registers with an instance-suffixed bus name like
+        org.mpris.MediaPlayer2.spotifyd.instance12345, so we need to
+        discover the actual name on the bus.
+        """
+        if self._spotify_mpris_proxy is not None:
+            return self._spotify_mpris_proxy
+        try:
+            bus = self._spotify_svc._bus
+            # List all bus names and find the spotifyd MPRIS instance
+            dbus_proxy = bus.get("org.freedesktop.DBus", "/org/freedesktop/DBus")
+            names = dbus_proxy.ListNames()
+            spotifyd_name = None
+            for name in names:
+                if name.startswith("org.mpris.MediaPlayer2.spotifyd"):
+                    spotifyd_name = name
+                    break
+            if spotifyd_name is None:
+                logger.debug("No spotifyd MPRIS bus name found")
+                return None
+            self._spotify_mpris_proxy = bus.get(
+                spotifyd_name,
+                "/org/mpris/MediaPlayer2"
+            )
+            logger.info(f"Connected to spotifyd MPRIS: {spotifyd_name}")
+            return self._spotify_mpris_proxy
+        except Exception as e:
+            logger.debug(f"Cannot get spotifyd MPRIS proxy: {e}")
+            self._spotify_mpris_proxy = None
+            return None
+
+    def _on_spotify_session_start(self):
+        """Push current system volume to Spotify when session starts."""
+        if self._last_system_volume is not None:
+            mpris_vol = self._system_to_spotify_volume(self._last_system_volume)
+            logger.info(f"Spotify session start: syncing system volume {self._last_system_volume}% -> MPRIS {mpris_vol:.2f}")
+            self._last_spotify_volume = mpris_vol
+            self._spotify_volume_source = "audiobridge"
+            self._spotify_volume_source_time = time.monotonic()
+            threading.Thread(
+                target=self._initial_spotify_volume_sync,
+                args=(mpris_vol,),
+                daemon=True
+            ).start()
+        else:
+            logger.debug("Spotify session start: no system volume cached yet, skipping initial sync")
+
+    def _initial_spotify_volume_sync(self, mpris_vol: float):
+        """Wait for MPRIS connection, then push volume to Spotify."""
+        time.sleep(2)
+        if self._spotify_session_active:
+            self._set_spotify_volume_mpris(mpris_vol)
+
+    def _handle_spotify_volume_event(self, data: dict):
+        """Handle volumeset event from spotifyd."""
+        if not self._spotify_session_active:
+            return
+
+        raw_volume = data.get("volume", 0)
+        system_vol = round(raw_volume / 655.35)
+        system_vol = max(0, min(100, system_vol))
+
+        now = time.monotonic()
+        if (self._spotify_volume_source == "audiobridge"
+                and (now - self._spotify_volume_source_time) < self._volume_cooldown):
+            return
+
+        if (self._last_system_volume is not None
+                and abs(system_vol - self._last_system_volume) <= 1):
+            return
+
+        logger.info(f"Spotify volume: {raw_volume}/65535 -> system {system_vol}%")
+        self._last_system_volume = system_vol
+        self._spotify_volume_source = "spotify"
+        self._spotify_volume_source_time = now
+        self.mqtt.publish(
+            "protogen/fins/audiobridge/volume/set",
+            json.dumps({"volume": system_vol})
+        )
+
+    def _set_spotify_volume_mpris(self, mpris_vol: float):
+        """Set Spotify volume via MPRIS D-Bus property."""
+        try:
+            proxy = self._get_spotify_mpris()
+            if proxy is None:
+                return
+            proxy.Volume = mpris_vol
+        except Exception as e:
+            logger.warning(f"Set Spotify MPRIS volume failed: {e}")
+            self._spotify_mpris_proxy = None
 
     # ======== AirPlay (shairport-sync) Management ========
 
@@ -495,49 +627,54 @@ sessioncontrol = {{
 
         self._publish_service_health("airplay", health)
 
-    # ======== Spotify (raspotify) Management ========
+    # ======== Spotify (spotifyd) Management ========
 
-    def _configure_raspotify(self):
-        """Write raspotify configuration to /etc/raspotify/conf"""
-        logger.info(f"Configuring raspotify: name={self.spotify_status.device_name}")
+    def _configure_spotifyd(self):
+        """Write spotifyd configuration to /etc/spotifyd.conf (TOML)"""
+        logger.info(f"Configuring spotifyd: name={self.spotify_status.device_name}")
 
         event_script = os.path.join(os.path.dirname(__file__), "spotify_event.sh")
 
         config_lines = [
-            f'LIBRESPOT_NAME="{self.spotify_status.device_name}"',
-            'LIBRESPOT_BACKEND="pulseaudio"',
-            'LIBRESPOT_BITRATE="160"',
-            'LIBRESPOT_DISABLE_AUDIO_CACHE="true"',
-            f'LIBRESPOT_ONEVENT="{event_script}"',
+            "[global]",
+            'backend = "pulseaudio"',
+            f'device_name = "{self.spotify_status.device_name}"',
+            "bitrate = 160",
+            "no_audio_cache = true",
+            'volume_controller = "none"',
+            "initial_volume = 30",
+            "volume_normalisation = false",
+            "use_mpris = true",
+            'dbus_type = "system"',
+            f'onevent = "{event_script}"',
         ]
 
         if self.spotify_status.username and self.spotify_status.password:
-            config_lines.append(f'LIBRESPOT_USERNAME="{self.spotify_status.username}"')
-            config_lines.append(f'LIBRESPOT_PASSWORD="{self.spotify_status.password}"')
+            config_lines.append(f'username = "{self.spotify_status.username}"')
+            config_lines.append(f'password = "{self.spotify_status.password}"')
 
         config = '\n'.join(config_lines) + '\n'
 
-        self._spotify_svc.mkdir_p("/etc/raspotify")
-        if not self._spotify_svc.write_config(RASPOTIFY_CONFIG_PATH, config):
-            logger.error("Failed to write raspotify config")
+        if not self._spotify_svc.write_config(SPOTIFYD_CONFIG_PATH, config):
+            logger.error("Failed to write spotifyd config")
             return False
 
-        logger.info("raspotify config written")
+        logger.info("spotifyd config written")
         return True
 
     def _enable_spotify(self, enable: bool) -> bool:
-        """Enable or disable Spotify Connect (raspotify)"""
+        """Enable or disable Spotify Connect (spotifyd)"""
         logger.info(f"{'Enabling' if enable else 'Disabling'} Spotify...")
 
         if enable:
             self._reset_spotify_playback()
 
-            if not self._configure_raspotify():
+            if not self._configure_spotifyd():
                 self._publish_notification("spotify", "error", "Failed to configure Spotify")
                 return False
 
             if not self._spotify_svc.enable():
-                logger.error("Failed to enable raspotify")
+                logger.error("Failed to enable spotifyd")
                 self._publish_notification("spotify", "error", "Failed to enable Spotify")
                 return False
 
@@ -553,19 +690,23 @@ sessioncontrol = {{
             self._stop_log_stream("spotify")
 
             if not self._spotify_svc.disable():
-                logger.error("Failed to disable raspotify")
+                logger.error("Failed to disable spotifyd")
                 return False
 
             logger.info("Spotify disabled successfully")
             self.spotify_status.enabled = False
             self.spotify_status.running = False
+            self._spotify_session_active = False
+            self._spotify_mpris_proxy = None
+            self._spotify_volume_source = None
+            self._last_spotify_volume = None
             self._publish_notification("spotify", "disabled", "Spotify Connect disabled")
 
         self._publish_spotify_status()
         return True
 
     def _update_spotify_status(self):
-        """Check raspotify status via D-Bus"""
+        """Check spotifyd status via D-Bus"""
         health = self._spotify_svc.get_health()
         changed = False
 
@@ -648,7 +789,7 @@ sessioncontrol = {{
             return None
 
     def _handle_spotify_event(self, client, userdata, msg):
-        """Handle raw Spotify events from librespot onevent script"""
+        """Handle raw Spotify events from spotifyd onevent script"""
         try:
             data = json.loads(msg.payload)
         except json.JSONDecodeError:
@@ -660,8 +801,8 @@ sessioncontrol = {{
         # Extract bare track ID from spotify:track:XXXXX URI
         track_id = track_uri.split(":")[-1] if ":" in track_uri else track_uri
 
-        if event == "track_changed":
-            # track_changed provides full metadata from librespot
+        # spotifyd event: "change" — track changed, provides full metadata
+        if event == "change":
             self._spotify_playback["track_id"] = track_id
             self._spotify_playback["duration_ms"] = data.get("duration_ms", 0)
             name = data.get("name", "")
@@ -678,21 +819,21 @@ sessioncontrol = {{
                 # covers is newline-separated list of URLs, pick the first (largest)
                 self._spotify_playback["cover_url"] = covers.split()[0].strip()
             elif track_id:
-                # Fallback to embed scraping if no covers provided
                 threading.Thread(
                     target=self._fetch_and_update_spotify_metadata,
                     args=(track_id,),
                     daemon=True,
                 ).start()
             logger.info(f"Spotify track: {artists} - {name}")
-            return  # Don't publish yet, playing event follows
+            return  # Don't publish yet, start/play event follows
 
-        elif event in ("playing", "started"):
+        # spotifyd events: "start" (new track), "play" (resume)
+        elif event in ("start", "play"):
+            was_active = self._spotify_session_active
+            self._spotify_session_active = True
             self._spotify_playback["playing"] = True
             self._spotify_position_ref = data.get("position_ms", 0)
             self._spotify_position_time = time.monotonic()
-            # If track_id changed without a track_changed event (e.g. on startup),
-            # fetch metadata via embed scraper
             if track_id and track_id != self._spotify_playback["track_id"]:
                 self._spotify_playback["track_id"] = track_id
                 threading.Thread(
@@ -700,29 +841,35 @@ sessioncontrol = {{
                     args=(track_id,),
                     daemon=True,
                 ).start()
+            if not was_active:
+                logger.info("Spotify session started, enabling volume sync")
+                self._on_spotify_session_start()
             self._start_spotify_ticker()
             return  # Ticker will publish
 
-        elif event in ("seeked", "position_correction"):
-            self._spotify_position_ref = data.get("position_ms", 0)
-            self._spotify_position_time = time.monotonic()
-            # Ticker keeps running, next tick picks up the new ref
-
-        elif event == "paused":
+        # spotifyd event: "pause"
+        elif event == "pause":
             self._spotify_playback["playing"] = False
             self._spotify_playback["position_ms"] = data.get("position_ms", 0)
             self._stop_spotify_ticker()
 
-        elif event in ("stopped", "unavailable", "end_of_track"):
+        # spotifyd event: "stop" — session disconnected
+        elif event == "stop":
             self._spotify_playback["playing"] = False
             self._stop_spotify_ticker()
+            self._spotify_session_active = False
+            self._spotify_mpris_proxy = None
+            self._spotify_volume_source = None
+            self._last_spotify_volume = None
 
-        elif event in ("volume_changed", "loading", "preloading",
-                        "preload_next", "session_connected",
-                        "session_disconnected", "session_client_changed",
-                        "shuffle_changed", "repeat_changed",
-                        "auto_play_changed", "filter_explicit_content_changed",
-                        "sink", "play_request_id_changed", "added_to_queue"):
+        # spotifyd event: "volumeset" — volume changed from Spotify app
+        elif event == "volumeset":
+            self._handle_spotify_volume_event(data)
+            return
+
+        # spotifyd events: "load", "preloading", "endoftrack", "sessionconnected"
+        elif event in ("load", "preloading", "endoftrack", "sessionconnected",
+                        "unavailable"):
             return
 
         self._publish_spotify_playback()
@@ -838,7 +985,7 @@ sessioncontrol = {{
             lambda client, userdata, msg: self._handle_spotify_config(json.loads(msg.payload))
         )
 
-        # Spotify playback events from librespot onevent script
+        # Spotify playback events from spotifyd onevent script
         self.mqtt.subscribe("protogen/fins/castbridge/spotify/event")
         self.mqtt.message_callback_add(
             "protogen/fins/castbridge/spotify/event",
@@ -1062,8 +1209,9 @@ sessioncontrol = {{
 
         if self.spotify_status.running:
             logger.info("Restarting Spotify with new config...")
-            self._configure_raspotify()
+            self._configure_spotifyd()
             self._spotify_svc.restart()
+            self._spotify_mpris_proxy = None
             self._publish_notification("spotify", "restarted", "Spotify restarted with new config")
 
         self._publish_spotify_status()
