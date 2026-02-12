@@ -12,8 +12,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "wifi.h"
-#include "wifi_menu.h"
+#include "Wi-Fi.h"
+#include "Wi-Fi_menu.h"
 #include "mqtt.h"
 #include "input.h"
 #include "ui.h"
@@ -24,7 +24,7 @@ PSP_MODULE_INFO("Protosuit_Remote", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
 // Global contexts
-static wifi_context_t wifi_ctx;
+static Wi-Fi_context_t Wi-Fi_ctx;
 static mqtt_context_t mqtt_ctx;
 static input_context_t input_ctx;
 static ui_context_t ui_ctx;
@@ -104,26 +104,26 @@ int main(int argc, char *argv[]) {
     // Initialize input
     input_init(&input_ctx);
 
-    // Always show WiFi profile selection menu (like PSP ftpd)
+    // Always show Wi-Fi profile selection menu (like PSP ftpd)
     int selected_profile = 1;
-    if (wifi_menu_select_profile(&selected_profile) < 0) {
-        pspDebugScreenPrintf("WiFi setup cancelled\n");
+    if (Wi-Fi_menu_select_profile(&selected_profile) < 0) {
+        pspDebugScreenPrintf("Wi-Fi setup cancelled\n");
         sceKernelDelayThread(2000000);
         sceKernelExitGame();
         return -1;
     }
 
-    // Initialize WiFi with selected profile
-    if (wifi_init(&wifi_ctx, selected_profile) < 0) {
-        pspDebugScreenPrintf("Failed to initialize WiFi\n");
+    // Initialize Wi-Fi with selected profile
+    if (Wi-Fi_init(&Wi-Fi_ctx, selected_profile) < 0) {
+        pspDebugScreenPrintf("Failed to initialize Wi-Fi\n");
         sceKernelDelayThread(3000000);
         sceKernelExitGame();
         return -1;
     }
 
-    // Connect and wait for WiFi (with progress display)
-    if (wifi_menu_wait_for_connection(&wifi_ctx) < 0) {
-        pspDebugScreenPrintf("WiFi connection cancelled\n");
+    // Connect and wait for Wi-Fi (with progress display)
+    if (Wi-Fi_menu_wait_for_connection(&Wi-Fi_ctx) < 0) {
+        pspDebugScreenPrintf("Wi-Fi connection cancelled\n");
         sceKernelDelayThread(2000000);
         sceKernelExitGame();
         return -1;
@@ -134,28 +134,28 @@ int main(int argc, char *argv[]) {
               app_config.mqtt_client_id, app_config.mqtt_keepalive);
 
     // Connection state tracking
-    bool wifi_connected = false;
+    bool Wi-Fi_connected = false;
     bool mqtt_connected = false;
     uint32_t last_ui_update = 0;
-    uint32_t last_wifi_retry = 0;
+    uint32_t last_Wi-Fi_retry = 0;
     uint32_t last_mqtt_retry = 0;
 
     // Main loop
     while (running) {
         uint32_t current_time = sceKernelGetSystemTimeLow();
 
-        // WiFi connection management
-        if (!wifi_connected) {
-            if (current_time - last_wifi_retry > WIFI_RETRY_DELAY) {
-                wifi_connect(&wifi_ctx);
-                last_wifi_retry = current_time;
+        // Wi-Fi connection management
+        if (!Wi-Fi_connected) {
+            if (current_time - last_Wi-Fi_retry > Wi-Fi_RETRY_DELAY) {
+                Wi-Fi_connect(&Wi-Fi_ctx);
+                last_Wi-Fi_retry = current_time;
             }
         }
 
-        wifi_connected = wifi_is_connected(&wifi_ctx);
+        Wi-Fi_connected = Wi-Fi_is_connected(&Wi-Fi_ctx);
 
         // MQTT connection management
-        if (wifi_connected && !mqtt_connected) {
+        if (Wi-Fi_connected && !mqtt_connected) {
             if (current_time - last_mqtt_retry > MQTT_RETRY_DELAY) {
                 mqtt_connect(&mqtt_ctx);
                 last_mqtt_retry = current_time;
@@ -179,7 +179,7 @@ int main(int argc, char *argv[]) {
 
         // Update UI periodically
         if (current_time - last_ui_update > UI_REFRESH_DELAY) {
-            ui_draw(&ui_ctx, &wifi_ctx, &mqtt_ctx, &input_ctx);
+            ui_draw(&ui_ctx, &Wi-Fi_ctx, &mqtt_ctx, &input_ctx);
             last_ui_update = current_time;
         }
 
@@ -189,7 +189,7 @@ int main(int argc, char *argv[]) {
 
     // Cleanup
     mqtt_disconnect(&mqtt_ctx);
-    wifi_shutdown(&wifi_ctx);
+    Wi-Fi_shutdown(&Wi-Fi_ctx);
     ui_shutdown(&ui_ctx);
 
     sceKernelExitGame();

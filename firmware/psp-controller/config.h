@@ -9,7 +9,7 @@
 #define CONFIG_H
 
 // Connection retry timing (microseconds)
-#define WIFI_RETRY_DELAY 5000000  // 5 seconds - how often to retry WiFi connection
+#define WIFI_RETRY_DELAY 5000000  // 5 seconds - how often to retry Wi-Fi connection
 #define MQTT_RETRY_DELAY 3000000  // 3 seconds - how often to retry MQTT connection
 
 // Input polling rate (microseconds)

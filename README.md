@@ -18,7 +18,9 @@ If you're building a Protogen and want animated fin displays, feel free to adapt
 - **Kuroda**: for helping with my v1 fursuit, and for building the original b0xcat-based suits with Miggy before I joined in, and for being so welcoming and a big reason I joined the fandom in the first place
 - **[b0xcat](https://github.com/b0xcat)**: for the original Protato CAD design that this project builds on, and the PETG thermoformed visor my suit is still using after all these years, I wish him the best
 - **[Coela Can't!](https://github.com/coelacant1)**: for the WS35 LED matrices, the b0xcat adapter, and ProtoTracer
-- **Shadertoy authors**: most shaders are adapted from Shadertoy, heavily modified for OpenGL ES and uniforms control, original credits are in each `.glsl` file
+- **Dharsi**: for creating the original ESP32 LED circle timing game with Miggy that became Ring Ding
+- **[Azavech](https://github.com/AliceDiNunno)**: for designing the score system for Ring Ding
+- **Respective Shadertoy authors**: most shaders are adapted from Shadertoy, heavily modified for OpenGL ES and uniforms control, original credits are in each `.glsl` file
 
 ---
 

@@ -1,7 +1,7 @@
 # Protosuit Remote Control Configuration
 # Edit these values to match your setup
 
-# Note: WiFi profile is selected on startup
+# Note: Wi-Fi profile is selected on startup
 
 # MQTT Broker Settings
 mqtt_broker_ip=192.168.1.100

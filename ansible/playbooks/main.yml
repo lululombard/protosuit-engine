@@ -37,7 +37,7 @@
     mode: "0644"
   notify: restart mosquitto
 
-- name: Disable NetworkManager-wait-online to avoid boot timeout without WiFi
+- name: Disable NetworkManager-wait-online to avoid boot timeout without Wi-Fi
   systemd:
     name: NetworkManager-wait-online.service
     enabled: no

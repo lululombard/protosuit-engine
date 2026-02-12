@@ -1,47 +1,47 @@
 /*
- * Protosuit Remote Control - WiFi Manager Header
+ * Protosuit Remote Control - Wi-Fi Manager Header
  */
 
-#ifndef WIFI_H
-#define WIFI_H
+#ifndef Wi-Fi_H
+#define Wi-Fi_H
 
 #include <stdbool.h>
 
-// WiFi connection state
+// Wi-Fi connection state
 typedef enum {
-    WIFI_DISCONNECTED,
-    WIFI_CONNECTING,
-    WIFI_CONNECTED,
-    WIFI_ERROR
-} wifi_state_t;
+    Wi-Fi_DISCONNECTED,
+    Wi-Fi_CONNECTING,
+    Wi-Fi_CONNECTED,
+    Wi-Fi_ERROR
+} Wi-Fi_state_t;
 
-// WiFi context
+// Wi-Fi context
 typedef struct {
-    wifi_state_t state;
+    Wi-Fi_state_t state;
     int profile_index;     // PSP network profile to use (1-10)
     char ip_address[16];
-} wifi_context_t;
+} Wi-Fi_context_t;
 
-// Initialize WiFi subsystem
+// Initialize Wi-Fi subsystem
 // profile: PSP network configuration profile index (1-10, or 0 for first available)
-int wifi_init(wifi_context_t *ctx, int profile);
+int Wi-Fi_init(Wi-Fi_context_t *ctx, int profile);
 
-// Connect to WiFi network
-int wifi_connect(wifi_context_t *ctx);
+// Connect to Wi-Fi network
+int Wi-Fi_connect(Wi-Fi_context_t *ctx);
 
-// Disconnect from WiFi
-void wifi_disconnect(wifi_context_t *ctx);
+// Disconnect from Wi-Fi
+void Wi-Fi_disconnect(Wi-Fi_context_t *ctx);
 
 // Check if connected
-bool wifi_is_connected(wifi_context_t *ctx);
+bool Wi-Fi_is_connected(Wi-Fi_context_t *ctx);
 
 // Get connection state
-wifi_state_t wifi_get_state(wifi_context_t *ctx);
+Wi-Fi_state_t Wi-Fi_get_state(Wi-Fi_context_t *ctx);
 
 // Get IP address (returns NULL if not connected)
-const char* wifi_get_ip(wifi_context_t *ctx);
+const char* Wi-Fi_get_ip(Wi-Fi_context_t *ctx);
 
-// Shutdown WiFi subsystem
-void wifi_shutdown(wifi_context_t *ctx);
+// Shutdown Wi-Fi subsystem
+void Wi-Fi_shutdown(Wi-Fi_context_t *ctx);
 
-#endif // WIFI_H
+#endif // Wi-Fi_H

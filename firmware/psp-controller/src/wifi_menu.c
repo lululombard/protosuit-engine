@@ -1,9 +1,9 @@
 /*
- * Protosuit Remote Control - WiFi Connection Menu
- * Shows available WiFi profiles and waits for connection
+ * Protosuit Remote Control - Wi-Fi Connection Menu
+ * Shows available Wi-Fi profiles and waits for connection
  */
 
-#include "wifi_menu.h"
+#include "Wi-Fi_menu.h"
 #include <pspdebug.h>
 #include <pspctrl.h>
 #include <pspkernel.h>
@@ -24,7 +24,7 @@
 #define COLOR_CYAN      0xFFFFFF00
 #define COLOR_GRAY      0xFF808080
 
-int wifi_menu_select_profile(int *selected_profile) {
+int Wi-Fi_menu_select_profile(int *selected_profile) {
     SceCtrlData pad, oldPad;
     int current_selection = 0;
     int need_redraw = 1;
@@ -71,7 +71,7 @@ int wifi_menu_select_profile(int *selected_profile) {
         pspDebugScreenClear();
         pspDebugScreenSetXY(0, 0);
         pspDebugScreenSetTextColor(COLOR_RED);
-        pspDebugScreenPrintf("No WiFi profiles configured!\n\n");
+        pspDebugScreenPrintf("No Wi-Fi profiles configured!\n\n");
         pspDebugScreenSetTextColor(COLOR_WHITE);
         pspDebugScreenPrintf("Please configure a profile in:\n");
         pspDebugScreenPrintf("Settings > Network Settings >\n");
@@ -164,7 +164,7 @@ int wifi_menu_select_profile(int *selected_profile) {
     }
 }
 
-int wifi_menu_wait_for_connection(wifi_context_t *ctx) {
+int Wi-Fi_menu_wait_for_connection(Wi-Fi_context_t *ctx) {
     pspDebugScreenClear();
 
     pspDebugScreenSetXY(0, 0);
@@ -177,7 +177,7 @@ int wifi_menu_wait_for_connection(wifi_context_t *ctx) {
     pspDebugScreenPrintf("Connecting to Access Point...\n\n");
 
     // Start connection (non-blocking)
-    int result = wifi_connect(ctx);
+    int result = Wi-Fi_connect(ctx);
     if (result < 0) {
         pspDebugScreenSetTextColor(COLOR_RED);
         pspDebugScreenPrintf("Failed to start connection!\n");
@@ -190,7 +190,7 @@ int wifi_menu_wait_for_connection(wifi_context_t *ctx) {
         while (1) {
             sceCtrlReadBufferPositive(&pad, 1);
             if ((pad.Buttons & PSP_CTRL_CROSS) && !(oldPad.Buttons & PSP_CTRL_CROSS)) {
-                return wifi_menu_wait_for_connection(ctx);
+                return Wi-Fi_menu_wait_for_connection(ctx);
             }
             if ((pad.Buttons & PSP_CTRL_CIRCLE) && !(oldPad.Buttons & PSP_CTRL_CIRCLE)) {
                 return -1;
@@ -221,7 +221,7 @@ int wifi_menu_wait_for_connection(wifi_context_t *ctx) {
             while (1) {
                 sceCtrlReadBufferPositive(&pad, 1);
                 if ((pad.Buttons & PSP_CTRL_CROSS) && !(oldPad.Buttons & PSP_CTRL_CROSS)) {
-                    return wifi_menu_wait_for_connection(ctx);
+                    return Wi-Fi_menu_wait_for_connection(ctx);
                 }
                 if ((pad.Buttons & PSP_CTRL_CIRCLE) && !(oldPad.Buttons & PSP_CTRL_CIRCLE)) {
                     return -1;
@@ -258,7 +258,7 @@ int wifi_menu_wait_for_connection(wifi_context_t *ctx) {
                 while (1) {
                     sceCtrlReadBufferPositive(&pad, 1);
                     if ((pad.Buttons & PSP_CTRL_CROSS) && !(oldPad.Buttons & PSP_CTRL_CROSS)) {
-                        return wifi_menu_wait_for_connection(ctx);
+                        return Wi-Fi_menu_wait_for_connection(ctx);
                     }
                     if ((pad.Buttons & PSP_CTRL_CIRCLE) && !(oldPad.Buttons & PSP_CTRL_CIRCLE)) {
                         return -1;
@@ -325,7 +325,7 @@ int wifi_menu_wait_for_connection(wifi_context_t *ctx) {
             pspDebugScreenSetTextColor(COLOR_GRAY);
             pspDebugScreenPrintf("Press X to continue...\n");
 
-            ctx->state = WIFI_CONNECTED;
+            ctx->state = Wi-Fi_CONNECTED;
 
             // Wait for X button
             SceCtrlData pad, oldPad;
@@ -355,7 +355,7 @@ int wifi_menu_wait_for_connection(wifi_context_t *ctx) {
     while (1) {
         sceCtrlReadBufferPositive(&pad, 1);
         if ((pad.Buttons & PSP_CTRL_CROSS) && !(oldPad.Buttons & PSP_CTRL_CROSS)) {
-            return wifi_menu_wait_for_connection(ctx);
+            return Wi-Fi_menu_wait_for_connection(ctx);
         }
         if ((pad.Buttons & PSP_CTRL_CIRCLE) && !(oldPad.Buttons & PSP_CTRL_CIRCLE)) {
             return -1;

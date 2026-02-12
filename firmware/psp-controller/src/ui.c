@@ -37,7 +37,7 @@ int ui_init(ui_context_t *ctx) {
     return 0;
 }
 
-void ui_draw(ui_context_t *ctx, wifi_context_t *wifi, mqtt_context_t *mqtt, input_context_t *input) {
+void ui_draw(ui_context_t *ctx, Wi-Fi_context_t *Wi-Fi, mqtt_context_t *mqtt, input_context_t *input) {
     if (!ctx->initialized) {
         return;
     }
@@ -57,30 +57,30 @@ void ui_draw(ui_context_t *ctx, wifi_context_t *wifi, mqtt_context_t *mqtt, inpu
         first_draw = 0;
     }
 
-    // WiFi Status - clear line and redraw
+    // Wi-Fi Status - clear line and redraw
     pspDebugScreenSetXY(0, 4);
     pspDebugScreenSetTextColor(COLOR_WHITE);
-    pspDebugScreenPrintf("WiFi: ");
+    pspDebugScreenPrintf("Wi-Fi: ");
 
-    switch (wifi_get_state(wifi)) {
-        case WIFI_DISCONNECTED:
+    switch (Wi-Fi_get_state(Wi-Fi)) {
+        case Wi-Fi_DISCONNECTED:
             pspDebugScreenSetTextColor(COLOR_GRAY);
             pspDebugScreenPrintf("Disconnected                         ");
             break;
-        case WIFI_CONNECTING:
+        case Wi-Fi_CONNECTING:
             pspDebugScreenSetTextColor(COLOR_YELLOW);
             pspDebugScreenPrintf("Connecting...                        ");
             break;
-        case WIFI_CONNECTED:
+        case Wi-Fi_CONNECTED:
             pspDebugScreenSetTextColor(COLOR_GREEN);
             pspDebugScreenPrintf("Connected");
-            if (wifi_get_ip(wifi)) {
-                pspDebugScreenPrintf(" (%s)                  ", wifi_get_ip(wifi));
+            if (Wi-Fi_get_ip(Wi-Fi)) {
+                pspDebugScreenPrintf(" (%s)                  ", Wi-Fi_get_ip(Wi-Fi));
             } else {
                 pspDebugScreenPrintf("                                     ");
             }
             break;
-        case WIFI_ERROR:
+        case Wi-Fi_ERROR:
             pspDebugScreenSetTextColor(COLOR_RED);
             pspDebugScreenPrintf("Error                                ");
             break;

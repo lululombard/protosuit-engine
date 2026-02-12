@@ -191,7 +191,7 @@ class RingDingGame:
         self.pass_count = 0
         print(f"[RingDing] Level {self.current_level}: Target={self.target_start_angle:.1f}° size={self.target_arc_size:.1f}°")
 
-    def check_hit(self):
+    def check_hit(self, verbose=False):
         """Simple angle range check"""
         marker = self.marker_angle % 360
         target_start = (self.target_start_angle - HIT_MARGIN) % 360
@@ -202,7 +202,8 @@ class RingDingGame:
         else:
             in_zone = marker >= target_start or marker <= target_end
 
-        print(f"[RingDing] Hit: M={marker:.0f}° T={target_start:.0f}°-{target_end:.0f}° = {in_zone}")
+        if verbose:
+            print(f"[RingDing] Hit: M={marker:.0f}° T={target_start:.0f}°-{target_end:.0f}° = {in_zone}")
         return in_zone
 
     def handle_hit(self):
@@ -213,7 +214,7 @@ class RingDingGame:
                 self.start_game()
             return
 
-        if self.check_hit():
+        if self.check_hit(verbose=True):
             self.validated_this_pass = True
             self.score += 10
             if self.current_level >= NUM_LEVELS:
@@ -331,7 +332,8 @@ class RingDingGame:
             start_text = self.font_medium.render("Press A to start", True, COLOR_TEXT)
             credit_text_1 = self.font_small.render("Original ESP32 LED game by", True, COLOR_TEXT)
             credit_text_2 = self.font_small.render("Miggy and Dharsi", True, COLOR_TEXT)
-            credit_text_3 = self.font_small.render("Ported to Pygame by lululombard", True, COLOR_TEXT)
+            credit_text_3 = self.font_small.render("Score system by Azavech", True, COLOR_TEXT)
+            credit_text_4 = self.font_small.render("Ported to Pygame by lululombard", True, COLOR_TEXT)
 
             for x_offset in [self.half_width // 2, self.half_width + self.half_width // 2]:
                 title_rect = title.get_rect(center=(x_offset, self.height // 2 - 180))
@@ -348,6 +350,8 @@ class RingDingGame:
                 self.screen.blit(credit_text_2, credit_rect_2)
                 credit_rect_3 = credit_text_3.get_rect(center=(x_offset, self.height // 2 + 230))
                 self.screen.blit(credit_text_3, credit_rect_3)
+                credit_rect_4 = credit_text_4.get_rect(center=(x_offset, self.height // 2 + 265))
+                self.screen.blit(credit_text_4, credit_rect_4)
 
         elif self.state == GameState.PLAYING:
             self.draw_circle_display(self.screen, self.half_width // 2, self.height // 2, mirror=False)

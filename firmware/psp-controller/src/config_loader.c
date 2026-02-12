@@ -113,7 +113,7 @@ int save_default_config() {
     fprintf(f, "# Protosuit Remote Control Configuration\n");
     fprintf(f, "# Edit these values to match your setup\n");
     fprintf(f, "\n");
-    fprintf(f, "# Note: WiFi profile is selected on startup\n");
+    fprintf(f, "# Note: Wi-Fi profile is selected on startup\n");
     fprintf(f, "\n");
     fprintf(f, "# MQTT Broker Settings\n");
     fprintf(f, "mqtt_broker_ip=192.168.1.100\n");

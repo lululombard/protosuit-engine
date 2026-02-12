@@ -7,10 +7,10 @@ A PSP homebrew application that sends button inputs to a MQTT broker for control
 ### On PSP:
 - Custom firmware (CFW) installed
 - FTP server homebrew (e.g., `ftpd` or `PSPFiler`) for wireless deployment
-- WiFi configured in PSP Settings → Network Settings
+- Wi-Fi configured in PSP Settings → Network Settings
 
 ### On Development Machine:
-- PSP SDK (installed via `setup-sdk.sh`)
+- PSP SDK (installed via `setup_sdk.sh`)
 - `lftp` (recommended) or `ftp` client for deployment
 
 ## Setup
@@ -18,24 +18,17 @@ A PSP homebrew application that sends button inputs to a MQTT broker for control
 ### 1. Install PSP SDK
 
 ```bash
-./setup-sdk.sh
+./setup_sdk.sh
 ```
 
 This will take over an hour to complete. It installs the complete PSP development environment.
 
-It is normal if you install ends with, just ignore it, it will wortk:
+It is normal if you install ends with, just ignore it, it will work anyways:
 ```
 warning: no 'XferCommand' configured
 :: Synchronizing package databases...
 error: failed to synchronize all databases (error invoking external downloader)
 ../scripts/003-psp-packages.sh: Failed.
-```
-
-After installation, add these to your `~/.bashrc` or `~/.zshrc`:
-
-```bash
-export PSPDEV=/usr/local/pspdev
-export PATH=$PATH:$PSPDEV/bin
 ```
 
 ### 2. Configure
@@ -48,14 +41,14 @@ ms0:/PSP/GAME/ProtosuitRemote/config.txt
 ```
 
 Edit this file on your PSP via FTP (or via USB) to change:
-- WiFi profile (1-10)
+- Wi-Fi profile (1-10)
 - MQTT broker IP address
 - MQTT port, client ID, topic
 - Keepalive interval
 
 **Example config.txt:**
 ```ini
-wifi_profile=1
+Wi-Fi_profile=1
 mqtt_broker_ip=192.168.1.100
 mqtt_broker_port=1883
 mqtt_client_id=psp-controller
@@ -96,11 +89,11 @@ This creates `EBOOT.PBP` - the PSP executable.
 
 ## Usage
 
-1. Configure WiFi on PSP (Settings → Network Settings)
-   - The app uses the profile specified in `WIFI_PROFILE`
+1. Configure Wi-Fi on PSP (Settings → Network Settings)
+   - The app uses the profile specified in `Wi-Fi_PROFILE`
 2. Start your MQTT broker on the configured IP
 3. Launch the app from Game → Memory Stick
-4. Wait for WiFi and MQTT connection
+4. Wait for Wi-Fi and MQTT connection
 5. Press PSP buttons - they'll be sent as MQTT messages!
 
 ## MQTT Message Format
@@ -129,7 +122,7 @@ Button presses are published as JSON:
 - Make sure PSPDEV is set: `export PSPDEV=/usr/local/pspdev`
 - Add to PATH: `export PATH=$PATH:$PSPDEV/bin`
 
-**WiFi connection fails:**
+**Wi-Fi connection fails:**
 - Verify PSP network profile is configured
 - Check that you're using the correct profile number in `config.h`
 

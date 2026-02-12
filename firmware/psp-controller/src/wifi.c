@@ -1,8 +1,8 @@
 /*
- * Protosuit Remote Control - WiFi Manager Implementation
+ * Protosuit Remote Control - Wi-Fi Manager Implementation
  */
 
-#include "wifi.h"
+#include "Wi-Fi.h"
 #include "../config.h"
 #include <string.h>
 #include <stdio.h>
@@ -12,10 +12,10 @@
 #include <psputility.h>
 #include <pspkernel.h>
 
-int wifi_init(wifi_context_t *ctx, int profile) {
-    memset(ctx, 0, sizeof(wifi_context_t));
+int Wi-Fi_init(Wi-Fi_context_t *ctx, int profile) {
+    memset(ctx, 0, sizeof(Wi-Fi_context_t));
     ctx->profile_index = (profile > 0 && profile <= 10) ? profile : 1; // Default to profile 1
-    ctx->state = WIFI_DISCONNECTED;
+    ctx->state = Wi-Fi_DISCONNECTED;
 
     // Load network modules
     int ret = sceUtilityLoadNetModule(PSP_NET_MODULE_COMMON);
@@ -43,16 +43,16 @@ int wifi_init(wifi_context_t *ctx, int profile) {
     return 0;
 }
 
-int wifi_connect(wifi_context_t *ctx) {
+int Wi-Fi_connect(Wi-Fi_context_t *ctx) {
     // Don't try to connect if already connected
     int state = 0;
     sceNetApctlGetState(&state);
     if (state == PSP_NET_APCTL_STATE_GOT_IP) {
-        ctx->state = WIFI_CONNECTED;
+        ctx->state = Wi-Fi_CONNECTED;
         return 0;  // Already connected
     }
 
-    ctx->state = WIFI_CONNECTING;
+    ctx->state = Wi-Fi_CONNECTING;
 
     // Connect using the configured PSP network profile (1-based index)
     // NOTE: Don't disconnect first - PSP-FTPD doesn't do this
@@ -60,7 +60,7 @@ int wifi_connect(wifi_context_t *ctx) {
     if (ret < 0) {
         // Only set error if not already connecting (error code 0x80410a0b)
         if (ret != 0x80410a0b) {
-            ctx->state = WIFI_ERROR;
+            ctx->state = Wi-Fi_ERROR;
         }
         return ret;
     }
@@ -68,26 +68,26 @@ int wifi_connect(wifi_context_t *ctx) {
     return 0; // Return immediately, let caller poll for connection
 }
 
-void wifi_disconnect(wifi_context_t *ctx) {
-    if (ctx->state == WIFI_CONNECTED || ctx->state == WIFI_CONNECTING) {
+void Wi-Fi_disconnect(Wi-Fi_context_t *ctx) {
+    if (ctx->state == Wi-Fi_CONNECTED || ctx->state == Wi-Fi_CONNECTING) {
         sceNetApctlDisconnect();
     }
-    ctx->state = WIFI_DISCONNECTED;
+    ctx->state = Wi-Fi_DISCONNECTED;
 }
 
-bool wifi_is_connected(wifi_context_t *ctx) {
+bool Wi-Fi_is_connected(Wi-Fi_context_t *ctx) {
     // Always check actual network state
     int state = 0;
     int ret = sceNetApctlGetState(&state);
 
     if (ret < 0) {
-        ctx->state = WIFI_ERROR;
+        ctx->state = Wi-Fi_ERROR;
         return false;
     }
 
     if (state == PSP_NET_APCTL_STATE_GOT_IP) {
         // Update context state and IP if connected
-        ctx->state = WIFI_CONNECTED;
+        ctx->state = Wi-Fi_CONNECTED;
 
         // Get IP address if we don't have it yet
         if (ctx->ip_address[0] == 0) {
@@ -101,29 +101,29 @@ bool wifi_is_connected(wifi_context_t *ctx) {
 
     // Update state based on actual connection state
     if (state == PSP_NET_APCTL_STATE_DISCONNECTED) {
-        ctx->state = WIFI_DISCONNECTED;
+        ctx->state = Wi-Fi_DISCONNECTED;
     } else if (state > PSP_NET_APCTL_STATE_DISCONNECTED && state < PSP_NET_APCTL_STATE_GOT_IP) {
-        ctx->state = WIFI_CONNECTING;
+        ctx->state = Wi-Fi_CONNECTING;
     }
 
     return false;
 }
 
-wifi_state_t wifi_get_state(wifi_context_t *ctx) {
+Wi-Fi_state_t Wi-Fi_get_state(Wi-Fi_context_t *ctx) {
     return ctx->state;
 }
 
-const char* wifi_get_ip(wifi_context_t *ctx) {
-    if (ctx->state == WIFI_CONNECTED) {
+const char* Wi-Fi_get_ip(Wi-Fi_context_t *ctx) {
+    if (ctx->state == Wi-Fi_CONNECTED) {
         return ctx->ip_address;
     }
     return NULL;
 }
 
-void wifi_shutdown(wifi_context_t *ctx) {
+void Wi-Fi_shutdown(Wi-Fi_context_t *ctx) {
     // Quick disconnect without waiting
     sceNetApctlDisconnect();
-    ctx->state = WIFI_DISCONNECTED;
+    ctx->state = Wi-Fi_DISCONNECTED;
 
     // Terminate network stack (don't wait for clean shutdown)
     sceNetApctlTerm();

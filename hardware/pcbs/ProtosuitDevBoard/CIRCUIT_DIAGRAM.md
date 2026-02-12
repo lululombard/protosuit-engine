@@ -36,7 +36,7 @@ flowchart LR
     MIC["Microphone"]
 
     %% Raspberry Pi USB Peripherals
-    USB_WIFI["USB WiFi/Bluetooth Adapter"]
+    USB_Wi-Fi["USB Wi-Fi/Bluetooth Adapter"]
     USB_MIC["USB Ambient Microphone"]
     USB_SPEAKER["USB Speaker"]
 
@@ -68,7 +68,7 @@ flowchart LR
     RPI -.->|HDMI| LCD1
     RPI -.->|HDMI| LCD2
     RPI -.->|USB| ESP32
-    RPI -.->|USB| USB_WIFI
+    RPI -.->|USB| USB_Wi-Fi
     RPI -.->|USB| USB_MIC
     RPI -.->|USB| USB_SPEAKER
     TEENSY -.->|UART| ESP32
@@ -126,7 +126,7 @@ flowchart LR
 | Raspberry Pi | LCD Display 1 | HDMI | Video output |
 | Raspberry Pi | LCD Display 2 | HDMI | Video output |
 | Raspberry Pi | ESP32 | USB | Data communication/control |
-| Raspberry Pi | WiFi/Bluetooth Adapter | USB | Wireless connectivity |
+| Raspberry Pi | Wi-Fi/Bluetooth Adapter | USB | Wireless connectivity |
 | Raspberry Pi | Ambient Microphone | USB | Audio input |
 | Raspberry Pi | Speaker | USB | Audio output |
 | Teensy 4.0 | ESP32 | UART | Inter-microcontroller communication |
@@ -135,7 +135,7 @@ flowchart LR
 | Quantity | Connector Type | Device | Purpose |
 |----------|----------------|---------|---------|
 | 1× | USB | ESP32 | Microcontroller communication/control |
-| 1× | USB | WiFi/Bluetooth Adapter | Wireless connectivity |
+| 1× | USB | Wi-Fi/Bluetooth Adapter | Wireless connectivity |
 | 1× | USB | Ambient Microphone | Environmental audio input |
 | 1× | USB | Speaker | Audio output |
 
@@ -169,4 +169,4 @@ flowchart LR
 - Communication links (HDMI, USB, UART) are shown with dotted lines in the diagram
 - Power connections are shown with solid lines
 - The main PCB houses both the Teensy 4.0 and ESP32, sharing the 5V 8A power rail
-- Raspberry Pi has 4 USB devices connected (ESP32, WiFi/Bluetooth adapter, ambient microphone, speaker)
+- Raspberry Pi has 4 USB devices connected (ESP32, Wi-Fi/Bluetooth adapter, ambient microphone, speaker)
