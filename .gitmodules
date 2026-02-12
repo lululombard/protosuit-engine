@@ -1,0 +1,3 @@
+[submodule "ProtoTracer"]
+	path = ProtoTracer
+	url = https://github.com/lululombard/ProtoTracer.git
