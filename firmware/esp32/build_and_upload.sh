@@ -8,7 +8,7 @@ cd "$SCRIPT_DIR"
 
 sudo systemctl stop protosuit-espbridge
 
-../env/bin/pio run -t upload
+../../env/bin/pio run -t upload
 
 sleep 3
 

@@ -96,8 +96,10 @@ echo "[superhaxagon.sh] Setting up screen duplication with X11 mirror..."
 echo "[superhaxagon.sh] Capturing from HDMI-1 at ${LEFT_X},${POS_Y}"
 
 # Start X11 mirror (hardware accelerated with OpenGL)
-MIRROR_SCRIPT="/home/proto/protosuit-engine/utils/x11_mirror.py"
-VENV_PYTHON="/home/proto/protosuit-engine/env/bin/python3"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+MIRROR_SCRIPT="$PROJECT_ROOT/engine/utils/x11_mirror.py"
+VENV_PYTHON="$PROJECT_ROOT/env/bin/python3"
 
 if [ -f "$MIRROR_SCRIPT" ]; then
     echo "[superhaxagon.sh] Starting OpenGL-accelerated mirror (low CPU usage)"

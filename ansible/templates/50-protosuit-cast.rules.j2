@@ -1,4 +1,4 @@
-// Polkit rule: Allow {{ pi_user }} to manage cast services via D-Bus
+// Polkit rule: Allow {{ pi_user }} to manage services via D-Bus
 // Deployed by Ansible - do not edit manually
 polkit.addRule(function(action, subject) {
     if (subject.user != "{{ pi_user }}") return;
@@ -6,7 +6,8 @@ polkit.addRule(function(action, subject) {
     // Start/Stop/Restart specific units
     if (action.id == "org.freedesktop.systemd1.manage-units" &&
         (action.lookup("unit") == "shairport-sync.service" ||
-         action.lookup("unit") == "spotifyd.service")) {
+         action.lookup("unit") == "spotifyd.service" ||
+         action.lookup("unit") == "bluetooth.service")) {
         return polkit.Result.YES;
     }
 

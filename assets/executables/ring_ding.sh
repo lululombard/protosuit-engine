@@ -16,9 +16,11 @@ echo "[ring_ding.sh] Starting Ring Ding launcher"
 echo "[ring_ding.sh] Display: ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}"
 echo "[ring_ding.sh] Left: ${LEFT_X},${POS_Y} | Right: ${RIGHT_X},${POS_Y}"
 
-# Ring Ding executable path
-GAME_PATH="/home/proto/protosuit-engine/launcher/games/ring_ding.py"
-VENV_PYTHON="/home/proto/protosuit-engine/env/bin/python3"
+# Ring Ding executable path (relative to project root via SCRIPT_DIR)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+GAME_PATH="$PROJECT_ROOT/assets/apps/ring_ding.py"
+VENV_PYTHON="$PROJECT_ROOT/env/bin/python3"
 
 if [ ! -f "$GAME_PATH" ]; then
     echo "[ring_ding.sh] ERROR: Ring Ding not found at $GAME_PATH"

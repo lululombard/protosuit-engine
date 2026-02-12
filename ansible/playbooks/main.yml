@@ -411,7 +411,7 @@
 - name: Download OUI database if not exists
   get_url:
     url: https://standards-oui.ieee.org/oui/oui.txt
-    dest: "{{ project_dir }}/data/oui.txt"
+    dest: "{{ project_dir }}/engine/data/oui.txt"
     mode: '0644'
     timeout: 60
   become_user: "{{ pi_user }}"
@@ -514,13 +514,6 @@
 - name: Set system to boot to graphical target
   command: systemctl set-default graphical.target
   become: true
-
-- name: Disable and remove legacy protosuit-engine wrapper service
-  systemd:
-    name: protosuit-engine
-    enabled: no
-    state: stopped
-  ignore_errors: yes
 
 - name: Remove legacy protosuit-engine service file
   file:

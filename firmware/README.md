@@ -6,7 +6,7 @@
 
 **Build & Upload:**
 ```bash
-./esp32/build_and_upload.sh
+./firmware/esp32/build_and_upload.sh
 ```
 Restarts protosuit-espbridge service after upload.
 
@@ -45,9 +45,8 @@ Restarts protosuit-espbridge service after upload.
 - Threading: main loop (reconnect/timeout), serial read thread, serial write thread (50ms delay between writes)
 
 **Fan Control:**
-- PWM on GPIO 33 (21.6 kHz, 8-bit, inverted duty cycle due to transistor driver)
-- Tachometer on GPIO 35 (FALLING edge, 2 pulses/revolution)
 - Speed clamped to 0-100%
+- See [hardware docs](../hardware/README.md#esp32-gpio-pinout) for GPIO pin assignments
 
 **Fan Curve System:**
 - Auto mode: fan speed = max(temperature curve, humidity curve)
@@ -116,7 +115,7 @@ Schema published as retained MQTT on connect. Web UI auto-generates controls fro
 
 ---
 
-## ProtoTracer / Teensy 4.0 (ProtoTracer/)
+## ProtoTracer / Teensy 4.0 (prototracer/)
 
 **Overview:** Git submodule -- fork of [coelacant1/ProtoTracer](https://github.com/coelacant1/ProtoTracer), adapted for ESP32/Pi communication.
 - Fork: [lululombard/ProtoTracer](https://github.com/lululombard/ProtoTracer)
@@ -131,7 +130,7 @@ Schema published as retained MQTT on connect. Web UI auto-generates controls fro
 
 **Build & Upload:**
 ```bash
-./ProtoTracer/build_and_upload.sh
+./firmware/prototracer/build_and_upload.sh
 ```
 - PlatformIO environment: `teensy40ws35`
 - Shows Teensy uploader GUI on the HDMI displays (DISPLAY=:0)
@@ -145,4 +144,4 @@ Schema published as retained MQTT on connect. Web UI auto-generates controls fro
 - Responses: `<PARAM>=<VALUE>`, `OK SAVED`, `ERR <msg>`
 - Parameters managed by ESP32 menu system (see above)
 
-**USB Connection:** See [hardware docs](hardware.md#pi-to-teensy-40----usb-without-5v-power) for details. USB is only used for firmware uploads, runtime communication goes through the ESP32 UART bridge.
+**USB Connection:** See [hardware docs](../hardware/README.md#pi-to-teensy-40----usb-without-5v-power) for details. USB is only used for firmware uploads, runtime communication goes through the ESP32 UART bridge.

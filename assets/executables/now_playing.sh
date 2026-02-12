@@ -16,9 +16,11 @@ ACCENT_COLOR="${ACCENT_COLOR:-255,165,0}"
 echo "[now_playing.sh] Starting Now Playing launcher"
 echo "[now_playing.sh] Display: ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}"
 
-# Paths
-GAME_PATH="/home/proto/protosuit-engine/launcher/games/now_playing.py"
-VENV_PYTHON="/home/proto/protosuit-engine/env/bin/python3"
+# Paths (relative to project root via SCRIPT_DIR)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+GAME_PATH="$PROJECT_ROOT/assets/apps/now_playing.py"
+VENV_PYTHON="$PROJECT_ROOT/env/bin/python3"
 
 if [ ! -f "$GAME_PATH" ]; then
     echo "[now_playing.sh] ERROR: now_playing.py not found at $GAME_PATH"

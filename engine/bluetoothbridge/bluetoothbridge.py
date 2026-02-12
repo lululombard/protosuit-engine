@@ -20,7 +20,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.loader import ConfigLoader
 from utils.mqtt_client import create_mqtt_client
 from utils.notifications import publish_notification
-from utils.bluez_dbus import (
+from utils.service_controller import ServiceController
+from bluetoothbridge.bluez_dbus import (
     BluezManager, BluezDevice, BluezAdapter,
     is_gamepad, is_audio_device,
     dbus_path_to_mac, dbus_path_adapter,
@@ -62,6 +63,7 @@ class BluetoothBridge:
 
         # BlueZ D-Bus manager
         self.bluez = BluezManager()
+        self.bt_service = ServiceController("bluetooth")
 
         # Bluetooth state
         self.scanning = False
@@ -659,12 +661,7 @@ class BluetoothBridge:
             if self.scanning:
                 self.stop_scan()
 
-            # Restart via systemd
-            result = subprocess.run(
-                ["sudo", "systemctl", "restart", "bluetooth"],
-                capture_output=True, text=True, timeout=10,
-            )
-            if result.returncode == 0:
+            if self.bt_service.restart():
                 print("[BluetoothBridge] Bluetooth service restarted")
                 time.sleep(3)
 
@@ -673,7 +670,7 @@ class BluetoothBridge:
                 self._auto_reconnect_devices()
                 self.publish_all_status()
             else:
-                print(f"[BluetoothBridge] Restart failed: {result.stderr}")
+                print("[BluetoothBridge] Restart failed")
 
         except Exception as e:
             print(f"[BluetoothBridge] Restart error: {e}")
@@ -812,11 +809,7 @@ class BluetoothBridge:
 
         # Restart Bluetooth for clean state
         try:
-            result = subprocess.run(
-                ["sudo", "systemctl", "restart", "bluetooth"],
-                capture_output=True, text=True, timeout=10,
-            )
-            if result.returncode == 0:
+            if self.bt_service.restart():
                 print("[BluetoothBridge] Bluetooth service restarted")
                 time.sleep(3)
         except Exception as e:

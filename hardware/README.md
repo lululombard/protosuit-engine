@@ -2,7 +2,7 @@
 
 This document covers all hardware aspects of the Protosuit Engine project, including the custom PCB, USB connections, GPIO pinout, displays, and Bluetooth adapter management.
 
-## PCB Design (ProtosuitDevBoard/)
+## PCB Design (pcbs/ProtosuitDevBoard/)
 
 The main PCB is designed in **KiCad 8.0** and serves as the central power distribution and interconnect board for the suit.
 
@@ -42,7 +42,7 @@ Each WS35 panel has two halves, each with its own 5V, GND, and signal pins. By d
 
 ### Custom Footprint Libraries
 
-Custom KiCad footprint libraries are located in `Aliexpress.pretty/` and `teensy.pretty/`:
+Custom KiCad footprint library in `Aliexpress.pretty/`:
 
 | Footprint | Description |
 |-----------|-------------|
@@ -51,6 +51,7 @@ Custom KiCad footprint libraries are located in `Aliexpress.pretty/` and `teensy
 | DC_DC_5V_8A_CRDC2580 | 5V 8A buck converter |
 | LEVEL_SHIFTER_TXS0108E | 8-channel level shifter (not used in PCB 1.1, wrong type of shifter, bypassed in 1.0) |
 | GYRO_MPU6050 | 6-axis IMU (gyroscope + accelerometer), on-board but currently unused |
+| TEENSY_4_0 | Teensy 4.0 module (modified from original) |
 
 ### Board Status
 
@@ -58,7 +59,7 @@ The current board (v1.1) is a **validation prototype** using off-the-shelf modul
 
 ### Manufacturing and Project Files
 
-- Gerber manufacturing files in `gerber/`
+- Gerber manufacturing files in `gerber_v1_0/`
 - `.kicad_sch` -- schematic
 - `.kicad_pcb` -- PCB layout
 - `.kicad_pro` -- project file

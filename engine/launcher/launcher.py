@@ -56,10 +56,9 @@ class Launcher:
         self.available_exec: List[str] = []
 
         # Base paths
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.audio_dir = os.path.join(project_root, "assets", "audio")
-        self.video_dir = os.path.join(project_root, "assets", "video")
-        self.exec_dir = os.path.join(project_root, "assets", "executables")
+        self.audio_dir = os.path.join(os.getcwd(), "assets", "audio")
+        self.video_dir = os.path.join(os.getcwd(), "assets", "video")
+        self.exec_dir = os.path.join(os.getcwd(), "assets", "executables")
 
         print("[Launcher] Initialized")
 

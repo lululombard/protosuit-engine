@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 """
 Protosuit Engine - Development Launcher
-Starts all three processes (renderer, launcher, web) for local development
+Starts all services for local development.
 
 ⚠️  WARNING: For development only!
-Production deployments should use systemd services:
-  - protosuit-renderer.service
-  - protosuit-launcher.service
-  - protosuit-web.service
-
+Production deployments should use systemd services (protosuit-*.service).
 This is a single point of failure and should not be used in production.
 """
 
+import os
 import subprocess
 import sys
 import signal
@@ -25,6 +22,10 @@ COLORS = {
     "web": "\033[93m",  # Yellow
     "bluetoothbridge": "\033[95m",  # Magenta
     "espbridge": "\033[96m",  # Cyan
+    "audiobridge": "\033[91m",  # Red
+    "controllerbridge": "\033[97m",  # White
+    "castbridge": "\033[33m",  # Dark Yellow
+    "networkingbridge": "\033[36m",  # Dark Cyan
     "reset": "\033[0m",
 }
 
@@ -38,43 +39,84 @@ def main():
 
     project_root = Path(__file__).parent
     python_bin = project_root / "env" / "bin" / "python"
+    engine_dir = project_root / "engine"
+
+    # Environment with PYTHONPATH pointing to engine/
+    env = {**os.environ, 'PYTHONPATH': str(engine_dir)}
 
     # Start processes
     processes = {
         "renderer": subprocess.Popen(
-            [str(python_bin), str(project_root / "renderer" / "renderer.py")],
+            [str(python_bin), str(engine_dir / "renderer" / "renderer.py")],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=env,
         ),
         "launcher": subprocess.Popen(
-            [str(python_bin), str(project_root / "launcher" / "launcher.py")],
+            [str(python_bin), str(engine_dir / "launcher" / "launcher.py")],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=env,
         ),
         "web": subprocess.Popen(
-            [str(python_bin), str(project_root / "web" / "server.py")],
+            [str(python_bin), str(engine_dir / "web" / "server.py")],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=env,
         ),
         "bluetoothbridge": subprocess.Popen(
-            [str(python_bin), str(project_root / "bluetoothbridge" / "bluetoothbridge.py")],
+            [str(python_bin), str(engine_dir / "bluetoothbridge" / "bluetoothbridge.py")],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=env,
         ),
         "espbridge": subprocess.Popen(
-            [str(python_bin), str(project_root / "espbridge" / "espbridge.py")],
+            [str(python_bin), str(engine_dir / "espbridge" / "espbridge.py")],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=env,
+        ),
+        "audiobridge": subprocess.Popen(
+            [str(python_bin), str(engine_dir / "audiobridge" / "audiobridge.py")],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
+        ),
+        "controllerbridge": subprocess.Popen(
+            [str(python_bin), str(engine_dir / "controllerbridge" / "controllerbridge.py")],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
+        ),
+        "castbridge": subprocess.Popen(
+            [str(python_bin), str(engine_dir / "castbridge" / "castbridge.py")],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
+        ),
+        "networkingbridge": subprocess.Popen(
+            [str(python_bin), str(engine_dir / "networkingbridge" / "networkingbridge.py")],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
         ),
     }
 

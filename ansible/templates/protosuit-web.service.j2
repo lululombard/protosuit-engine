@@ -9,8 +9,8 @@ Type=simple
 User={{ service_user }}
 Group={{ service_group }}
 WorkingDirectory={{ project_dir }}
-Environment=PYTHONPATH={{ project_dir }}
-ExecStart={{ project_dir }}/env/bin/python3-privileged {{ project_dir }}/web/server.py
+Environment=PYTHONPATH={{ project_dir }}/engine
+ExecStart={{ project_dir }}/env/bin/python3-privileged {{ project_dir }}/engine/web/server.py
 Restart={{ service_config.restart_policy }}
 RestartSec={{ service_config.restart_sec }}
 TimeoutStopSec={{ service_config.timeout_stop_sec }}

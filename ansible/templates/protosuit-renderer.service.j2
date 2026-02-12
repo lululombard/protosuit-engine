@@ -10,9 +10,9 @@ User={{ service_user }}
 Group={{ service_group }}
 WorkingDirectory={{ project_dir }}
 Environment=DISPLAY=:0
-Environment=PYTHONPATH={{ project_dir }}
+Environment=PYTHONPATH={{ project_dir }}/engine
 ExecStartPre=/bin/bash -c 'for i in $(seq 30); do [ -S /run/user/1000/pulse/native ] && exit 0; sleep 1; done; exit 1'
-ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/renderer/renderer.py
+ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/engine/renderer/renderer.py
 Restart={{ service_config.restart_policy }}
 RestartSec={{ service_config.restart_sec }}
 TimeoutStopSec={{ service_config.timeout_stop_sec }}

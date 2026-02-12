@@ -2,6 +2,8 @@
 
 **The brain of my Protogen fursuit, featuring GLSL shaders on dual round displays, LED matrix visor control, AirPlay/Spotify streaming, Doom, Super Haxagon, Bluetooth gamepads and speakers, and way more than I originally planned.**
 
+[INSERT YOUTUBE VIDEO SHOT AT NFC]
+
 My friend [Miggy](https://github.com/Myggi) and I make our Protogen fursuits together, he handles 3D CAD and I handle the electronics and software. My original suit (v1) from 2023 ran a fork of [b0xcat/protocontrol](https://github.com/b0xcat/protocontrol) ([my fork](https://github.com/lululombard/protocontrol)) with 14 basic MAX7219 matrices and no sensors. I wore it at [NFC](https://nordicfuzzcon.org/) and [FBL](https://fblacklight.org/) 2024. It worked, but I wanted more.
 
 In 2023, we found some 5-inch 1080x1080 round displays on AliExpress. Miggy designed and almost finished building a suit around them, looking back they were pretty bulky and heavy. Then in 2024 we found 4-inch 720x720 displays and that's when I jumped on board to use them for my v2 suit and his too. The project was reborn.
@@ -39,48 +41,13 @@ That's it! The system will auto-configure and start on boot.
 
 ## Hardware
 
-### Recommended Setup
-
-- **Raspberry Pi 5** (4GB+ RAM recommended)
-- **Two 4-inch 720x720 round displays** (search "wisecoco 4 inch 720 round" on AliExpress) with HDMI-MIPI driver boards
-- **USB Wi-Fi 6 + Bluetooth dongle** (RTL8851BU chipset), handles both Wi-Fi client and Bluetooth
-  - Built-in RPi radio has issues running AP + BT simultaneously; this dongle handles Wi-Fi + 3 BT devices (2 controllers + 1 speaker) smoothly
-  - Built-in RPi Wi-Fi is used for AP mode
-  - See [ansible/README.md](ansible/README.md#wi-fi-hardware-configuration) for details
+- **Raspberry Pi 5** (4GB+ RAM)
+- **Two 4-inch 720x720 round displays** with HDMI-MIPI driver boards, mounted on fursuit fins
+- **Custom PCB** ([hardware/pcbs/ProtosuitDevBoard/](hardware/pcbs/ProtosuitDevBoard/)): KiCad power distribution board with 9-25V input, dual buck converters, LED matrix/strip connectors
+- **USB Wi-Fi 6 + Bluetooth dongle** (RTL8851BU): handles Wi-Fi client + BT devices; built-in RPi Wi-Fi runs AP mode
 - **USB microphone dongle**: for sound-reactive shader audio capture (FFT)
 
-### USB Connections
-
-| Connection | Power | Visible in lsusb | Purpose |
-|------------|-------|-------------------|---------|
-| Pi ↔ Teensy 4.0 | No USB 5V (VUSB=VIN, no cut trace) | Only during bootloader upload | Firmware uploads only |
-| Pi ↔ ESP32 | USB 5V (CH341 needs bus power) | Always (`/dev/ttyUSB0`) | Serial communication (921,600 baud) |
-
-The Teensy is powered from the main PCB 5V 8A rail. The ESP32's CH341 USB-serial chip is not connected to the ESP32 main 5V rail, so it requires USB bus power.
-
-### Custom PCB ([ProtosuitDevBoard/](ProtosuitDevBoard/))
-
-KiCad 9.0 power distribution and interconnect board:
-
-- **9-25V input** via XT60 connector, powered by a USB-C PD 20V to XT60 cable from a power bank (minimizes power loss)
-- **1x 5V 5A low-ESR buck-boost**: shared between RPi and 2x LCD displays
-- **1x 5V 8A buck-boost**: main PCB powering Teensy 4.0, ESP32, WS35 matrices, and LED strips
-- **4x WS35 LED matrix** screw terminal connectors (3-pin, Coela Can't! design)
-- **5x LED strip** screw terminal connectors (3-pin): 2x fins, 2x ears, 1x upper arch
-- I2C, MAX9814 microphone input (Teensy), DHT22 sensor connector (ESP32), all JST
-- MPU6050 gyro/accelerometer (on-board, currently unused)
-- Screw terminals and power connectors use ferrule crimps
-
-Currently a validation prototype using off-the-shelf modules (buck converters, ESP32 dev board) with no SMD components. See [Future Plans](#future-plans) for the roadmap toward a production-ready board.
-
-See [docs/hardware.md](docs/hardware.md) for full details including custom footprints and gerber files.
-
-### Display Configuration
-
-Dual 720x720 displays mounted on fursuit fins:
-- Left display rotated 90° clockwise
-- Right display rotated 90° counter-clockwise
-- Extended desktop spanning both displays
+See **[hardware/README.md](hardware/README.md)** for PCB details, USB connections, GPIO pinout, display configuration, and Bluetooth adapter management.
 
 ---
 
@@ -121,91 +88,13 @@ The dashboard includes a visor panel with fan curve editor and Teensy LED menu c
 
 ## Architecture
 
-### Services
-
-Nine independent Python services + three supporting services, all communicating via MQTT:
-
-| Service | Role | Tech |
-|---------|------|------|
-| `protosuit-renderer` | OpenGL shader rendering | ModernGL + Pygame |
-| `protosuit-launcher` | Audio/video/executable playback | mpv, ffplay, xdotool |
-| `protosuit-web` | Browser control interface | Flask |
-| `protosuit-bluetoothbridge` | BT discovery, pairing, connection | D-Bus → BlueZ |
-| `protosuit-audiobridge` | Audio device/volume management | pulsectl → PulseAudio |
-| `protosuit-controllerbridge` | Gamepad input forwarding | evdev + D-Bus |
-| `protosuit-castbridge` | AirPlay, Spotify, lyrics | D-Bus → systemd, lrclib.net |
-| `protosuit-networkingbridge` | Wi-Fi client/AP, NAT routing | hostapd, dnsmasq |
-| `protosuit-espbridge` | ESP32 serial bridge | pyserial (CRC-8/SMBUS) |
-
-**Supporting:** `xserver` (X11), `mosquitto` (MQTT broker), `pulseaudio` (audio server)
-
-### Communication
+Nine independent Python services communicating via MQTT, plus shared utilities for logging, D-Bus, and systemd control. See **[engine/README.md](engine/README.md)** for the full services table, shared modules, configuration reference, and complete MQTT API.
 
 - **MQTT**: All inter-service messaging under `protogen/fins/*` and `protogen/visor/*`
 - **D-Bus**: BlueZ (Bluetooth), systemd (service control), PulseAudio (audio sinks)
 - **Serial**: ESP32 ↔ Pi (tab-separated with CRC-8 checksum, 921,600 baud), ESP32 ↔ Teensy (text commands)
 
----
-
-## MQTT API
-
-Full reference with payloads and examples: **[docs/mqtt-api.md](docs/mqtt-api.md)**
-
-Summary of topic prefixes:
-
-| Prefix | Service | Topics |
-|--------|---------|--------|
-| `protogen/fins/renderer/` | Renderer | Shader loading, uniforms, performance status |
-| `protogen/fins/launcher/` | Launcher | Media start/stop/kill, input forwarding, playback status |
-| `protogen/fins/bluetoothbridge/` | Bluetoothbridge | Scan, connect, unpair, device lists |
-| `protogen/fins/audiobridge/` | Audiobridge | Volume, device selection, current device |
-| `protogen/fins/controllerbridge/` | Controllerbridge | Controller-to-display assignment |
-| `protogen/fins/castbridge/` | Castbridge | AirPlay/Spotify config, playback metadata, lyrics, health, logs |
-| `protogen/fins/networkingbridge/` | Networkingbridge | Wi-Fi scan, client/AP config, routing, QR codes |
-| `protogen/visor/esp/` | ESPBridge | Fan control, fan curves, sensor data |
-| `protogen/visor/teensy/` | ESPBridge | Teensy menu (schema, get/set/save, per-param status) |
-| `protogen/visor/notifications` | Cross-service | System notifications for OLED display |
-
----
-
-## Configuration
-
-Edit `config.yaml` to customize the system. Key sections:
-
-```yaml
-default_animation: "aperture"       # Boot animation
-
-animations:                         # Shader definitions with uniforms
-  aperture:
-    name: "Aperture"
-    left_shader: "aperture.glsl"
-    right_shader: "aperture.glsl"
-    render_scale: 1.0
-    uniforms:
-      speed: {type: float, value: 1.0, min: 0.0, max: 5.0, step: 0.1}
-
-transitions:                        # Cross-fade settings
-  duration: 0.75
-  blur: {enabled: true, strength: 8.0}
-
-bluetoothbridge:                    # BT adapter assignment
-  adapters: {gamepads: "hci1", audio: "hci1"}
-
-controllerbridge:                   # Evdev button mapping
-  button_mapping: {BTN_SOUTH: "a", BTN_EAST: "b"}
-
-audiobridge:                        # Audio device settings
-  volume: {default: 50, min: 0, max: 100}
-  audio_device: {auto_reconnect: true, exclude_hdmi: true}
-
-cast:                               # AirPlay/Spotify + lyrics
-  lyrics: {enabled: true, priority: ["airplay", "spotify"]}
-
-espbridge:                          # ESP32 serial config
-  serial: {port: "/dev/ttyUSB0", baud: 921600}
-```
-
-**Asset directories** (auto-scanned): `assets/shaders/`, `assets/audio/`, `assets/video/`, `assets/executables/`
+**Supporting services:** `xserver` (X11), `mosquitto` (MQTT broker), `pulseaudio` (audio server)
 
 ---
 
@@ -213,71 +102,49 @@ espbridge:                          # ESP32 serial config
 
 ```
 protosuit-engine/
-├── ansible/              # Ansible deployment playbooks and templates
-├── assets/               # Shaders (.glsl), audio, video, executables (.sh)
-├── audiobridge/          # Audio device/volume management service
-├── bluetoothbridge/      # Bluetooth discovery/pairing service
-├── castbridge/           # AirPlay, Spotify Connect, lyrics service
-├── config/               # Config loader module
-├── controllerbridge/     # Gamepad input forwarding service
-├── data/                 # OUI MAC address lookup table
-├── docs/                 # Detailed documentation
-│   ├── mqtt-api.md       #   Full MQTT topic reference
-│   ├── hardware.md       #   PCB, GPIO pinout, USB connections
-│   ├── firmware.md       #   ESP32 + ProtoTracer firmware
-│   └── psp-controller.md #   PSP homebrew controller
-├── esp32/                # ESP32 firmware (PlatformIO C++)
-├── espbridge/            # ESP32 serial bridge service
-├── launcher/             # Media/executable launcher service
-├── networkingbridge/     # Wi-Fi client/AP management service
-├── ProtoTracer/          # Teensy LED visor firmware (git submodule)
-├── ProtosuitDevBoard/    # KiCad 8.0 PCB design
-├── psp-controller/       # PSP homebrew MQTT controller (C/PSP SDK)
-├── renderer/             # OpenGL shader renderer service
-├── scripts/              # Utility scripts
-├── tests/                # Integration tests
-├── utils/                # Shared Python modules (MQTT, logger, D-Bus, etc.)
-├── web/                  # Flask web interface + static assets
-├── config.yaml           # Main configuration file
-├── protosuit_engine.py   # Development launcher (all services in one process)
-└── requirements.txt      # Python dependencies
+├── engine/                  # Python services + shared modules (see engine/README.md)
+│   ├── audiobridge/         #   Audio device/volume management
+│   ├── bluetoothbridge/     #   Bluetooth discovery/pairing
+│   ├── castbridge/          #   AirPlay, Spotify Connect, lyrics
+│   ├── config/              #   Config loader module
+│   ├── controllerbridge/    #   Gamepad input forwarding
+│   ├── data/                #   OUI MAC address lookup table
+│   ├── espbridge/           #   ESP32 serial bridge
+│   ├── launcher/            #   Media/executable launcher
+│   ├── networkingbridge/    #   Wi-Fi client/AP management
+│   ├── renderer/            #   OpenGL shader renderer
+│   ├── utils/               #   Shared modules (MQTT, logger, D-Bus, etc.)
+│   └── web/                 #   Flask web interface + static assets
+├── firmware/                # Embedded firmware (see firmware/README.md)
+│   ├── esp32/               #   ESP32 firmware (PlatformIO C++)
+│   ├── prototracer/         #   Teensy LED visor firmware (git submodule)
+│   └── psp-controller/      #   PSP homebrew MQTT controller (C/PSP SDK)
+├── hardware/                # PCB and hardware designs (see hardware/README.md)
+│   └── pcbs/
+│       └── ProtosuitDevBoard/  # KiCad PCB design
+├── ansible/                 # Ansible deployment playbooks and templates
+├── assets/                  # Shaders (.glsl), audio, video, apps, executables (.sh)
+├── scripts/                 # Utility scripts
+├── tests/                   # Integration tests
+├── config.yaml              # Main configuration file
+├── protosuit_engine.py      # Development launcher (all services in one process)
+└── requirements.txt         # Python dependencies
 ```
 
 ---
 
 ## Firmware
 
-### ESP32 ([esp32/](esp32/))
-
-PlatformIO C++ firmware for the visor ESP32: temperature/humidity sensors, fan control with auto curves, OLED status display, and serial bridge between MQTT and Teensy.
-
-```bash
-./esp32/build_and_upload.sh    # Build, upload, restart espbridge service
-```
-
-See [docs/firmware.md](docs/firmware.md) for modules, serial protocol, fan curve system, and Teensy menu parameters.
-
-### ProtoTracer / Teensy 4.0 ([ProtoTracer/](ProtoTracer/))
-
-Git submodule, fork of [coelacant1/ProtoTracer](https://github.com/coelacant1/ProtoTracer), adapted for ESP32/Pi communication.
-
-Real-time 3D LED rendering engine: face animations, audio visualization, post-processing effects. Drives WS35 LED matrix panels.
-
-- Fork: [lululombard/ProtoTracer](https://github.com/lululombard/ProtoTracer)
+- **[ESP32](firmware/esp32/)**: PlatformIO C++ firmware for visor sensors, fan control, OLED display, and MQTT/Teensy serial bridge
+- **[ProtoTracer / Teensy 4.0](firmware/prototracer/)**: real-time 3D LED rendering engine (git submodule, fork of [coelacant1/ProtoTracer](https://github.com/coelacant1/ProtoTracer))
+- **[PSP Controller](firmware/psp-controller/)**: PSP homebrew app as wireless MQTT gamepad
 
 ```bash
-./ProtoTracer/build_and_upload.sh    # Build, upload via Teensy loader GUI
+./firmware/esp32/build_and_upload.sh          # ESP32: build, upload, restart espbridge
+./firmware/prototracer/build_and_upload.sh    # Teensy: build, upload via loader GUI
 ```
 
-See [docs/firmware.md](docs/firmware.md) for build details and communication protocol.
-
----
-
-## PSP Controller ([psp-controller/](psp-controller/))
-
-PSP homebrew app that turns a PlayStation Portable into a wireless MQTT gamepad. Connects via Wi-Fi, sends D-pad and button events to the launcher.
-
-See [docs/psp-controller.md](docs/psp-controller.md) for build, deploy, and configuration.
+See **[firmware/README.md](firmware/README.md)** for modules, serial protocol, fan curves, Teensy menu parameters, and build details.
 
 ---
 
@@ -327,7 +194,7 @@ void main() {
 }
 ```
 
-Add to `config.yaml` and control via MQTT. See [docs/mqtt-api.md](docs/mqtt-api.md) for examples.
+Add to `config.yaml` and control via MQTT. See [engine/README.md](engine/README.md) for examples.
 
 ---
 
@@ -376,7 +243,7 @@ ls -la /dev/ttyUSB0                  # Check serial device exists
 ```bash
 lsusb | grep Teensy                  # Only visible in bootloader mode
 killall teensy                       # Kill stuck uploader UI
-./ProtoTracer/build_and_upload.sh    # Retry
+./firmware/prototracer/build_and_upload.sh    # Retry
 ```
 
 For more help, [open an issue on GitHub](https://github.com/lululombard/protosuit-engine/issues).
@@ -401,12 +268,6 @@ For more help, [open an issue on GitHub](https://github.com/lululombard/protosui
 - **Live web preview performance**: ffmpeg slows the whole system and the preview lags behind after extended use
 - **System bridge**: new service to expose CPU/memory/IO/storage usage, temperature, fan speed, undervoltage events, plus reboot and shutdown controls
 - **Notifications**: expand `protogen/visor/notifications` usage across all services, rename to `protogen/global/notifications`
-
-### Repo
-- Move all Python services/utils into `engine/` (major refactor, affects systemd units, imports, paths)
-- Consolidate hardware files: `ProtosuitDevBoard/` → `hardware/pcb/`
-- Per-service README.md files with service-specific docs
-- Separate `firmware/` umbrella for ESP32 + Teensy
 
 ---
 

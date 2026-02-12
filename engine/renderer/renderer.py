@@ -125,8 +125,7 @@ class Renderer:
         self.video_running = False
 
         # Shader directory and available shaders
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.shader_dir = os.path.join(project_root, "assets", "shaders")
+        self.shader_dir = os.path.join(os.getcwd(), "assets", "shaders")
         self.available_shaders = []
         self.shader_metadata = {}  # Store animation configs for each shader
 

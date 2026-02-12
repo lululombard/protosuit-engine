@@ -21,9 +21,7 @@ class ConfigLoader:
         """
         # Handle both relative and absolute paths
         if not os.path.isabs(config_path):
-            # Assume relative to project root (parent of config/ directory)
-            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            config_path = os.path.join(project_root, config_path)
+            config_path = os.path.abspath(config_path)
 
         self.config_path = config_path
         self.config = self._load_config()

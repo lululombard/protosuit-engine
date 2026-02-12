@@ -9,9 +9,9 @@ Type=simple
 User={{ service_user }}
 Group={{ service_group }}
 WorkingDirectory={{ project_dir }}
-Environment=PYTHONPATH={{ project_dir }}
+Environment=PYTHONPATH={{ project_dir }}/engine
 Environment=PYTHONUNBUFFERED=1
-ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/bluetoothbridge/bluetoothbridge.py
+ExecStart={{ project_dir }}/env/bin/python {{ project_dir }}/engine/bluetoothbridge/bluetoothbridge.py
 Restart={{ service_config.restart_policy }}
 RestartSec={{ service_config.restart_sec }}
 TimeoutStopSec={{ service_config.timeout_stop_sec }}
