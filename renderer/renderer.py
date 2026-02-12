@@ -135,20 +135,28 @@ class Renderer:
             f"Display config: {self.display_width}x{self.display_height} @ ({self.left_x}, {self.right_x})"
         )
 
+    def _mqtt_subscribe_all(self):
+        """Subscribe to all MQTT topics (called on connect and reconnect)"""
+        self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/file")
+        self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/uniform")
+        self.mqtt_client.subscribe("protogen/fins/renderer/config/reload")
+        self.mqtt_client.subscribe("protogen/fins/launcher/status/exec")
+        self.mqtt_client.subscribe("protogen/fins/launcher/status/video")
+
+    def _on_mqtt_connect(self, client, userdata, flags, reason_code, properties=None):
+        """Handle MQTT (re)connection — re-subscribe to all topics"""
+        print(f"[Renderer] MQTT connected (reason={reason_code}), subscribing to topics")
+        self._mqtt_subscribe_all()
+
     def init_mqtt(self):
         """Initialize MQTT client for control and status"""
         try:
             self.mqtt_client = create_mqtt_client(self.config_loader)
+            self.mqtt_client.on_connect = self._on_mqtt_connect
             self.mqtt_client.on_message = self.on_mqtt_message
 
-            # Subscribe to NEW control topics
-            self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/file")
-            self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/uniform")
-            self.mqtt_client.subscribe("protogen/fins/renderer/config/reload")
-
-            # Subscribe to launcher status for performance optimization
-            self.mqtt_client.subscribe("protogen/fins/launcher/status/exec")
-            self.mqtt_client.subscribe("protogen/fins/launcher/status/video")
+            # Subscribe to control and status topics
+            self._mqtt_subscribe_all()
 
             self.mqtt_client.loop_start()
 

@@ -4,6 +4,7 @@ Manages PulseAudio sinks, volume control, BT audio tracking, and device switchin
 """
 
 import paho.mqtt.client as mqtt
+import pulsectl
 import signal
 import json
 import subprocess
@@ -64,6 +65,7 @@ class AudioBridge:
         # State
         self.last_selected_device: Optional[str] = None  # Restored from retained MQTT
         self.bt_device_mac_to_sink: Dict[str, str] = {}  # BT MAC → sink name
+        self._last_published_volume: Optional[int] = None  # Dedup external changes
 
         print("[AudioBridge] Initialized")
 
@@ -219,6 +221,7 @@ class AudioBridge:
             return
         try:
             volume = self.get_current_volume()
+            self._last_published_volume = volume
             status = {
                 "volume": volume,
                 "min": self.volume_min,
@@ -246,6 +249,35 @@ class AudioBridge:
                     self.publish_volume_status()
         except Exception as e:
             print(f"[AudioBridge] Error handling volume set: {e}")
+
+    # ======== PulseAudio Event Monitor ========
+
+    def _start_volume_monitor(self):
+        """Start background thread monitoring PulseAudio for external volume changes."""
+        thread = threading.Thread(target=self._volume_monitor_loop, daemon=True)
+        thread.start()
+
+    def _volume_monitor_loop(self):
+        """Listen for PulseAudio sink change events and republish volume."""
+        while self.running:
+            try:
+                with pulsectl.Pulse('audiobridge-monitor') as pulse:
+                    pulse.event_mask_set('sink')
+                    pulse.event_callback_set(self._on_pulse_event)
+                    while self.running:
+                        pulse.event_listen(timeout=1)
+            except Exception as e:
+                print(f"[AudioBridge] Volume monitor error: {e}, restarting in 3s...")
+                time.sleep(3)
+
+    def _on_pulse_event(self, ev):
+        """Handle PulseAudio sink events — republish if volume changed externally."""
+        if ev.t == 'change':
+            volume = self.get_current_volume()
+            if volume != self._last_published_volume:
+                self.publish_volume_status()
+        # Keep listening
+        raise pulsectl.PulseLoopStop
 
     # ======== Audio Device Selection ========
 
@@ -495,6 +527,9 @@ class AudioBridge:
 
         # Initialize MQTT
         self.init_mqtt()
+
+        # Monitor PulseAudio for external volume changes (BT speaker buttons, etc.)
+        self._start_volume_monitor()
 
         print("[AudioBridge] Running. Press Ctrl+C to stop.")
 

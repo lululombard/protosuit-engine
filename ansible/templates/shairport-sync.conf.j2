@@ -8,6 +8,7 @@ general = {
     resync_threshold_in_seconds = 0.0;  // disable hard resync (default 0.050)
     drift_tolerance_in_seconds = 0.1;  // tolerate more drift before correcting (default 0.002)
     audio_backend_silent_lead_in_time = 2.0;  // fill buffer with silence before starting playback
+    ignore_volume_control = "yes";  // PulseAudio is sole volume control, prevents double-attenuation
 };
 
 metadata = {

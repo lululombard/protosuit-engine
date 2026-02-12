@@ -57,7 +57,7 @@ function handleLauncherExecStatus(payload) {
 function handleLauncherVolumeStatus(payload) {
     try {
         const data = JSON.parse(payload);
-        const volume = data.volume || 50;
+        const volume = data.volume !== undefined ? data.volume : 50;
         const min = data.min !== undefined ? data.min : 0;
         const max = data.max !== undefined ? data.max : 100;
 

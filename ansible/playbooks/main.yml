@@ -191,6 +191,12 @@
     name: shairport-sync
     state: present
 
+- name: Deploy shairport-sync D-Bus policy for volume control
+  template:
+    src: "{{ playbook_dir }}/../templates/shairport-sync-dbus-policy.conf.j2"
+    dest: /usr/share/dbus-1/system.d/shairport-sync-dbus-policy.conf
+    mode: '0644'
+
 - name: Create keyrings directory
   file:
     path: /etc/apt/keyrings

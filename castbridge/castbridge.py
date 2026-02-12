@@ -29,7 +29,7 @@ try:
 except ImportError:
     from lyrics import LyricsService
 
-logger = get_logger(__name__)
+logger = get_logger("castbridge")
 
 SHAIRPORT_CONFIG_PATH = "/etc/shairport-sync.conf"
 RASPOTIFY_CONFIG_PATH = "/etc/raspotify/conf"
@@ -98,6 +98,15 @@ class CastBridge:
         }
         self._airplay_last_phbt_frame = 0  # For frame-delta tracking without prgr
 
+        # AirPlay <-> AudioBridge volume sync
+        self._airplay_session_active = False
+        self._volume_source = None          # "airplay" | "audiobridge" | None
+        self._volume_source_time = 0        # time.monotonic() of last source change
+        self._volume_cooldown = 1.0         # seconds to suppress echo feedback
+        self._last_airplay_volume = None    # float, -30.0..0.0
+        self._last_system_volume = None     # int, 0..100
+        self._airplay_dbus_proxy = None     # pydbus proxy for shairport-sync RemoteControl
+
         # Lyrics service
         self._lyrics = LyricsService()
 
@@ -162,15 +171,25 @@ class CastBridge:
 
     # ======== Startup ========
 
+    def _on_connect(self, client, userdata, flags, reason_code, properties=None):
+        """Handle MQTT (re)connection — re-subscribe to all topics"""
+        logger.info(f"MQTT connected (reason={reason_code}), subscribing to topics")
+        self._subscribe_mqtt()
+        if self.running:
+            self._sync_service_state()
+
     def start(self):
         """Start the cast bridge"""
         logger.info("Starting...")
         self.running = True
 
+        # Set on_connect handler for (re)connection resilience
+        self.mqtt.on_connect = self._on_connect
+
         # Systemd is the source of truth for service state
         self._sync_service_state()
 
-        # Subscribe to MQTT topics
+        # Subscribe to MQTT topics (also re-done in on_connect for reconnects)
         self._subscribe_mqtt()
 
         # Start polling loop
@@ -235,6 +254,140 @@ class CastBridge:
                 logger.error(f"Error in poll loop: {e}")
             time.sleep(10)
 
+    # ======== AirPlay Volume Sync ========
+
+    @staticmethod
+    def _airplay_to_system_volume(airplay_vol: float) -> int:
+        """Convert AirPlay volume (-30.0..0.0) to system volume (0..100)."""
+        clamped = max(-30.0, min(0.0, airplay_vol))
+        return round(((clamped + 30.0) / 30.0) * 100.0)
+
+    @staticmethod
+    def _system_to_airplay_volume(system_vol: int) -> float:
+        """Convert system volume (0..100) to AirPlay volume (-30.0..0.0)."""
+        clamped = max(0, min(100, system_vol))
+        return (clamped / 100.0) * 30.0 - 30.0
+
+    def _get_airplay_remote_control(self):
+        """Get or create D-Bus proxy for shairport-sync RemoteControl."""
+        if self._airplay_dbus_proxy is not None:
+            return self._airplay_dbus_proxy
+        try:
+            bus = self._airplay_svc._bus
+            self._airplay_dbus_proxy = bus.get(
+                "org.gnome.ShairportSync",
+                "/org/gnome/ShairportSync"
+            )
+            return self._airplay_dbus_proxy
+        except Exception as e:
+            logger.debug(f"Cannot get shairport-sync D-Bus proxy: {e}")
+            self._airplay_dbus_proxy = None
+            return None
+
+    def _on_airplay_session_start(self):
+        """Push current system volume to iPhone when AirPlay session starts."""
+        if self._last_system_volume is not None:
+            airplay_vol = self._system_to_airplay_volume(self._last_system_volume)
+            logger.info(f"AirPlay session start: syncing system volume {self._last_system_volume}% -> AirPlay {airplay_vol:.1f}")
+            self._last_airplay_volume = airplay_vol
+            self._volume_source = "audiobridge"
+            self._volume_source_time = time.monotonic()
+            # Delay to let shairport-sync establish DACP connection to the sender
+            threading.Thread(
+                target=self._initial_volume_sync,
+                args=(airplay_vol,),
+                daemon=True
+            ).start()
+        else:
+            logger.debug("AirPlay session start: no system volume cached yet, skipping initial sync")
+
+    def _initial_volume_sync(self, airplay_vol: float):
+        """Wait for DACP connection, then push volume to iPhone."""
+        time.sleep(2)
+        if self._airplay_session_active:
+            self._set_airplay_volume_dbus(airplay_vol)
+
+    def _handle_airplay_volume(self, client, userdata, msg):
+        """Handle volume updates from shairport-sync MQTT."""
+        if not self._airplay_session_active:
+            return
+        try:
+            payload = msg.payload.decode("utf-8", errors="replace").strip()
+            if not payload:
+                return
+            # Format: "airplay_vol,vol,lowest_vol" or just a float
+            parts = payload.split(",")
+            airplay_vol = float(parts[0])
+
+            now = time.monotonic()
+            if (self._volume_source == "audiobridge"
+                    and (now - self._volume_source_time) < self._volume_cooldown):
+                self._last_airplay_volume = airplay_vol
+                return
+
+            system_vol = self._airplay_to_system_volume(airplay_vol)
+            if (self._last_system_volume is not None
+                    and abs(system_vol - self._last_system_volume) <= 1):
+                self._last_airplay_volume = airplay_vol
+                return
+
+            logger.info(f"AirPlay volume: {airplay_vol:.1f} -> system {system_vol}%")
+            self._last_airplay_volume = airplay_vol
+            self._last_system_volume = system_vol
+            self._volume_source = "airplay"
+            self._volume_source_time = now
+            self.mqtt.publish(
+                "protogen/fins/audiobridge/volume/set",
+                json.dumps({"volume": system_vol})
+            )
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Could not parse AirPlay volume: {msg.payload} ({e})")
+
+    def _handle_audiobridge_volume(self, client, userdata, msg):
+        """Handle volume status from audiobridge — forward to AirPlay if session active."""
+        try:
+            data = json.loads(msg.payload)
+            system_vol = data.get("volume")
+            if system_vol is None:
+                return
+            self._last_system_volume = system_vol
+        except (json.JSONDecodeError, KeyError):
+            return
+
+        if not self._airplay_session_active:
+            return
+
+        now = time.monotonic()
+        if (self._volume_source == "airplay"
+                and (now - self._volume_source_time) < self._volume_cooldown):
+            return
+
+        airplay_vol = self._system_to_airplay_volume(system_vol)
+        if (self._last_airplay_volume is not None
+                and abs(airplay_vol - self._last_airplay_volume) < 0.5):
+            return
+
+        logger.info(f"System volume: {system_vol}% -> AirPlay {airplay_vol:.1f}")
+        self._last_airplay_volume = airplay_vol
+        self._volume_source = "audiobridge"
+        self._volume_source_time = now
+        threading.Thread(
+            target=self._set_airplay_volume_dbus,
+            args=(airplay_vol,),
+            daemon=True
+        ).start()
+
+    def _set_airplay_volume_dbus(self, airplay_vol: float):
+        """Call SetAirplayVolume on shairport-sync via D-Bus."""
+        try:
+            proxy = self._get_airplay_remote_control()
+            if proxy is None:
+                return
+            proxy.SetAirplayVolume(airplay_vol)
+        except Exception as e:
+            logger.warning(f"SetAirplayVolume failed: {e}")
+            self._airplay_dbus_proxy = None
+
     # ======== AirPlay (shairport-sync) Management ========
 
     def _configure_shairport(self):
@@ -250,6 +403,7 @@ general = {{
     name = "{self.airplay_status.device_name}";
     output_backend = "pa";
     mdns_backend = "avahi";
+    ignore_volume_control = "yes";
 }};
 
 metadata = {{
@@ -309,6 +463,10 @@ sessioncontrol = {{
             logger.info("AirPlay disabled successfully")
             self.airplay_status.enabled = False
             self.airplay_status.running = False
+            self._airplay_session_active = False
+            self._airplay_dbus_proxy = None
+            self._volume_source = None
+            self._last_airplay_volume = None
             self._publish_notification("airplay", "disabled", "AirPlay disabled")
 
         self._publish_airplay_status()
@@ -707,7 +865,7 @@ sessioncontrol = {{
         )
         self.mqtt.message_callback_add(
             "protogen/fins/castbridge/airplay/playback/play_flush",
-            lambda c, u, m: self._handle_airplay_play_state(False)
+            lambda c, u, m: self._handle_airplay_flush()
         )
         self.mqtt.message_callback_add(
             "protogen/fins/castbridge/airplay/playback/core/astm",
@@ -724,6 +882,18 @@ sessioncontrol = {{
         self.mqtt.message_callback_add(
             "protogen/fins/castbridge/airplay/playback/cover",
             self._handle_airplay_cover
+        )
+
+        # Volume sync: shairport-sync volume + audiobridge status
+        self.mqtt.subscribe("protogen/fins/castbridge/airplay/playback/volume")
+        self.mqtt.message_callback_add(
+            "protogen/fins/castbridge/airplay/playback/volume",
+            self._handle_airplay_volume
+        )
+        self.mqtt.subscribe("protogen/fins/audiobridge/status/volume")
+        self.mqtt.message_callback_add(
+            "protogen/fins/audiobridge/status/volume",
+            self._handle_audiobridge_volume
         )
 
         logger.info("Subscribed to all MQTT topics")
@@ -746,13 +916,32 @@ sessioncontrol = {{
             self._publish_airplay_playback()
 
     def _handle_airplay_play_state(self, playing: bool):
-        """Handle play_start/play_end/play_resume/play_flush events"""
+        """Handle play_start/play_end/play_resume events (NOT flush)"""
+        was_active = self._airplay_session_active
         self._airplay_playback["playing"] = playing
-        if not playing:
-            # Reset references so next phbt after resume waits for fresh prgr
+
+        if playing:
+            self._airplay_session_active = True
+            if not was_active:
+                logger.info("AirPlay session started, enabling volume sync")
+                self._on_airplay_session_start()
+        else:
+            # play_end: session disconnected
+            self._airplay_session_active = False
+            self._airplay_dbus_proxy = None
+            self._volume_source = None
+            self._last_airplay_volume = None
             self._airplay_playback["start_frame"] = 0
             self._airplay_playback["prgr_start"] = 0
             self._airplay_playback["prgr_end"] = 0
+
+        self._publish_airplay_playback()
+
+    def _handle_airplay_flush(self):
+        """Handle play_flush — buffer flushed (seek/skip), NOT disconnect."""
+        self._airplay_playback["start_frame"] = 0
+        self._airplay_playback["prgr_start"] = 0
+        self._airplay_playback["prgr_end"] = 0
         self._publish_airplay_playback()
 
     def _handle_airplay_duration(self, client, userdata, msg):
@@ -858,6 +1047,7 @@ sessioncontrol = {{
             logger.info("Restarting AirPlay with new config...")
             self._configure_shairport()
             self._airplay_svc.restart()
+            self._airplay_dbus_proxy = None
             self._publish_notification("airplay", "restarted", "AirPlay restarted with new config")
 
         self._publish_airplay_status()
