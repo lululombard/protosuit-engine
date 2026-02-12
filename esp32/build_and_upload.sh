@@ -6,6 +6,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+sudo systemctl stop protosuit-espbridge
+
 ../env/bin/pio run -t upload
 
 sleep 3

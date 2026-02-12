@@ -49,7 +49,7 @@ static const char* const faceLabels[] = {
 };
 static const char* const colorLabels[] = {
     "BASE","YELLOW","ORANGE","WHITE","GREEN","PURPLE","RED","BLUE",
-    "RAINBOW","RAINBOWNOISE","HORIZONTALRAINBOW","BLACK"
+    "RAINBOW","RAINBOWNOISE","FLOWNOISE","HORIZONTALRAINBOW","BLACK"
 };
 static const char* const effectLabels[] = {
     "NONE","PHASEY","PHASEX","PHASER","GLITCHX",
@@ -74,7 +74,7 @@ static const ParamMapping paramMap[] = {
     {"boopSensor",     "BOOP",   &TeensyMenu::boopSensor,     1,  toggleLabels},
     {"spectrumMirror", "SPEC",   &TeensyMenu::spectrumMirror, 1,  toggleLabels},
     {"faceSize",       "SIZE",   &TeensyMenu::faceSize,       10, nullptr},
-    {"color",          "COLOR",  &TeensyMenu::color,          11, colorLabels},
+    {"color",          "COLOR",  &TeensyMenu::color,          12, colorLabels},
     {"hueF",           "HUEF",   &TeensyMenu::hueF,           254, nullptr},
     {"hueB",           "HUEB",   &TeensyMenu::hueB,           254, nullptr},
     {"effect",         "EFFECT", &TeensyMenu::effect,          9,  effectLabels},
