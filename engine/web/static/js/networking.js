@@ -57,6 +57,8 @@ function connectToMQTT() {
         client.subscribe('protogen/fins/networkingbridge/status/scanning');
         client.subscribe('protogen/fins/networkingbridge/status/qrcode');
         client.subscribe('protogen/fins/networkingbridge/status/connection');
+        client.subscribe('protogen/fins/networkingbridge/status/hostapd/health');
+        client.subscribe('protogen/fins/networkingbridge/status/dnsmasq/health');
 
         console.log('[Networking] Connected to MQTT');
     });
@@ -126,6 +128,12 @@ function handleMQTTMessage(topic, payload) {
             const data = JSON.parse(payload);
             handleConnectionResult(data);
         }
+        else if (topic === 'protogen/fins/networkingbridge/status/hostapd/health') {
+            updateServiceHealth('hostapd', JSON.parse(payload));
+        }
+        else if (topic === 'protogen/fins/networkingbridge/status/dnsmasq/health') {
+            updateServiceHealth('dnsmasq', JSON.parse(payload));
+        }
     } catch (e) {
         console.error('[Networking] Error parsing MQTT message:', e);
     }
@@ -153,11 +161,6 @@ function initNetworking() {
         setAPEnabled(e.target.checked);
     });
     
-    // Routing toggle
-    document.getElementById('routing-enabled').addEventListener('change', (e) => {
-        setRoutingEnabled(e.target.checked);
-    });
-
     // QR code button
     document.getElementById('qr-btn').addEventListener('click', showQRCode);
     
@@ -287,15 +290,23 @@ function updateAPStatusUI() {
     }
     
     updatePasswordVisibility(document.getElementById('ap-security').value);
-    
-    // Routing toggle
-    document.getElementById('routing-enabled').checked = apStatus.routing_enabled || false;
 
     // Update QR code SSID
     document.getElementById('qr-ssid').textContent = apStatus.ssid || 'Protosuit';
     
     // Connected clients
     updateClientsListUI();
+}
+
+// Update service health indicator
+function updateServiceHealth(service, health) {
+    const el = document.getElementById(`${service}-status`);
+    if (!el) return;
+    const isRunning = health.is_active;
+    el.innerHTML = `
+        <span class="status-indicator ${isRunning ? 'running' : 'stopped'}"></span>
+        <span>${isRunning ? 'Running' : 'Stopped'}</span>
+    `;
 }
 
 // Update password field visibility based on security type
@@ -417,17 +428,6 @@ function setAPEnabled(enabled) {
 
     networkingMqttClient.publish(
         'protogen/fins/networkingbridge/ap/enable',
-        JSON.stringify({ enable: enabled }),
-        { retain: true }
-    );
-}
-
-// Set routing enabled
-function setRoutingEnabled(enabled) {
-    if (!networkingMqttClient || !networkingIsConnected) return;
-
-    networkingMqttClient.publish(
-        'protogen/fins/networkingbridge/routing/enable',
         JSON.stringify({ enable: enabled }),
         { retain: true }
     );

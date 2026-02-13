@@ -183,16 +183,22 @@
             </div>
 
             <div class="section">
-                <h2 class="section-title">ROUTING</h2>
-                <div class="routing-config">
-                    <div class="toggle-row">
-                        <span class="toggle-label">Route to Client Interface</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="routing-enabled">
-                            <span class="toggle-slider"></span>
-                        </label>
+                <h2 class="section-title">SERVICES</h2>
+                <div class="interface-info">
+                    <div class="info-row">
+                        <span class="info-label">hostapd</span>
+                        <span class="info-value" id="hostapd-status">
+                            <span class="status-indicator unknown"></span>
+                            <span>Checking...</span>
+                        </span>
                     </div>
-                    <p class="toggle-description">Enable NAT to share internet from USB Wi-Fi</p>
+                    <div class="info-row">
+                        <span class="info-label">dnsmasq</span>
+                        <span class="info-value" id="dnsmasq-status">
+                            <span class="status-indicator unknown"></span>
+                            <span>Checking...</span>
+                        </span>
+                    </div>
                 </div>
             </div>
 

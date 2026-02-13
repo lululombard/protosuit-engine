@@ -13,7 +13,7 @@ The `engine/` directory contains all Python services, shared utilities, and conf
 | [AudioBridge](audiobridge/) | `audiobridge/` | Audio device/volume management | pulsectl, PulseAudio |
 | [ControllerBridge](controllerbridge/) | `controllerbridge/` | Gamepad input forwarding | evdev + D-Bus |
 | [CastBridge](castbridge/) | `castbridge/` | AirPlay, Spotify, lyrics | D-Bus, systemd, lrclib.net |
-| [NetworkingBridge](networkingbridge/) | `networkingbridge/` | Wi-Fi client/AP, NAT routing | hostapd, dnsmasq |
+| [NetworkingBridge](networkingbridge/) | `networkingbridge/` | Wi-Fi client/AP, NAT routing | D-Bus, systemd, NetworkManager |
 | [ESPBridge](espbridge/) | `espbridge/` | ESP32 serial bridge | pyserial (CRC-8/SMBUS) |
 
 **Supporting services** (not in engine/): X11 (`xserver`), MQTT broker (`mosquitto`), audio server (`pulseaudio`)
@@ -725,7 +725,7 @@ These topics are published by shairport-sync's MQTT metadata output and consumed
 
 **Topic prefix:** `protogen/fins/networkingbridge/`
 
-Manages Wi-Fi client, access point, and NAT routing via NetworkManager.
+Manages Wi-Fi client and access point via NetworkManager D-Bus and systemd-managed hostapd/dnsmasq. NAT routing is automatic when AP is enabled.
 
 ### Commands
 
@@ -737,10 +737,9 @@ Manages Wi-Fi client, access point, and NAT routing via NetworkManager.
 | `client/disconnect` | empty | | Disconnect from current network |
 | `ap/enable` | JSON | | Enable or disable access point |
 | `ap/config` | JSON | | Configure access point settings |
-| `routing/enable` | JSON | | Enable or disable NAT routing (AP to client) |
 | `qrcode/generate` | empty | | Generate QR code for AP connection |
 
-#### `client/enable` / `ap/enable` / `routing/enable`
+#### `client/enable` / `ap/enable`
 
 ```json
 {
@@ -785,6 +784,8 @@ Manages Wi-Fi client, access point, and NAT routing via NetworkManager.
 | `status/scanning` | boolean | **R** | `true` while scanning |
 | `status/qrcode` | JSON | **R** | Base64 QR code PNG for AP credentials |
 | `status/connection` | JSON | **R** | Connection status updates |
+| `status/hostapd/health` | JSON | **R** | hostapd systemd health |
+| `status/dnsmasq/health` | JSON | **R** | dnsmasq systemd health |
 
 #### `status/client`
 
@@ -802,7 +803,11 @@ Manages Wi-Fi client, access point, and NAT routing via NetworkManager.
 ```json
 {
   "enabled": true,
+  "running": true,
   "ssid": "Protosuit",
+  "security": "wpa2",
+  "password": "BeepBoop",
+  "ip_cidr": "192.168.50.1/24",
   "clients": []
 }
 ```
@@ -1148,7 +1153,6 @@ protogen/
       client/disconnect
       ap/enable
       ap/config
-      routing/enable
       qrcode/generate
       status/interfaces           [R]
       status/client               [R]
@@ -1157,6 +1161,8 @@ protogen/
       status/scanning             [R]
       status/qrcode               [R]
       status/connection           [R]
+      status/hostapd/health       [R]
+      status/dnsmasq/health       [R]
     uniform/query
   visor/
     esp/set/fan

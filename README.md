@@ -55,7 +55,7 @@ See **[hardware/README.md](hardware/README.md)** for PCB details, USB connection
 
 ## Features
 
-- **GLSL Shader Animations**: 33+ shaders with smooth cross-fade transitions, blur effects, and real-time parameter control
+- **GLSL Shader Animations**: Over 30 shaders with smooth cross-fade transitions, blur effects, and real-time parameter control
 - **Media Playback**: Videos (exclusive), audio (stackable), synchronized playback
 - **Executables**: Run shell scripts (Doom, Super Haxagon, Ring Ding) across both displays
 - **Bluetooth Device Management**: Discover, pair, and connect devices via D-Bus (BlueZ API)
@@ -63,7 +63,7 @@ See **[hardware/README.md](hardware/README.md)** for PCB details, USB connection
 - **Audio Device Control**: Manage output devices and volume via pulsectl (PulseAudio), with auto-reconnect
 - **AirPlay & Spotify Connect**: Stream audio with now-playing metadata and cover art
 - **Synced Lyrics**: Real-time synchronized lyrics from lrclib.net for AirPlay and Spotify
-- **Wi-Fi Management**: Dual-mode networking with AP hotspot, client mode, NAT routing, and QR code sharing
+- **Wi-Fi Management**: Dual-mode networking with AP hotspot (systemd-managed hostapd/dnsmasq), client mode via NetworkManager D-Bus, automatic NAT routing, and QR code sharing
 - **ESP32 Visor**: Temperature/humidity monitoring, auto fan curves, OLED status display
 - **Teensy LED Visor**: ProtoTracer 3D LED rendering with face animations, audio visualization, and effects
 - **Web Control Interface**: Browser-based control with live preview, physics-based sliders, and performance monitoring
@@ -82,7 +82,7 @@ Open your browser to `http://<raspberry-pi-ip>`
 | Virtual Controller | `/controller` | Mobile-friendly gamepad UI for testing inputs |
 | Bluetooth & Audio | `/bluetooth` | Device scanning, pairing, controller assignment, audio device selection |
 | Cast Settings | `/cast` | AirPlay/Spotify enable/config, now-playing with cover art, synced lyrics |
-| Networking | `/networking` | Wi-Fi client/AP config, QR code sharing, NAT routing |
+| Networking | `/networking` | Wi-Fi client/AP config, QR code sharing, service health |
 
 The dashboard includes a visor panel with fan curve editor and Teensy LED menu controls (face, brightness, color, effects).
 
@@ -265,8 +265,6 @@ For more help, [open an issue on GitHub](https://github.com/lululombard/protosui
 - **Firmware restart commands**: restart Teensy and ESP32 via MQTT commands
 
 ### Reliability
-- **NetworkController**: manage hostapd/dnsmasq via `utils/service_controller` instead of direct process management
-- **Systemd-first approach**: use `enable --now` / `disable --now` everywhere, read config from services at boot instead of relying on MQTT retained messages to start processes, tighter D-Bus integration
 - **Live web preview performance**: ffmpeg slows the whole system and the preview lags behind after extended use
 - **System bridge**: new service to expose CPU/memory/IO/storage usage, temperature, fan speed, undervoltage events, plus reboot and shutdown controls
 - **Notifications**: expand `protogen/visor/notifications` usage across all services, rename to `protogen/global/notifications`

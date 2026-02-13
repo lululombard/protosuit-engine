@@ -1,21 +1,42 @@
 """
-Networking Bridge - Simple and Reliable Implementation
-Manages Wi-Fi client and AP modes via NetworkManager (nmcli)
+Networking Bridge - Systemd-First Wi-Fi Management
+Manages Wi-Fi client via NetworkManager D-Bus and AP mode via hostapd/dnsmasq
+systemd services controlled through ServiceController (D-Bus).
 """
 
-import subprocess
+import os
+import sys
 import json
+import re
 import time
 import threading
-import ipaddress
 import io
 import base64
 import signal
-import yaml
 from dataclasses import dataclass, asdict, field
-from typing import List, Optional, Dict
-import paho.mqtt.client as mqtt
+from typing import List, Dict
+
 import qrcode
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config.loader import ConfigLoader
+from utils.mqtt_client import create_mqtt_client
+from utils.logger import setup_logger, get_logger
+from utils.service_controller import ServiceController
+from utils.notifications import publish_notification
+from utils.nm_dbus import NetworkManagerDbus, get_ap_clients
+
+try:
+    from networkingbridge.oui_lookup import get_oui_lookup
+except ImportError:
+    from oui_lookup import get_oui_lookup
+
+logger = get_logger("networkingbridge")
+
+HOSTAPD_CONFIG_PATH = "/etc/hostapd/hostapd.conf"
+DNSMASQ_CONFIG_PATH = "/etc/dnsmasq.d/ap.conf"
+AP_ENV_PATH = "/etc/protosuit/ap.env"
 
 
 @dataclass
@@ -48,11 +69,11 @@ class APClient:
 @dataclass
 class APStatus:
     enabled: bool = False
+    running: bool = False
     ssid: str = "Protosuit"
     security: str = "wpa"
     password: str = "BeepBoop"
     ip_cidr: str = "192.168.50.1/24"
-    routing_enabled: bool = True
     clients: List[APClient] = field(default_factory=list)
 
 
@@ -73,8 +94,22 @@ class NetworkingBridge:
         self.running = False
 
         # Interface names from config
-        self.client_interface = config['networking']['client']['interface']  # wlan1
-        self.ap_interface = config['networking']['ap']['interface']  # wlan0
+        self.client_interface = config["networking"]["client"]["interface"]
+        self.ap_interface = config["networking"]["ap"]["interface"]
+
+        # Service controllers (D-Bus/systemd)
+        self._hostapd_svc = ServiceController("hostapd")
+        self._dnsmasq_svc = ServiceController("dnsmasq")
+
+        # NetworkManager D-Bus wrapper
+        self._nm = NetworkManagerDbus()
+
+        # Resolve device paths
+        self._client_dev_path = self._nm.get_wifi_device(self.client_interface)
+        self._ap_dev_path = self._nm.get_wifi_device(self.ap_interface)
+
+        # OUI lookup for vendor names
+        self._oui = get_oui_lookup()
 
         # State
         self.interfaces = {}
@@ -83,56 +118,110 @@ class NetworkingBridge:
         self.scan_results = []
         self.scanning = False
 
-        # Lock to prevent concurrent AP enable/disable operations
-        self.ap_lock = threading.Lock()
-
-        # Load AP config from file
+        # Load AP config defaults from config.yaml
         self._load_ap_config()
 
     def _load_ap_config(self):
-        """Load AP configuration from config file"""
-        ap_config = self.config['networking'].get('ap', {})
-        self.ap_status.ssid = ap_config.get('ssid', 'Protosuit')
-        self.ap_status.security = ap_config.get('security', 'wpa')
-        self.ap_status.password = ap_config.get('password', 'BeepBoop')
-        self.ap_status.ip_cidr = ap_config.get('ip_cidr', '192.168.50.1/24')
+        """Load AP configuration defaults from config.yaml."""
+        ap_config = self.config["networking"].get("ap", {})
+        self.ap_status.ssid = ap_config.get("ssid", "Protosuit")
+        self.ap_status.security = ap_config.get("security", "wpa")
+        self.ap_status.password = ap_config.get("password", "BeepBoop")
+        self.ap_status.ip_cidr = ap_config.get("ip_cidr", "192.168.50.1/24")
 
-        routing_config = self.config['networking'].get('routing', {})
-        self.ap_status.routing_enabled = routing_config.get('enabled', True)
+    # ======== Startup ========
+
+    def _on_connect(self, client, userdata, flags, reason_code, properties=None):
+        """Handle MQTT (re)connection — re-subscribe to all topics."""
+        logger.info(f"MQTT connected (reason={reason_code}), subscribing to topics")
+        self._subscribe_mqtt()
+        if self.running:
+            self._sync_service_state()
 
     def start(self):
-        """Start the networking bridge"""
-        print("[NetworkingBridge] Starting...")
+        """Start the networking bridge."""
+        logger.info("Starting...")
         self.running = True
 
-        # Subscribe to MQTT topics
-        self._subscribe_mqtt()
+        # Set on_connect handler for (re)connection resilience
+        self.mqtt.on_connect = self._on_connect
 
-        # Restore AP state from retained MQTT message
-        self._restore_ap_state()
+        # Systemd is the source of truth for AP state
+        self._sync_service_state()
+
+        # Subscribe to MQTT topics (also re-done in on_connect for reconnects)
+        self._subscribe_mqtt()
 
         # Start polling loop
         threading.Thread(target=self._poll_loop, daemon=True).start()
 
-        print("[NetworkingBridge] Started successfully")
+        logger.info("Started successfully")
 
-    def _restore_ap_state(self):
-        """Restore AP state from retained MQTT message"""
-        # Subscribe to get retained messages for AP config
-        self.mqtt.subscribe("protogen/fins/networkingbridge/ap/config")
+    def _sync_service_state(self):
+        """Read systemd state at startup — systemd is the source of truth."""
+        hostapd_health = self._hostapd_svc.get_health()
+        self.ap_status.enabled = hostapd_health.is_enabled
+        self.ap_status.running = hostapd_health.is_active
+        logger.info(
+            f"hostapd: enabled={hostapd_health.is_enabled}, "
+            f"active={hostapd_health.is_active}, "
+            f"state={hostapd_health.active_state}/{hostapd_health.sub_state}"
+        )
 
-        # Give MQTT a moment to receive retained messages
-        time.sleep(0.5)
+        dnsmasq_health = self._dnsmasq_svc.get_health()
+        logger.info(
+            f"dnsmasq: enabled={dnsmasq_health.is_enabled}, "
+            f"active={dnsmasq_health.is_active}, "
+            f"state={dnsmasq_health.active_state}/{dnsmasq_health.sub_state}"
+        )
+
+        # Parse config files to recover AP settings
+        self._parse_hostapd_config()
+
+        # Publish initial status + health
+        self._publish_ap_status()
+        self._publish_service_health("hostapd", hostapd_health)
+        self._publish_service_health("dnsmasq", dnsmasq_health)
+
+    def _parse_hostapd_config(self):
+        """Parse /etc/hostapd/hostapd.conf to recover AP settings."""
+        content = self._hostapd_svc.read_config(HOSTAPD_CONFIG_PATH)
+        if content is None:
+            return
+
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if key == "ssid":
+                self.ap_status.ssid = value
+            elif key == "wpa":
+                if value == "1":
+                    self.ap_status.security = "wpa"
+                elif value == "2":
+                    self.ap_status.security = "wpa2"
+            elif key == "wpa_passphrase":
+                self.ap_status.password = value
+
+        # Check for open security (no wpa key in config)
+        if "wpa=" not in (content or ""):
+            # Only override if we actually read a valid config
+            if "ssid=" in (content or ""):
+                self.ap_status.security = "open"
+                self.ap_status.password = ""
 
     def stop(self):
-        """Stop the networking bridge"""
-        print("[NetworkingBridge] Stopping...")
+        """Stop the networking bridge."""
+        logger.info("Stopping...")
         self.running = False
 
     # ======== Polling Loop ========
 
     def _poll_loop(self):
-        """Poll status every 10 seconds"""
+        """Poll status every 10 seconds."""
         # Publish initial status on startup
         self._publish_interfaces()
         self._publish_client_status()
@@ -145,44 +234,18 @@ class NetworkingBridge:
                 self._update_ap_status()
                 self._update_ap_clients()
             except Exception as e:
-                print(f"[NetworkingBridge] Error in poll loop: {e}")
+                logger.error(f"Error in poll loop: {e}")
             time.sleep(10)
 
     # ======== AP Management ========
 
     def _configure_ap(self) -> bool:
-        """Configure AP using hostapd"""
-        print(f"[NetworkingBridge] Configuring AP: SSID={self.ap_status.ssid}, Security={self.ap_status.security}")
-
-        # Remove wlan0 from NetworkManager control
-        subprocess.run(
-            ["sudo", "nmcli", "device", "set", self.ap_interface, "managed", "no"],
-            capture_output=True
+        """Write hostapd config file via ServiceController."""
+        logger.info(
+            f"Configuring AP: SSID={self.ap_status.ssid}, "
+            f"Security={self.ap_status.security}"
         )
 
-        # Bring interface down
-        subprocess.run(["sudo", "ip", "link", "set", self.ap_interface, "down"], capture_output=True)
-        time.sleep(0.5)
-
-        # Bring interface up
-        subprocess.run(["sudo", "ip", "link", "set", self.ap_interface, "up"], capture_output=True)
-        time.sleep(0.5)
-
-        # Disable power save - critical for performance
-        subprocess.run(["sudo", "iw", "dev", self.ap_interface, "set", "power_save", "off"], capture_output=True)
-
-        # Set IP address
-        ip, cidr = self.ap_status.ip_cidr.split('/')
-        subprocess.run(
-            ["sudo", "ip", "addr", "flush", "dev", self.ap_interface],
-            capture_output=True
-        )
-        subprocess.run(
-            ["sudo", "ip", "addr", "add", self.ap_status.ip_cidr, "dev", self.ap_interface],
-            capture_output=True
-        )
-
-        # Create hostapd config with performance optimizations
         config = f"""interface={self.ap_interface}
 driver=nl80211
 ssid={self.ap_status.ssid}
@@ -233,35 +296,21 @@ rsn_pairwise=CCMP
 """
         # For "open" security, no wpa config needed
 
-        # Write hostapd config
-        config_path = "/tmp/hostapd-ap.conf"
-        try:
-            with open(config_path, 'w') as f:
-                f.write(config)
-        except Exception as e:
-            print(f"[NetworkingBridge] Failed to write hostapd config: {e}")
+        if not self._hostapd_svc.write_config(HOSTAPD_CONFIG_PATH, config):
+            logger.error("Failed to write hostapd config")
             return False
 
-        print("[NetworkingBridge] AP configured successfully")
+        logger.info("hostapd config written")
         return True
 
-    def _start_dnsmasq(self) -> bool:
-        """Start dnsmasq for DHCP"""
-        print("[NetworkingBridge] Starting dnsmasq...")
-
-        # First, stop any existing dnsmasq instance
-        self._stop_dnsmasq()
-
-        # Parse IP/CIDR
-        ip, cidr = self.ap_status.ip_cidr.split('/')
-
-        # Calculate DHCP range: .50 to .150
-        network_parts = ip.split('.')
-        network_base = '.'.join(network_parts[:3])
+    def _configure_dnsmasq(self) -> bool:
+        """Write dnsmasq config file via ServiceController."""
+        ip, cidr = self.ap_status.ip_cidr.split("/")
+        network_parts = ip.split(".")
+        network_base = ".".join(network_parts[:3])
         dhcp_start = f"{network_base}.50"
         dhcp_end = f"{network_base}.150"
 
-        # Create dnsmasq config with DNS and gateway
         config = f"""interface={self.ap_interface}
 dhcp-range={dhcp_start},{dhcp_end},12h
 bind-interfaces
@@ -271,471 +320,254 @@ server=8.8.8.8
 server=8.8.4.4
 """
 
-        # Write config
-        config_path = "/tmp/dnsmasq-ap.conf"
-        try:
-            with open(config_path, 'w') as f:
-                f.write(config)
-        except Exception as e:
-            print(f"[NetworkingBridge] Failed to write dnsmasq config: {e}")
+        if not self._dnsmasq_svc.write_config(DNSMASQ_CONFIG_PATH, config):
+            logger.error("Failed to write dnsmasq config")
             return False
 
-        # Start dnsmasq
-        result = subprocess.run(
-            ["sudo", "dnsmasq", f"--conf-file={config_path}", f"--pid-file=/tmp/dnsmasq-ap.pid"],
-            capture_output=True, text=True
-        )
-
-        if result.returncode != 0:
-            print(f"[NetworkingBridge] Failed to start dnsmasq: {result.stderr}")
-            return False
-
-        print("[NetworkingBridge] dnsmasq started successfully")
+        logger.info("dnsmasq config written")
         return True
 
-    def _stop_dnsmasq(self):
-        """Stop dnsmasq"""
-        print("[NetworkingBridge] Stopping dnsmasq...")
-        subprocess.run(
-            ["sudo", "pkill", "-f", "dnsmasq.*dnsmasq-ap"],
-            capture_output=True
-        )
-        time.sleep(0.5)  # Wait for it to actually stop
+    def _write_ap_env(self) -> bool:
+        """Write AP environment file for systemd ExecStartPre/Post scripts."""
+        ip, cidr = self.ap_status.ip_cidr.split("/")
+        network_parts = ip.split(".")
+        network = f"{network_parts[0]}.{network_parts[1]}.{network_parts[2]}.0/{cidr}"
+
+        env_content = f"""# AP environment - written by networkingbridge
+AP_INTERFACE={self.ap_interface}
+AP_IP_CIDR={self.ap_status.ip_cidr}
+AP_NETWORK={network}
+CLIENT_INTERFACE={self.client_interface}
+"""
+
+        if not self._hostapd_svc.write_config(AP_ENV_PATH, env_content):
+            logger.error("Failed to write AP env file")
+            return False
+
+        return True
 
     def _enable_ap(self, enable: bool) -> bool:
-        """Enable or disable AP"""
-        with self.ap_lock:
-            print(f"[NetworkingBridge] {'Enabling' if enable else 'Disabling'} AP...")
-
-            if enable:
-                # Stop any existing hostapd
-                subprocess.run(["sudo", "pkill", "hostapd"], capture_output=True)
-                time.sleep(0.5)
-
-                # Configure first
-                if not self._configure_ap():
-                    return False
-
-                # Start hostapd in background
-                result = subprocess.Popen(
-                    ["sudo", "/usr/sbin/hostapd", "-B", "/tmp/hostapd-ap.conf"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                time.sleep(2)  # Wait for hostapd to start
-
-                # Check if hostapd is running
-                check = subprocess.run(
-                    ["pgrep", "-f", "/usr/sbin/hostapd"],
-                    capture_output=True
-                )
-
-                if check.returncode != 0:
-                    print("[NetworkingBridge] Failed to start hostapd")
-                    return False
-
-                # Start dnsmasq
-                if not self._start_dnsmasq():
-                    # Failed to start dnsmasq, stop hostapd
-                    subprocess.run(["sudo", "pkill", "hostapd"], capture_output=True)
-                    return False
-
-                # Enable routing if configured
-                if self.ap_status.routing_enabled:
-                    self._enable_routing(True)
-
-                print("[NetworkingBridge] AP enabled successfully")
-                self.ap_status.enabled = True
-                self._publish_ap_status()
-                return True
-            else:
-                # Stop hostapd
-                subprocess.run(["sudo", "pkill", "hostapd"], capture_output=True)
-
-                # Stop dnsmasq
-                self._stop_dnsmasq()
-
-                # Disable routing
-                self._enable_routing(False)
-
-                # Give wlan0 back to NetworkManager
-                subprocess.run(
-                    ["sudo", "nmcli", "device", "set", self.ap_interface, "managed", "yes"],
-                    capture_output=True
-                )
-
-                # Flush IP address
-                subprocess.run(
-                    ["sudo", "ip", "addr", "flush", "dev", self.ap_interface],
-                    capture_output=True
-                )
-
-                print("[NetworkingBridge] AP disabled successfully")
-                self.ap_status.enabled = False
-                self._publish_ap_status()
-                return True
-
-    # ======== Routing (NAT) ========
-
-    def _enable_routing(self, enable: bool):
-        """Enable/disable NAT routing from AP to client"""
-        print(f"[NetworkingBridge] {'Enabling' if enable else 'Disabling'} routing...")
+        """Enable or disable AP via systemd."""
+        logger.info(f"{'Enabling' if enable else 'Disabling'} AP...")
 
         if enable:
-            # Enable IP forwarding
-            subprocess.run(
-                ["sudo", "sysctl", "-w", "net.ipv4.ip_forward=1"],
-                capture_output=True
+            # Write config files
+            if not self._configure_ap():
+                publish_notification(
+                    self.mqtt, "network", "error", "hotspot",
+                    "Failed to configure hostapd",
+                )
+                return False
+
+            if not self._configure_dnsmasq():
+                publish_notification(
+                    self.mqtt, "network", "error", "hotspot",
+                    "Failed to configure dnsmasq",
+                )
+                return False
+
+            if not self._write_ap_env():
+                publish_notification(
+                    self.mqtt, "network", "error", "hotspot",
+                    "Failed to write AP environment",
+                )
+                return False
+
+            # Enable and start via systemd (ExecStartPre handles interface setup,
+            # ExecStartPost handles routing, dnsmasq auto-starts via BindsTo)
+            if not self._hostapd_svc.enable():
+                logger.error("Failed to enable hostapd")
+                publish_notification(
+                    self.mqtt, "network", "error", "hotspot",
+                    "Failed to enable hotspot",
+                )
+                return False
+
+            logger.info("AP enabled successfully")
+            self.ap_status.enabled = True
+            self.ap_status.running = True
+            publish_notification(
+                self.mqtt, "network", "enabled", "hotspot",
+                f"Hotspot '{self.ap_status.ssid}' enabled",
+            )
+        else:
+            # Disable and stop via systemd (ExecStopPost handles routing teardown
+            # and interface cleanup, dnsmasq auto-stops via BindsTo)
+            if not self._hostapd_svc.disable():
+                logger.error("Failed to disable hostapd")
+                return False
+
+            logger.info("AP disabled successfully")
+            self.ap_status.enabled = False
+            self.ap_status.running = False
+            self.ap_status.clients = []
+            publish_notification(
+                self.mqtt, "network", "disabled", "hotspot",
+                "Hotspot disabled",
             )
 
-            # Get AP network
-            ip, cidr = self.ap_status.ip_cidr.split('/')
-            network_parts = ip.split('.')
-            network = f"{network_parts[0]}.{network_parts[1]}.{network_parts[2]}.0/{cidr}"
-
-            # Add iptables rules - use source network instead of interface
-            # MASQUERADE rule for AP network going out any interface
-            if subprocess.run([
-                "sudo", "iptables", "-t", "nat", "-C", "POSTROUTING",
-                "-s", network, "!", "-d", network, "-j", "MASQUERADE"
-            ], capture_output=True).returncode != 0:
-                subprocess.run([
-                    "sudo", "iptables", "-t", "nat", "-A", "POSTROUTING",
-                    "-s", network, "!", "-d", network, "-j", "MASQUERADE"
-                ], capture_output=True)
-
-            # Forward from AP to anywhere
-            if subprocess.run([
-                "sudo", "iptables", "-C", "FORWARD",
-                "-i", self.ap_interface, "-s", network,
-                "-j", "ACCEPT"
-            ], capture_output=True).returncode != 0:
-                subprocess.run([
-                    "sudo", "iptables", "-A", "FORWARD",
-                    "-i", self.ap_interface, "-s", network,
-                    "-j", "ACCEPT"
-                ], capture_output=True)
-
-            # Forward to AP (established connections)
-            if subprocess.run([
-                "sudo", "iptables", "-C", "FORWARD",
-                "-o", self.ap_interface, "-d", network,
-                "-m", "state", "--state", "RELATED,ESTABLISHED",
-                "-j", "ACCEPT"
-            ], capture_output=True).returncode != 0:
-                subprocess.run([
-                    "sudo", "iptables", "-A", "FORWARD",
-                    "-o", self.ap_interface, "-d", network,
-                    "-m", "state", "--state", "RELATED,ESTABLISHED",
-                    "-j", "ACCEPT"
-                ], capture_output=True)
-
-            print("[NetworkingBridge] Routing enabled")
-            self.ap_status.routing_enabled = True
-        else:
-            # Get AP network
-            ip, cidr = self.ap_status.ip_cidr.split('/')
-            network_parts = ip.split('.')
-            network = f"{network_parts[0]}.{network_parts[1]}.{network_parts[2]}.0/{cidr}"
-
-            # Remove iptables rules
-            subprocess.run([
-                "sudo", "iptables", "-t", "nat", "-D", "POSTROUTING",
-                "-s", network, "!", "-d", network, "-j", "MASQUERADE"
-            ], capture_output=True)
-
-            subprocess.run([
-                "sudo", "iptables", "-D", "FORWARD",
-                "-i", self.ap_interface, "-s", network,
-                "-j", "ACCEPT"
-            ], capture_output=True)
-
-            subprocess.run([
-                "sudo", "iptables", "-D", "FORWARD",
-                "-o", self.ap_interface, "-d", network,
-                "-m", "state", "--state", "RELATED,ESTABLISHED",
-                "-j", "ACCEPT"
-            ], capture_output=True)
-
-            print("[NetworkingBridge] Routing disabled")
-            self.ap_status.routing_enabled = False
-
         self._publish_ap_status()
+        return True
 
     # ======== Client Management ========
 
     def _connect_to_network(self, ssid: str, password: str = "") -> bool:
-        """Connect to a network"""
-        print(f"[NetworkingBridge] Connecting to network: {ssid}")
+        """Connect to a Wi-Fi network via NM D-Bus."""
+        logger.info(f"Connecting to network: {ssid}")
 
-        # Check if wlan0 is connected to the same SSID in client mode
-        check_result = subprocess.run(
-            ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device"],
-            capture_output=True, text=True
-        )
+        if not self._client_dev_path:
+            self._client_dev_path = self._nm.get_wifi_device(self.client_interface)
+            if not self._client_dev_path:
+                logger.error(f"Client device {self.client_interface} not found")
+                self._publish_connection_result(ssid, False)
+                return False
 
-        for line in check_result.stdout.strip().split('\n'):
-            if line:
-                parts = line.split(':')
-                if len(parts) >= 4:
-                    device, dtype, state, connection = parts[0], parts[1], parts[2], parts[3]
-                    # If wlan0 is connected to the same SSID, disconnect it first
-                    if device == self.ap_interface and dtype == "wifi" and state == "connected" and ssid in connection:
-                        print(f"[NetworkingBridge] Disconnecting {device} from {ssid} (switching to {self.client_interface})")
-                        subprocess.run(
-                            ["sudo", "nmcli", "device", "disconnect", device],
-                            capture_output=True, text=True
-                        )
-
-        # Create connection with unique name for this interface
-        conn_name = f"{ssid}-{self.client_interface}"
-        cmd = [
-            "sudo", "nmcli", "device", "wifi", "connect", ssid,
-            "ifname", self.client_interface,
-            "name", conn_name
-        ]
-
-        if password:
-            cmd.extend(["password", password])
-
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-
-        success = result.returncode == 0
+        success = self._nm.connect(self._client_dev_path, ssid, password)
 
         if success:
-            print(f"[NetworkingBridge] Connected to {ssid}")
+            logger.info(f"Connected to {ssid}")
         else:
-            print(f"[NetworkingBridge] Failed to connect to {ssid}: {result.stderr}")
+            logger.error(f"Failed to connect to {ssid}")
 
-        # Publish result
         self._publish_connection_result(ssid, success)
-
         return success
 
     def _disconnect_from_network(self) -> bool:
-        """Disconnect from current network"""
-        print("[NetworkingBridge] Disconnecting from network...")
+        """Disconnect from current Wi-Fi network via NM D-Bus."""
+        logger.info("Disconnecting from network...")
 
-        result = subprocess.run(
-            ["sudo", "nmcli", "device", "disconnect", self.client_interface],
-            capture_output=True, text=True
-        )
-
-        if result.returncode == 0:
-            print("[NetworkingBridge] Disconnected successfully")
-            return True
-        else:
-            print(f"[NetworkingBridge] Failed to disconnect: {result.stderr}")
+        if not self._client_dev_path:
+            logger.warning("No client device path")
             return False
 
+        success = self._nm.disconnect(self._client_dev_path)
+
+        if success:
+            logger.info("Disconnected successfully")
+        else:
+            logger.error("Failed to disconnect")
+
+        return success
+
     def _scan_networks(self) -> List[Network]:
-        """Scan for available networks"""
-        print("[NetworkingBridge] Scanning for networks...")
+        """Scan for available Wi-Fi networks via NM D-Bus."""
+        logger.info("Scanning for networks...")
         self.scanning = True
         self._publish_scanning(True)
 
-        # Trigger scan
-        subprocess.run(
-            ["sudo", "nmcli", "device", "wifi", "rescan", "ifname", self.client_interface],
-            capture_output=True
-        )
-
-        time.sleep(3)  # Wait for scan
-
-        # Get results
-        result = subprocess.run(
-            ["sudo", "nmcli", "-t", "-f", "SSID,SECURITY,SIGNAL,FREQ,ACTIVE",
-             "device", "wifi", "list", "ifname", self.client_interface],
-            capture_output=True, text=True
-        )
+        if not self._client_dev_path:
+            self._client_dev_path = self._nm.get_wifi_device(self.client_interface)
 
         networks = []
-        seen_ssids = set()
-
-        for line in result.stdout.strip().split('\n'):
-            if not line:
-                continue
-
-            parts = line.split(':')
-            if len(parts) >= 5:
-                ssid = parts[0]
-
-                # Skip empty SSIDs and duplicates
-                if not ssid or ssid in seen_ssids:
-                    continue
-
-                seen_ssids.add(ssid)
-
-                security = parts[1] if parts[1] else "Open"
-                signal = int(parts[2]) if parts[2] else 0
-                freq = parts[3]
-                active = parts[4] == 'yes'
-
-                # Convert signal to dBm (approximate)
-                signal_dbm = -100 + signal
-
-                networks.append(Network(
-                    ssid=ssid,
-                    security=security,
-                    signal_percent=signal,
-                    signal_dbm=signal_dbm,
-                    frequency=freq,
-                    connected=active
-                ))
+        if self._client_dev_path:
+            raw = self._nm.scan_networks(self._client_dev_path)
+            networks = [
+                Network(
+                    ssid=n["ssid"],
+                    security=n["security"],
+                    signal_percent=n["signal_percent"],
+                    signal_dbm=n["signal_dbm"],
+                    frequency=n["frequency"],
+                    connected=n["connected"],
+                )
+                for n in raw
+            ]
 
         self.scan_results = networks
         self.scanning = False
         self._publish_scan_results()
         self._publish_scanning(False)
 
-        print(f"[NetworkingBridge] Found {len(networks)} networks")
+        logger.info(f"Found {len(networks)} networks")
         return networks
 
     # ======== Status Polling ========
 
     def _update_interfaces(self):
-        """Check which interfaces are detected"""
-        result = subprocess.run(
-            ["ip", "link", "show"],
-            capture_output=True, text=True
-        )
-
+        """Check which interfaces are detected via NM D-Bus."""
         self.interfaces = {
-            'client': InterfaceInfo(
+            "client": InterfaceInfo(
                 name=self.client_interface,
-                mode='client',
-                detected=self.client_interface in result.stdout,
-                enabled=True
+                mode="client",
+                detected=self._nm.is_device_present(self.client_interface),
+                enabled=True,
             ),
-            'ap': InterfaceInfo(
+            "ap": InterfaceInfo(
                 name=self.ap_interface,
-                mode='ap',
-                detected=self.ap_interface in result.stdout,
-                enabled=self.ap_status.enabled
-            )
+                mode="ap",
+                detected=self._nm.is_device_present(self.ap_interface),
+                enabled=self.ap_status.enabled,
+            ),
         }
-
         self._publish_interfaces()
 
     def _update_client_status(self):
-        """Update client connection status"""
-        result = subprocess.run(
-            ["sudo", "nmcli", "-t", "-f", "DEVICE,STATE,CONNECTION",
-             "device", "status"],
-            capture_output=True, text=True
-        )
+        """Update client connection status via NM D-Bus."""
+        if not self._client_dev_path:
+            self._client_dev_path = self._nm.get_wifi_device(self.client_interface)
+            if not self._client_dev_path:
+                return
 
-        connected = False
-        for line in result.stdout.split('\n'):
-            if line.startswith(self.client_interface):
-                parts = line.split(':')
-                if len(parts) >= 2 and parts[1] == 'connected':
-                    connected = True
-                    break
+        details = self._nm.get_connection_details(self._client_dev_path)
+        if details is None:
+            return
 
         was_connected = self.client_status.connected
-        self.client_status.connected = connected
+        self.client_status.connected = details["connected"]
+        self.client_status.ssid = details["ssid"]
+        self.client_status.ip_address = details["ip_address"]
+        self.client_status.cidr = details["cidr"]
+        self.client_status.router = details["router"]
+        self.client_status.signal_percent = details["signal_percent"]
+        self.client_status.signal_dbm = details["signal_dbm"]
 
-        if connected:
-            # Get connection details
-            self._update_client_details()
-        else:
-            # Clear details
-            self.client_status.ssid = ""
-            self.client_status.ip_address = ""
-            self.client_status.router = ""
-            self.client_status.signal_dbm = -100
-            self.client_status.signal_percent = 0
-
-        # Publish if status changed
-        if connected != was_connected:
+        if details["connected"] != was_connected:
             self._publish_client_status()
 
-    def _update_client_details(self):
-        """Get detailed client connection info"""
-        # Get SSID and signal
-        result = subprocess.run(
-            ["sudo", "nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL",
-             "device", "wifi", "list", "ifname", self.client_interface],
-            capture_output=True, text=True
-        )
-
-        for line in result.stdout.split('\n'):
-            if line.startswith('yes:'):
-                parts = line.split(':')
-                if len(parts) >= 3:
-                    self.client_status.ssid = parts[1]
-                    signal = int(parts[2]) if parts[2] else 0
-                    self.client_status.signal_percent = signal
-                    self.client_status.signal_dbm = -100 + signal
-                    break
-
-        # Get IP address
-        result = subprocess.run(
-            ["ip", "-4", "addr", "show", self.client_interface],
-            capture_output=True, text=True
-        )
-
-        for line in result.stdout.split('\n'):
-            if 'inet ' in line:
-                parts = line.strip().split()
-                if len(parts) >= 2:
-                    ip_cidr = parts[1]
-                    ip, cidr = ip_cidr.split('/')
-                    self.client_status.ip_address = ip
-                    self.client_status.cidr = int(cidr)
-                    break
-
-        # Get router (gateway)
-        result = subprocess.run(
-            ["ip", "route", "show", "dev", self.client_interface],
-            capture_output=True, text=True
-        )
-
-        for line in result.stdout.split('\n'):
-            if 'default via' in line:
-                parts = line.split()
-                if len(parts) >= 3:
-                    self.client_status.router = parts[2]
-                    break
-
-        self._publish_client_status()
-
     def _update_ap_status(self):
-        """Update AP status - check if hostapd is running"""
-        result = subprocess.run(
-            ["pgrep", "-f", "/usr/sbin/hostapd"],
-            capture_output=True
-        )
+        """Update AP status from systemd health."""
+        hostapd_health = self._hostapd_svc.get_health()
+        dnsmasq_health = self._dnsmasq_svc.get_health()
+        changed = False
 
-        is_active = result.returncode == 0
+        if hostapd_health.is_active != self.ap_status.running:
+            self.ap_status.running = hostapd_health.is_active
+            changed = True
+            if not hostapd_health.is_active and self.ap_status.enabled:
+                publish_notification(
+                    self.mqtt, "network", "stopped", "hotspot",
+                    f"Hotspot stopped unexpectedly "
+                    f"({hostapd_health.active_state}/{hostapd_health.sub_state})",
+                )
 
-        if is_active != self.ap_status.enabled:
-            self.ap_status.enabled = is_active
+        if hostapd_health.is_enabled != self.ap_status.enabled:
+            self.ap_status.enabled = hostapd_health.is_enabled
+            changed = True
+
+        if changed:
             self._publish_ap_status()
 
+        # Always publish health for monitoring
+        self._publish_service_health("hostapd", hostapd_health)
+        self._publish_service_health("dnsmasq", dnsmasq_health)
+
     def _update_ap_clients(self):
-        """Update list of connected AP clients"""
-        if not self.ap_status.enabled:
+        """Update list of connected AP clients from /proc/net/arp."""
+        if not self.ap_status.running:
             if len(self.ap_status.clients) > 0:
                 self.ap_status.clients = []
                 self._publish_ap_status()
             return
 
-        # Parse arp table for connected clients
-        result = subprocess.run(
-            ["ip", "neigh", "show", "dev", self.ap_interface],
-            capture_output=True, text=True
-        )
-
-        clients = []
-        for line in result.stdout.split('\n'):
-            if "REACHABLE" in line or "STALE" in line:
-                parts = line.split()
-                if len(parts) >= 5:
-                    ip = parts[0]
-                    mac = parts[4]
-                    clients.append(APClient(ip=ip, mac=mac))
+        raw_clients = get_ap_clients(self.ap_interface)
+        clients = [
+            APClient(
+                ip=c["ip"],
+                mac=c["mac"],
+                vendor=self._oui.lookup(c["mac"]),
+            )
+            for c in raw_clients
+        ]
 
         # Only publish if changed
         if len(clients) != len(self.ap_status.clients):
@@ -745,7 +577,7 @@ server=8.8.4.4
     # ======== MQTT Interface ========
 
     def _subscribe_mqtt(self):
-        """Subscribe to command topics"""
+        """Subscribe to command topics."""
         topics = [
             "protogen/fins/networkingbridge/scan/start",
             "protogen/fins/networkingbridge/client/enable",
@@ -753,239 +585,225 @@ server=8.8.4.4
             "protogen/fins/networkingbridge/client/disconnect",
             "protogen/fins/networkingbridge/ap/enable",
             "protogen/fins/networkingbridge/ap/config",
-            "protogen/fins/networkingbridge/routing/enable",
             "protogen/fins/networkingbridge/qrcode/generate",
         ]
 
         for topic in topics:
             self.mqtt.subscribe(topic)
-            print(f"[NetworkingBridge] Subscribed to {topic}")
+            logger.debug(f"Subscribed to {topic}")
 
         # Set up message callbacks
         self.mqtt.message_callback_add(
             "protogen/fins/networkingbridge/scan/start",
-            lambda client, userdata, msg: threading.Thread(target=self._scan_networks, daemon=True).start()
+            lambda c, u, m: threading.Thread(
+                target=self._scan_networks, daemon=True
+            ).start(),
         )
 
         self.mqtt.message_callback_add(
             "protogen/fins/networkingbridge/client/enable",
-            lambda client, userdata, msg: self._handle_client_enable(json.loads(msg.payload))
+            lambda c, u, m: self._handle_client_enable(json.loads(m.payload)),
         )
 
         self.mqtt.message_callback_add(
             "protogen/fins/networkingbridge/client/connect",
-            lambda client, userdata, msg: threading.Thread(
-                target=self._handle_client_connect, args=(json.loads(msg.payload),), daemon=True
-            ).start()
+            lambda c, u, m: threading.Thread(
+                target=self._handle_client_connect,
+                args=(json.loads(m.payload),),
+                daemon=True,
+            ).start(),
         )
 
         self.mqtt.message_callback_add(
             "protogen/fins/networkingbridge/client/disconnect",
-            lambda client, userdata, msg: self._disconnect_from_network()
+            lambda c, u, m: self._disconnect_from_network(),
         )
 
         self.mqtt.message_callback_add(
             "protogen/fins/networkingbridge/ap/enable",
-            lambda client, userdata, msg: threading.Thread(
-                target=self._enable_ap, args=(json.loads(msg.payload)['enable'],), daemon=True
-            ).start()
+            lambda c, u, m: threading.Thread(
+                target=self._enable_ap,
+                args=(json.loads(m.payload)["enable"],),
+                daemon=True,
+            ).start(),
         )
 
         self.mqtt.message_callback_add(
             "protogen/fins/networkingbridge/ap/config",
-            lambda client, userdata, msg: self._handle_ap_config(json.loads(msg.payload))
-        )
-
-        self.mqtt.message_callback_add(
-            "protogen/fins/networkingbridge/routing/enable",
-            lambda client, userdata, msg: self._enable_routing(json.loads(msg.payload)['enable'])
+            lambda c, u, m: self._handle_ap_config(json.loads(m.payload)),
         )
 
         self.mqtt.message_callback_add(
             "protogen/fins/networkingbridge/qrcode/generate",
-            lambda client, userdata, msg: self._generate_qrcode()
+            lambda c, u, m: self._generate_qrcode(),
         )
 
     def _handle_client_enable(self, data: Dict):
-        """Handle client enable/disable"""
-        enable = data.get('enable', True)
-        # For now, just log - client is always enabled
-        print(f"[NetworkingBridge] Client enable={enable} (not implemented)")
+        """Handle client enable/disable."""
+        enable = data.get("enable", True)
+        logger.info(f"Client enable={enable} (not implemented)")
 
     def _handle_client_connect(self, data: Dict):
-        """Handle client connection request"""
-        ssid = data.get('ssid', '')
-        password = data.get('password', '')
+        """Handle client connection request."""
+        ssid = data.get("ssid", "")
+        password = data.get("password", "")
         self._connect_to_network(ssid, password)
 
     def _handle_ap_config(self, data: Dict):
-        """Handle AP configuration update"""
-        print(f"[NetworkingBridge] Updating AP config: {data}")
+        """Handle AP configuration update."""
+        logger.info(f"Updating AP config: {data}")
 
-        # Update configuration
-        self.ap_status.ssid = data.get('ssid', self.ap_status.ssid)
-        self.ap_status.security = data.get('security', self.ap_status.security)
-        self.ap_status.password = data.get('password', self.ap_status.password)
-        self.ap_status.ip_cidr = data.get('ip_cidr', self.ap_status.ip_cidr)
+        self.ap_status.ssid = data.get("ssid", self.ap_status.ssid)
+        self.ap_status.security = data.get("security", self.ap_status.security)
+        self.ap_status.password = data.get("password", self.ap_status.password)
+        self.ap_status.ip_cidr = data.get("ip_cidr", self.ap_status.ip_cidr)
 
-        # If AP is currently enabled, restart it with new config
-        if self.ap_status.enabled:
-            print("[NetworkingBridge] Restarting AP with new config...")
-            # Save routing state before disabling
-            routing_was_enabled = self.ap_status.routing_enabled
-            self._enable_ap(False)
-            # Restore routing state
-            self.ap_status.routing_enabled = routing_was_enabled
-            time.sleep(1)
-            self._enable_ap(True)
+        if self.ap_status.running:
+            logger.info("Restarting AP with new config...")
+            self._configure_ap()
+            self._configure_dnsmasq()
+            self._write_ap_env()
+            self._hostapd_svc.restart()
+            publish_notification(
+                self.mqtt, "network", "restarted", "hotspot",
+                f"Hotspot restarted with new config (SSID: {self.ap_status.ssid})",
+            )
         else:
-            # Just publish the updated config
             self._publish_ap_status()
 
     def _generate_qrcode(self):
-        """Generate Wi-Fi QR code"""
-        print("[NetworkingBridge] Generating QR code...")
+        """Generate Wi-Fi QR code."""
+        logger.info("Generating QR code...")
 
-        # Create Wi-Fi QR code string
-        # Format: WIFI:T:WPA;S:SSID;P:password;;
         if self.ap_status.security == "open":
             wifi_str = f"WIFI:T:nopass;S:{self.ap_status.ssid};;"
         else:
-            # Use WPA for both wpa and wpa2
-            wifi_str = f"WIFI:T:WPA;S:{self.ap_status.ssid};P:{self.ap_status.password};;"
+            wifi_str = (
+                f"WIFI:T:WPA;S:{self.ap_status.ssid};"
+                f"P:{self.ap_status.password};;"
+            )
 
-        # Generate QR code
         qr = qrcode.QRCode(version=1, box_size=10, border=2)
         qr.add_data(wifi_str)
         qr.make(fit=True)
 
-        # Create image
         img = qr.make_image(fill_color="black", back_color="white")
 
-        # Convert to base64
         buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
+        img.save(buffer, format="PNG")
         buffer.seek(0)
         img_base64 = base64.b64encode(buffer.read()).decode()
         data_url = f"data:image/png;base64,{img_base64}"
 
-        # Publish QR code
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/qrcode",
             json.dumps({"qrcode": data_url}),
-            retain=True
+            retain=True,
         )
 
-        print("[NetworkingBridge] QR code generated and published")
+        logger.info("QR code generated and published")
 
     # ======== MQTT Publishers ========
 
     def _publish_interfaces(self):
-        """Publish interface status"""
+        """Publish interface status."""
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/interfaces",
             json.dumps({k: asdict(v) for k, v in self.interfaces.items()}),
-            retain=True
+            retain=True,
         )
 
     def _publish_client_status(self):
-        """Publish client status"""
+        """Publish client status."""
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/client",
             json.dumps(asdict(self.client_status)),
-            retain=True
+            retain=True,
         )
 
     def _publish_ap_status(self):
-        """Publish AP status"""
+        """Publish AP status."""
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/ap",
             json.dumps(asdict(self.ap_status)),
-            retain=True
+            retain=True,
         )
 
     def _publish_scan_results(self):
-        """Publish scan results"""
+        """Publish scan results."""
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/scan",
             json.dumps([asdict(n) for n in self.scan_results]),
-            retain=True
+            retain=True,
         )
 
     def _publish_scanning(self, scanning: bool):
-        """Publish scanning state"""
+        """Publish scanning state."""
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/scanning",
-            json.dumps(scanning)
+            json.dumps(scanning),
         )
 
     def _publish_connection_result(self, ssid: str, success: bool):
-        """Publish connection result"""
+        """Publish connection result."""
         self.mqtt.publish(
             "protogen/fins/networkingbridge/status/connection",
-            json.dumps({"ssid": ssid, "success": success})
+            json.dumps({"ssid": ssid, "success": success}),
         )
 
+    def _publish_service_health(self, service: str, health):
+        """Publish systemd service health."""
+        self.mqtt.publish(
+            f"protogen/fins/networkingbridge/status/{service}/health",
+            json.dumps(health.to_dict()),
+            retain=True,
+        )
+
+    # ======== Lifecycle ========
+
     def cleanup(self):
-        """Cleanup on shutdown"""
-        print("[NetworkingBridge] Stopping...")
+        """Cleanup on shutdown."""
+        logger.info("Stopping...")
         self.running = False
         self.mqtt.loop_stop()
         self.mqtt.disconnect()
-        print("[NetworkingBridge] Stopped")
+        logger.info("Stopped")
 
     def run(self):
-        """Main run loop"""
-        print("[NetworkingBridge] Starting networking bridge...")
+        """Main run loop."""
+        logger.info("Starting networking bridge...")
 
-        # Set up signal handlers
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
-        # Start the bridge
         self.start()
 
-        print("[NetworkingBridge] Networking bridge is running. Press Ctrl+C to exit.")
+        logger.info("Networking bridge is running")
 
-        # Keep running
         try:
             while self.running:
                 signal.pause()
         except KeyboardInterrupt:
-            print("\n[NetworkingBridge] Keyboard interrupt received")
+            logger.info("Keyboard interrupt received")
 
         self.cleanup()
 
     def _signal_handler(self, signum, frame):
-        """Handle shutdown signals"""
-        print(f"\n[NetworkingBridge] Received signal {signum}")
+        """Handle shutdown signals."""
+        logger.info(f"Received signal {signum}")
         self.running = False
 
 
 def main():
-    """Main entry point"""
-    # Load config
-    with open('/home/proto/protosuit-engine/config.yaml', 'r') as f:
-        config = yaml.safe_load(f)
+    """Main entry point."""
+    setup_logger("networkingbridge")
 
-    # Create MQTT client
-    mqtt_client = mqtt.Client(
-        client_id="protosuit-networkingbridge",
-        clean_session=True
-    )
+    config_loader = ConfigLoader()
+    config = config_loader.config
 
-    # Connect to MQTT broker
-    mqtt_config = config['mqtt']
-    mqtt_client.connect(
-        mqtt_config['broker'],
-        mqtt_config['port'],
-        mqtt_config['keepalive']
-    )
-
-    # Start MQTT loop
+    mqtt_client = create_mqtt_client(config_loader)
     mqtt_client.loop_start()
 
-    # Create and run bridge
     bridge = NetworkingBridge(config, mqtt_client)
     bridge.run()
 

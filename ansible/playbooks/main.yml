@@ -287,10 +287,10 @@
     mode: '0644'
     force: yes
 
-- name: Create polkit rule for cast service management via D-Bus
+- name: Create polkit rule for service management via D-Bus
   template:
-    src: "{{ playbook_dir }}/../templates/50-protosuit-cast.rules.j2"
-    dest: /etc/polkit-1/rules.d/50-protosuit-cast.rules
+    src: "{{ playbook_dir }}/../templates/50-protosuit-services.rules.j2"
+    dest: /etc/polkit-1/rules.d/50-protosuit-services.rules
     mode: '0644'
 
 - name: Allow user to write cast service config files without password
@@ -329,21 +329,74 @@
       - network-manager
     state: present
 
-- name: Disable and mask system hostapd service (we manage it ourselves)
+- name: Ensure hostapd service is stopped (managed by networkingbridge via D-Bus)
   systemd:
     name: hostapd
     enabled: no
     state: stopped
-    masked: yes
+    masked: no
   ignore_errors: yes
 
-- name: Disable and mask system dnsmasq service (we manage it ourselves)
+- name: Ensure dnsmasq service is stopped (managed by networkingbridge via D-Bus)
   systemd:
     name: dnsmasq
     enabled: no
     state: stopped
-    masked: yes
+    masked: no
   ignore_errors: yes
+
+- name: Create hostapd systemd drop-in override directory
+  file:
+    path: /etc/systemd/system/hostapd.service.d
+    state: directory
+    mode: '0755'
+
+- name: Deploy hostapd systemd drop-in override
+  template:
+    src: "{{ playbook_dir }}/../templates/hostapd-override.conf.j2"
+    dest: /etc/systemd/system/hostapd.service.d/override.conf
+    mode: '0644'
+
+- name: Create dnsmasq systemd drop-in override directory
+  file:
+    path: /etc/systemd/system/dnsmasq.service.d
+    state: directory
+    mode: '0755'
+
+- name: Deploy dnsmasq systemd drop-in override
+  template:
+    src: "{{ playbook_dir }}/../templates/dnsmasq-override.conf.j2"
+    dest: /etc/systemd/system/dnsmasq.service.d/override.conf
+    mode: '0644'
+
+- name: Create AP scripts directory
+  file:
+    path: "{{ project_dir }}/scripts"
+    state: directory
+    mode: '0755'
+    owner: "{{ pi_user }}"
+    group: "{{ pi_user }}"
+
+- name: Deploy AP management scripts
+  template:
+    src: "{{ playbook_dir }}/../templates/{{ item.src }}"
+    dest: "{{ project_dir }}/scripts/{{ item.dest }}"
+    mode: '0755'
+  loop:
+    - { src: "protosuit-ap-setup.sh.j2", dest: "ap-setup.sh" }
+    - { src: "protosuit-ap-teardown.sh.j2", dest: "ap-teardown.sh" }
+    - { src: "protosuit-routing-setup.sh.j2", dest: "routing-setup.sh" }
+    - { src: "protosuit-routing-teardown.sh.j2", dest: "routing-teardown.sh" }
+
+- name: Create protosuit config directory for AP environment
+  file:
+    path: /etc/protosuit
+    state: directory
+    mode: '0755'
+
+- name: Reload systemd after deploying drop-in overrides
+  systemd:
+    daemon_reload: yes
 
 - name: Disable ModemManager (interferes with Bluetooth pairing)
   systemd:

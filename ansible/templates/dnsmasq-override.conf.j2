@@ -1,0 +1,5 @@
+# Protosuit dnsmasq systemd override
+# Deployed by Ansible - do not edit manually
+[Unit]
+BindsTo=hostapd.service
+After=hostapd.service

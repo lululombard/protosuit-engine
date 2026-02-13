@@ -132,6 +132,15 @@
     box-shadow: 0 0 8px var(--danger);
 }
 
+.status-indicator.running {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+}
+
+.status-indicator.stopped {
+    background: var(--text-dim);
+}
+
 .status-indicator.unknown {
     background: var(--text-dim);
 }
@@ -446,31 +455,6 @@
     border-color: var(--accent-primary);
 }
 
-/* Routing Config */
-.routing-config {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.toggle-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.toggle-label {
-    font-size: 14px;
-    color: var(--text-primary);
-}
-
-.toggle-description {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin: 0;
-    padding-left: 10px;
-    border-left: 2px solid var(--border-color);
-}
 
 /* Client Card */
 .client-card {
@@ -743,11 +727,6 @@
         min-width: unset;
     }
     
-    .toggle-row {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-    }
 }
 
 /* Notification styles */

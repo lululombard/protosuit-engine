@@ -1,0 +1,13 @@
+# Protosuit hostapd systemd override
+# Deployed by Ansible - do not edit manually
+[Unit]
+Wants=dnsmasq.service
+Before=dnsmasq.service
+
+[Service]
+ExecStartPre={{ project_dir }}/scripts/ap-setup.sh
+ExecStartPost={{ project_dir }}/scripts/routing-setup.sh
+ExecStopPost=-{{ project_dir }}/scripts/routing-teardown.sh
+ExecStopPost=-{{ project_dir }}/scripts/ap-teardown.sh
+Restart=on-failure
+RestartSec=5
