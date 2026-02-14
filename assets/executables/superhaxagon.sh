@@ -91,9 +91,9 @@ xdotool windowsize $GAME_WINDOW $DISPLAY_WIDTH $DISPLAY_HEIGHT 2>/dev/null || tr
 xdotool windowactivate $GAME_WINDOW 2>/dev/null || true
 
 # Set up display duplication using X11 native mirroring
-# Capture left display (HDMI-1) and show it on right display (HDMI-2)
+# Capture left display and show it on right display
 echo "[superhaxagon.sh] Setting up screen duplication with X11 mirror..."
-echo "[superhaxagon.sh] Capturing from HDMI-1 at ${LEFT_X},${POS_Y}"
+echo "[superhaxagon.sh] Capturing from left display at ${LEFT_X},${POS_Y}"
 
 # Start X11 mirror (hardware accelerated with OpenGL)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

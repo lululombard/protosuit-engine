@@ -25,14 +25,14 @@ done
 # Configure displays with correct rotation
 echo "Configuring dual displays..."
 
-# HDMI-1: Left fin (rotated right)
-xrandr --output HDMI-1 --mode 720x720 --pos 0x0 --rotate {{ display_config.hdmi1.rotation }} || echo "Failed to configure HDMI-1"
+# Left fin
+xrandr --output {{ display_config.left.name }} --mode {{ display_config.left.resolution }} --pos {{ display_config.left.position }} --rotate {{ display_config.left.rotation }} || echo "Failed to configure {{ display_config.left.name }}"
 
-# HDMI-2: Right fin (rotated left)
-xrandr --output HDMI-2 --mode 720x720 --pos 720x0 --rotate {{ display_config.hdmi2.rotation }} || echo "Failed to configure HDMI-2"
+# Right fin
+xrandr --output {{ display_config.right.name }} --mode {{ display_config.right.resolution }} --pos {{ display_config.right.position }} --rotate {{ display_config.right.rotation }} || echo "Failed to configure {{ display_config.right.name }}"
 
-# Set HDMI-1 as primary
-xrandr --output HDMI-1 --primary || echo "Failed to set HDMI-1 as primary"
+# Set left fin as primary
+xrandr --output {{ display_config.left.name }} --primary || echo "Failed to set {{ display_config.left.name }} as primary"
 
 # Disable screen blanking and power management
 xset s off

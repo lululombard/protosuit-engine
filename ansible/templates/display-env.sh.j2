@@ -24,8 +24,8 @@ export PATH="{{ project_dir }}/env/bin:$PATH"
 # Function to test displays
 test_displays() {
     echo "Testing dual display setup..."
-    echo "HDMI-1 (Left fin): {{ display_config.hdmi1.resolution }} at {{ display_config.hdmi1.position }}"
-    echo "HDMI-2 (Right fin): {{ display_config.hdmi2.resolution }} at {{ display_config.hdmi2.position }}"
+    echo "Left fin ({{ display_config.left.name }}): {{ display_config.left.resolution }} at {{ display_config.left.position }}"
+    echo "Right fin ({{ display_config.right.name }}): {{ display_config.right.resolution }} at {{ display_config.right.position }}"
 
     # Test with simple color fills
     DISPLAY=:0 xsetroot -solid red &

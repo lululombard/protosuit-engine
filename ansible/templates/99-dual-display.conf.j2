@@ -1,15 +1,15 @@
 Section "Monitor"
-    Identifier "HDMI-1"
-    Option "PreferredMode" "{{ display_config.hdmi1.resolution }}"
-    Option "Position" "{{ display_config.hdmi1.position }}"
-    Option "Rotate" "{{ display_config.hdmi1.rotation }}"
+    Identifier "{{ display_config.left.name }}"
+    Option "PreferredMode" "{{ display_config.left.resolution }}"
+    Option "Position" "{{ display_config.left.position }}"
+    Option "Rotate" "{{ display_config.left.rotation }}"
 EndSection
 
 Section "Monitor"
-    Identifier "HDMI-2"
-    Option "PreferredMode" "{{ display_config.hdmi2.resolution }}"
-    Option "Position" "{{ display_config.hdmi2.position }}"
-    Option "Rotate" "{{ display_config.hdmi2.rotation }}"
+    Identifier "{{ display_config.right.name }}"
+    Option "PreferredMode" "{{ display_config.right.resolution }}"
+    Option "Position" "{{ display_config.right.position }}"
+    Option "Rotate" "{{ display_config.right.rotation }}"
 EndSection
 
 Section "Device"
@@ -21,10 +21,10 @@ EndSection
 Section "Screen"
     Identifier "Screen0"
     Device "VideoCard"
-    Monitor "HDMI-1"
+    Monitor "{{ display_config.left.name }}"
     SubSection "Display"
         Depth 24
-        Modes "{{ display_config.hdmi1.resolution }}"
+        Modes "{{ display_config.left.resolution }}"
     EndSubSection
 EndSection
 

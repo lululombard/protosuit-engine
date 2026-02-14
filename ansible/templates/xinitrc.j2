@@ -14,14 +14,14 @@ xhost +local:
 sleep 2
 
 # Configure dual displays
-# HDMI-1: Left fin (rotated right)
-DISPLAY=:0 xrandr --output HDMI-1 --mode {{ display_config.hdmi1.resolution }} --pos {{ display_config.hdmi1.position }} --rotate {{ display_config.hdmi1.rotation }}
+# Left fin
+DISPLAY=:0 xrandr --output {{ display_config.left.name }} --mode {{ display_config.left.resolution }} --pos {{ display_config.left.position }} --rotate {{ display_config.left.rotation }}
 
-# HDMI-2: Right fin (rotated left)
-DISPLAY=:0 xrandr --output HDMI-2 --mode {{ display_config.hdmi2.resolution }} --pos {{ display_config.hdmi2.position }} --rotate {{ display_config.hdmi2.rotation }}
+# Right fin
+DISPLAY=:0 xrandr --output {{ display_config.right.name }} --mode {{ display_config.right.resolution }} --pos {{ display_config.right.position }} --rotate {{ display_config.right.rotation }}
 
 # Set up extended desktop
-DISPLAY=:0 xrandr --output HDMI-1 --primary
+DISPLAY=:0 xrandr --output {{ display_config.left.name }} --primary
 
 # Keep X running
 exec sleep infinity
