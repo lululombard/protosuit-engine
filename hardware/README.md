@@ -101,6 +101,11 @@ The current board (v1.1) is a **validation prototype** using off-the-shelf modul
 | 35 | Fan Tachometer | Input | FALLING edge interrupts, 2 pulses/revolution |
 | 21 | I2C SDA (OLED Display) | Bidirectional | SSD1306 128x64 monochrome |
 | 22 | I2C SCL (OLED Display) | Bidirectional | |
+| 5 | LED Strip (Upper Arch) | Output | SK6812 |
+| 18 | LED Strip (Left Ear) | Output | WS2812B |
+| 19 | LED Strip (Right Fin) | Output | WS2812B, 60 LEDs |
+| 23 | LED Strip (Left Fin) | Output | WS2812B, 60 LEDs |
+| 26 | LED Strip (Right Ear) | Output | WS2812B |
 | 16 | UART RX (Teensy) | Input | 921,600 baud |
 | 17 | UART TX (Teensy) | Output | 921,600 baud |
 

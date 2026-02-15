@@ -266,7 +266,7 @@ For more help, [open an issue on GitHub](https://github.com/lululombard/protosui
 
 ### Reliability
 - **Live web preview performance**: ffmpeg slows the whole system and the preview lags behind after extended use
-- **System bridge**: new service to expose CPU/memory/IO/storage usage, temperature, fan speed, undervoltage events, plus reboot and shutdown controls
+- **System bridge**: new service to expose CPU/memory/IO/storage usage, temperature, frequency, fan speed, undervoltage events, plus reboot and shutdown controls
 - **Notifications**: expand `protogen/visor/notifications` usage across all services, rename to `protogen/global/notifications`
 
 ---
