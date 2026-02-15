@@ -210,6 +210,11 @@ static void processMessage(const String& topic, const String& payload) {
     else if (topic == "protogen/visor/teensy/menu/save") {
         if (onTeensyCommand) onTeensyCommand("SAVE");
     }
+    else if (topic == "protogen/visor/esp/restart") {
+        if (onTeensyCommand) onTeensyCommand("RESTART");
+        delay(500);   // let UART transmit to Teensy
+        ESP.restart();
+    }
 }
 
 void mqttBridgeProcess() {

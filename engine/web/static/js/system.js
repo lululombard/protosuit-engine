@@ -213,3 +213,9 @@ function systemShutdown() {
         sendCommand('protogen/fins/systembridge/power/shutdown', '');
     }
 }
+
+function firmwareRestart() {
+    if (confirm('Restart Teensy and ESP32 firmware?')) {
+        sendCommand('protogen/visor/esp/restart', '');
+    }
+}

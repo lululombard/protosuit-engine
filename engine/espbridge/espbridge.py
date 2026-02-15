@@ -80,6 +80,7 @@ class ESPBridge:
         "protogen/visor/teensy/menu/set",
         "protogen/visor/teensy/menu/get",
         "protogen/visor/teensy/menu/save",
+        "protogen/visor/esp/restart",
     ]
 
     def __init__(self, serial_port: str = "/dev/ttyUSB0", baud_rate: int = 921600):
