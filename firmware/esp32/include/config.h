@@ -11,6 +11,25 @@
 #define TEENSY_RX 16
 #define TEENSY_TX 17
 
+// LED strip pins
+#define LED_UPPER_ARCH_PIN 5
+#define LED_RIGHT_EAR_PIN  26
+#define LED_RIGHT_FIN_PIN  19
+#define LED_LEFT_FIN_PIN   23
+#define LED_LEFT_EAR_PIN   18
+
+// LED strip counts
+#define LED_UPPER_ARCH_COUNT 300
+#define LED_RIGHT_EAR_COUNT  40
+#define LED_RIGHT_FIN_COUNT  60
+#define LED_LEFT_FIN_COUNT   60
+#define LED_LEFT_EAR_COUNT   40
+
+#define LED_TOTAL_COUNT (LED_UPPER_ARCH_COUNT + LED_RIGHT_EAR_COUNT + LED_RIGHT_FIN_COUNT + LED_LEFT_FIN_COUNT + LED_LEFT_EAR_COUNT)
+
+// Brightness cap (prevents excessive current draw)
+#define MAX_BRIGHTNESS 150
+
 // DHT settings
 #define DHT_TYPE DHT22
 

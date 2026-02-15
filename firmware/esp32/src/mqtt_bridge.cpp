@@ -1,6 +1,7 @@
 #include "mqtt_bridge.h"
 #include "config.h"
 #include "fan_curve.h"
+#include "led_strips.h"
 #include <ArduinoJson.h>
 
 static String inputBuffer;
@@ -190,6 +191,14 @@ static void processMessage(const String& topic, const String& payload) {
                         String cmd = "SET " + String(m->proto) + " " + String(value);
                         onTeensyCommand(cmd);
                     }
+
+                    // Update LED strips when relevant params change
+                    String p = String(param);
+                    if (p == "color" || p == "hueF" || p == "hueB" || p == "bright") {
+                        ledStripsSetColor(teensyMenu.color, teensyMenu.hueF, teensyMenu.hueB, teensyMenu.bright);
+                    } else if (p == "face") {
+                        ledStripsSetFace(teensyMenu.face);
+                    }
                 }
             }
         }
@@ -301,11 +310,26 @@ void mqttBridgeHandleTeensyResponse(const String& msg) {
         protoParam.trim();
         int value = msg.substring(eqIdx + 1).toInt();
 
+        // Handle boop state from ProtoTracer
+        if (protoParam == "BOOPED") {
+            ledStripsSetBooped(value != 0);
+            mqttBridgePublish("protogen/visor/teensy/status/booped", value ? "1" : "0");
+            return;
+        }
+
         const ParamMapping* m = findByProto(protoParam);
         if (m) {
             teensyMenu.*(m->field) = value;
 
             publishParamStatus(m, value);
+
+            // Sync LED strips when Teensy reports param values (boot sync)
+            String proto = String(m->proto);
+            if (proto == "COLOR" || proto == "HUEF" || proto == "HUEB" || proto == "BRIGHT") {
+                ledStripsSetColor(teensyMenu.color, teensyMenu.hueF, teensyMenu.hueB, teensyMenu.bright);
+            } else if (proto == "FACE") {
+                ledStripsSetFace(teensyMenu.face);
+            }
         }
     }
 }

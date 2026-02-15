@@ -7,6 +7,7 @@
 #include "display.h"
 #include "mqtt_bridge.h"
 #include "teensy_comm.h"
+#include "led_strips.h"
 
 static unsigned long lastSensorUpdate = 0;
 static unsigned long lastSensorPublish = 0;
@@ -64,6 +65,8 @@ void setup() {
     fanCurveInit();
     fanCurveLoad();
 
+    ledStripsInit();
+
     mqttBridgeSetCallbacks(onFanSpeedChange, onTeensyCommand);
     teensyCommSetCallback(onTeensyMessage);
 
@@ -115,4 +118,7 @@ void loop() {
     // Process serial communications
     mqttBridgeProcess();
     teensyCommProcess();
+
+    // Update LED strip animations
+    ledStripsUpdate();
 }
