@@ -262,10 +262,8 @@ For more help, [open an issue on GitHub](https://github.com/lululombard/protosui
 
 ### Features
 - **Shader image/video support**: load images and videos as shader inputs (textures)
-- **Firmware restart commands**: restart Teensy and ESP32 via MQTT commands
 
 ### Reliability
-- **Live web preview performance**: ffmpeg slows the whole system and the preview lags behind after extended use
 - **Notifications**: expand `protogen/visor/notifications` usage across all services, rename to `protogen/global/notifications`
 
 ---

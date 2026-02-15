@@ -68,10 +68,8 @@
             <!-- Animation Control -->
             <section class="panel">
                 <h2>Animation Control</h2>
-                <div class="button-grid">
-                    {% for key, anim in animations.items() %}
-                    <button onclick="sendExpression('{{ key }}')">{{ anim.emoji }} {{ anim.name }}</button>
-                    {% endfor %}
+                <div id="animationButtons" class="button-grid">
+                    <p><em>Waiting for renderer...</em></p>
                 </div>
             </section>
 
@@ -296,7 +294,7 @@
                     <span id="previewFps"></span>
                 </div>
                 <div id="previewContainer" style="display: none;">
-                    <img id="previewImage" src="" alt="Display Preview">
+                    <video id="previewVideo" autoplay playsinline muted style="width: 100%;"></video>
                     <p><small>◢ Left Display | Right Display ◣</small></p>
                 </div>
             </section>

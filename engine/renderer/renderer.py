@@ -479,6 +479,8 @@ class Renderer:
                 # Store metadata for this animation
                 self.shader_metadata[anim_name] = {
                     "name": anim_config.get("name", anim_name),
+                    "emoji": anim_config.get("emoji", ""),
+                    "type": anim_config.get("type", "base"),
                     "left_shader": anim_config.get("left_shader"),
                     "right_shader": anim_config.get("right_shader"),
                     "uniforms": anim_config.get("uniforms", {}),
@@ -509,7 +511,9 @@ class Renderer:
                 metadata = self.shader_metadata.get(shader_name, {})
                 animation_info = {
                     "id": shader_name,
-                    "name": shader_name.replace("_", " ").title(),
+                    "name": metadata.get("name", shader_name.replace("_", " ").title()),
+                    "emoji": metadata.get("emoji", ""),
+                    "type": metadata.get("type", "base"),
                     "uniforms": [],
                 }
 

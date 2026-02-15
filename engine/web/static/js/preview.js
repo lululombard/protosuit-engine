@@ -1,15 +1,12 @@
-// Display Preview Functionality
+// Display Preview — WebRTC
 
 let previewEnabled = false;
-let previewLastFrameTime = 0;
-let previewFrameCount = 0;
-let previewFpsUpdateInterval = null;
+let previewPC = null;      // RTCPeerConnection
+let previewWS = null;      // WebSocket for signaling
 
-// Check if preview should be enabled on page load (browser may restore checkbox state)
 function initPreview() {
     const checkbox = document.getElementById('enablePreview');
     if (checkbox && checkbox.checked) {
-        // Checkbox was restored by browser, trigger preview
         togglePreview();
     }
 }
@@ -18,72 +15,116 @@ function togglePreview() {
     const checkbox = document.getElementById('enablePreview');
     const container = document.getElementById('previewContainer');
     const fpsDisplay = document.getElementById('previewFps');
-    const img = document.getElementById('previewImage');
 
     if (checkbox.checked) {
-        // Enable preview
         previewEnabled = true;
         container.style.display = 'block';
-        previewFrameCount = 0;
-        previewLastFrameTime = Date.now();
-
-        // Use MJPEG stream (efficient, real-time)
-        img.src = '/api/stream';
-
-        // Set up frame counting for FPS (estimate based on browser rendering)
-        previewFpsUpdateInterval = setInterval(() => {
-            const now = Date.now();
-            const elapsed = (now - previewLastFrameTime) / 1000;
-            if (elapsed > 0) {
-                fpsDisplay.textContent = '(MJPEG stream)';
-            }
-            previewLastFrameTime = now;
-        }, 1000);
-
-        logMessage('Preview enabled - MJPEG stream mode');
+        fpsDisplay.textContent = '(connecting…)';
+        startWebRTC();
+        logMessage('Preview enabled — WebRTC');
     } else {
-        // Disable preview
         previewEnabled = false;
         container.style.display = 'none';
         fpsDisplay.textContent = '';
-
-        // Clear the image source to stop the stream
-        img.src = '';
-
-        if (previewFpsUpdateInterval) {
-            clearInterval(previewFpsUpdateInterval);
-            previewFpsUpdateInterval = null;
-        }
+        stopWebRTC();
         logMessage('Preview disabled');
     }
 }
 
-function updatePreview() {
-    if (!previewEnabled) return;
+function startWebRTC() {
+    stopWebRTC(); // clean up any previous session
 
-    const img = document.getElementById('previewImage');
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const host = window.location.host;
+    previewWS = new WebSocket(`${proto}://${host}/ws/preview`);
 
-    // Create a new image to load in background
-    const newImg = new Image();
+    previewWS.onmessage = function (event) {
+        const msg = JSON.parse(event.data);
 
-    // When image loads successfully, update display and fetch next frame immediately
-    newImg.onload = function () {
-        img.src = newImg.src;
-        previewFrameCount++;
-
-        // Immediately request next frame for maximum throughput
-        if (previewEnabled) {
-            updatePreview();
+        if (msg.type === 'offer') {
+            handleOffer(msg.sdp);
+        } else if (msg.type === 'ice') {
+            handleRemoteICE(msg);
         }
     };
 
-    // On error, retry after a short delay
-    newImg.onerror = function () {
+    previewWS.onclose = function () {
+        // If preview is still enabled, reconnect after a delay
         if (previewEnabled) {
-            setTimeout(updatePreview, 500); // Retry after 500ms on error
+            const fpsDisplay = document.getElementById('previewFps');
+            fpsDisplay.textContent = '(reconnecting…)';
+            setTimeout(startWebRTC, 2000);
         }
     };
 
-    // Start loading the image (with timestamp to prevent caching)
-    newImg.src = '/api/preview?t=' + Date.now();
+    previewWS.onerror = function () {
+        // onclose will fire after this, triggering reconnect
+    };
+}
+
+function stopWebRTC() {
+    if (previewPC) {
+        previewPC.close();
+        previewPC = null;
+    }
+    if (previewWS) {
+        const ws = previewWS;
+        previewWS = null; // prevent reconnect in onclose
+        ws.close();
+    }
+}
+
+async function handleOffer(sdpText) {
+    previewPC = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+
+    // Attach incoming video to <video> element
+    previewPC.ontrack = function (event) {
+        const video = document.getElementById('previewVideo');
+        video.srcObject = event.streams[0];
+        document.getElementById('previewFps').textContent = '(streaming)';
+    };
+
+    // Send local ICE candidates to server
+    previewPC.onicecandidate = function (event) {
+        if (event.candidate && previewWS && previewWS.readyState === WebSocket.OPEN) {
+            previewWS.send(JSON.stringify({
+                type: 'ice',
+                sdpMLineIndex: event.candidate.sdpMLineIndex,
+                candidate: event.candidate.candidate
+            }));
+        }
+    };
+
+    previewPC.oniceconnectionstatechange = function () {
+        const fpsDisplay = document.getElementById('previewFps');
+        const state = previewPC ? previewPC.iceConnectionState : 'closed';
+        if (state === 'connected' || state === 'completed') {
+            fpsDisplay.textContent = '(streaming)';
+        } else if (state === 'disconnected' || state === 'failed') {
+            fpsDisplay.textContent = '(disconnected)';
+        }
+    };
+
+    // Set remote offer and create answer
+    await previewPC.setRemoteDescription({ type: 'offer', sdp: sdpText });
+    const answer = await previewPC.createAnswer();
+    await previewPC.setLocalDescription(answer);
+
+    if (previewWS && previewWS.readyState === WebSocket.OPEN) {
+        previewWS.send(JSON.stringify({
+            type: 'answer',
+            sdp: answer.sdp
+        }));
+    }
+}
+
+function handleRemoteICE(msg) {
+    if (previewPC && msg.candidate) {
+        previewPC.addIceCandidate({
+            sdpMLineIndex: msg.sdpMLineIndex,
+            candidate: msg.candidate
+        });
+    }
 }

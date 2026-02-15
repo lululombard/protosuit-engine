@@ -10,13 +10,24 @@ function handleRendererShaderStatus(payload) {
         const data = JSON.parse(payload);
         availableAnimations = data.available || [];
 
-        // Load animation metadata (uniforms, etc)
+        // Load animation metadata and build UI buttons
         if (data.animations) {
             animationsData = {};
+            const container = document.getElementById('animationButtons');
+            container.innerHTML = '';
+
             data.animations.forEach(anim => {
                 animationsData[anim.id] = anim;
-                console.log('Loaded animation:', anim.id, 'uniforms:', anim.uniforms);
+
+                // Create button dynamically
+                const btn = document.createElement('button');
+                const emoji = anim.emoji || '';
+                const name = anim.name || anim.id;
+                btn.textContent = emoji ? `${emoji} ${name}` : name;
+                btn.onclick = () => sendExpression(anim.id);
+                container.appendChild(btn);
             });
+
             logMessage(`✓ Loaded ${data.animations.length} animations from renderer`);
         }
 
