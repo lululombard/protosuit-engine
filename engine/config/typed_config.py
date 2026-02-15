@@ -50,7 +50,6 @@ class SystemConfig:
     """System configuration"""
 
     x_display: str = ":0"
-    window_class: str = "pygame"
 
 
 @dataclass
@@ -65,9 +64,7 @@ class BlurConfig:
 class TransitionConfig:
     """Transition configuration"""
 
-    enabled: bool = True
     duration: float = 0.75
-    easing: str = "smoothstep"
     blur: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
@@ -117,68 +114,3 @@ class ESP32Config:
     baud_rate: int = 921600
 
 
-@dataclass
-class NetworkingInterfacesConfig:
-    """Networking interface configuration"""
-    
-    client: str = "wlan0"
-    ap: str = "wlan1"
-
-
-@dataclass
-class NetworkingAPConfig:
-    """Access Point configuration"""
-    
-    ssid: str = "Protosuit-AP"
-    security: str = "wpa2"  # none, wep, wpa2
-    password: str = "protosuit123"
-    ip_cidr: str = "192.168.50.1/24"
-    dhcp_range: str = "192.168.50.10,192.168.50.100"
-    channel: int = 6
-
-
-@dataclass
-class NetworkingRoutingConfig:
-    """Routing configuration for AP"""
-    
-    enabled: bool = False
-
-
-@dataclass
-class NetworkingCaptivePortalConfig:
-    """Captive portal configuration"""
-    
-    enabled: bool = False
-
-
-@dataclass
-class NetworkingConfig:
-    """Networking bridge configuration"""
-    
-    enabled: bool = True
-    interfaces: Optional[NetworkingInterfacesConfig] = None
-    ap: Optional[NetworkingAPConfig] = None
-    routing: Optional[NetworkingRoutingConfig] = None
-    captive_portal: Optional[NetworkingCaptivePortalConfig] = None
-    
-    def __post_init__(self):
-        # Parse nested configs
-        if self.interfaces is None:
-            self.interfaces = NetworkingInterfacesConfig()
-        elif isinstance(self.interfaces, dict):
-            self.interfaces = NetworkingInterfacesConfig(**self.interfaces)
-        
-        if self.ap is None:
-            self.ap = NetworkingAPConfig()
-        elif isinstance(self.ap, dict):
-            self.ap = NetworkingAPConfig(**self.ap)
-        
-        if self.routing is None:
-            self.routing = NetworkingRoutingConfig()
-        elif isinstance(self.routing, dict):
-            self.routing = NetworkingRoutingConfig(**self.routing)
-        
-        if self.captive_portal is None:
-            self.captive_portal = NetworkingCaptivePortalConfig()
-        elif isinstance(self.captive_portal, dict):
-            self.captive_portal = NetworkingCaptivePortalConfig(**self.captive_portal)

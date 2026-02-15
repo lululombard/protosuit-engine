@@ -40,7 +40,7 @@ class ConfigLoader:
         return {
             "default_animation": "stars",
             "animations": {},
-            "transitions": {"enabled": True, "duration": 0.75},
+            "transitions": {"duration": 0.75},
         }
 
     def _parse_typed_config(self, config_dict: Dict[str, Any], config_class) -> Any:
@@ -152,11 +152,6 @@ class ConfigLoader:
         """Get monitoring configuration"""
         config_dict = self.config.get("monitoring", {})
         return self._parse_typed_config(config_dict, MonitoringConfig)
-
-    def get_networking_config(self) -> NetworkingConfig:
-        """Get networking bridge configuration"""
-        config_dict = self.config.get("networkingbridge", {})
-        return self._parse_typed_config(config_dict, NetworkingConfig)
 
     def get_esp32_config(self) -> ESP32Config:
         """Get ESP32 bridge configuration"""

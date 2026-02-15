@@ -5,7 +5,6 @@ default_animation: "aperture"
 # System configuration
 system:
   x_display: ":0"  # X11 display to use
-  window_class: "pygame"  # Window class name for renderer windows
 
 # MQTT configuration
 mqtt:
@@ -33,9 +32,6 @@ monitoring:
   fps_smoothing_frames: 3    # Number of frames to average for FPS smoothing
   enabled: true              # Enable/disable FPS monitoring
 
-# Launcher configuration
-launcher: {}
-
 # AudioBridge configuration (volume control, audio device management)
 audiobridge:
   volume:
@@ -47,10 +43,6 @@ audiobridge:
     fallback_to_non_hdmi: true  # Fallback to non-HDMI device when BT disconnects
     exclude_hdmi: true  # Exclude HDMI devices from UI and fallback options
 
-# Networkingbridge configuration
-networkingbridge:
-  enabled: true
-
 # Networking configuration (used by networkingbridge)
 networking:
   client:
@@ -61,12 +53,9 @@ networking:
     security: "wpa"     # Options: "wpa" (WPA1 for PSP), "wpa2", "open"
     password: "BeepBoop"
     ip_cidr: "192.168.50.1/24"
-  routing:
-    enabled: true       # NAT from AP to client interface
 
 # Bluetoothbridge configuration
 bluetoothbridge:
-  enabled: true
   # Bluetooth adapter selection
   # Use different adapters for gamepads and audio to avoid bandwidth conflicts
   # Run 'bluetoothctl list' to see available adapters
@@ -90,11 +79,9 @@ esp32:
 # Cast configuration (AirPlay and Spotify Connect)
 cast:
   airplay:
-    enabled: false
     device_name: "Protosuit"
     password: ""  # Optional password for AirPlay
   spotify:
-    enabled: false
     device_name: "Protosuit"
     username: ""  # Optional Spotify username (for premium features)
     password: ""  # Optional Spotify password
@@ -122,7 +109,6 @@ animations:
     emoji: "⬛"
     left_shader: "blank.glsl"
     right_shader: "blank.glsl"
-    rate: 30  # Low framerate since nothing is happening
     uniforms:
       backgroundColor: {type: "vec3", value: [0.0, 0.0, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Black
 
@@ -132,7 +118,6 @@ animations:
     emoji: "✨"
     left_shader: "stars.glsl"
     right_shader: "stars.glsl"
-    rate: 60
     uniforms:
       speed:
         left: {type: "float", value: 1.0, min: -5.0, max: 5.0, step: 0.1}
@@ -149,7 +134,6 @@ animations:
     emoji: "🌀"
     left_shader: "portal.glsl"
     right_shader: "portal.glsl"
-    rate: 60
     render_scale: 0.5  # Render at half resolution (4x performance boost)
     uniforms:
       portalOrange:
@@ -194,7 +178,6 @@ animations:
     emoji: "🌊"
     left_shader: "spiral.glsl"
     right_shader: "spiral.glsl"
-    rate: 60
     uniforms:
       spiralColor:
         type: vec3
@@ -238,7 +221,6 @@ animations:
     emoji: "📷"
     left_shader: "aperture.glsl"
     right_shader: "aperture.glsl"
-    rate: 60
     uniforms:
       rotationSpeed:
         left: {type: "float", value: 0.5, min: -2.0, max: 2.0, step: 0.1}    # Clockwise rotation
@@ -251,7 +233,6 @@ animations:
     emoji: "🌌"
     left_shader: "outer_wilds.glsl"
     right_shader: "outer_wilds.glsl"
-    rate: 30  # Lower framerate target for this heavy shader
     render_scale: 0.5  # Render at half resolution (4x performance boost)
     uniforms:
       cameraX:
@@ -296,7 +277,6 @@ animations:
     emoji: "🌊"
     left_shader: "waves.glsl"
     right_shader: "waves.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 5.0, step: 0.1}
       color1: {type: "vec3", value: [1.0, 0.5, 0.0], min: 0.0, max: 1.0, step: 0.01}  # Orange
@@ -310,7 +290,6 @@ animations:
     emoji: "🌅"
     left_shader: "retrowave.glsl"
     right_shader: "retrowave.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
       gridIntensity: {type: "float", value: 1.0, min: 0.0, max: 2.0, step: 0.1}
@@ -326,7 +305,6 @@ animations:
     emoji: "🌊"
     left_shader: "seascape.glsl"
     right_shader: "seascape.glsl"
-    rate: 60
     render_scale: 0.25  # Render at 25% resolution for better performance
     uniforms:
       seaSpeed: {type: "float", value: 0.8, min: 0.0, max: 3.0, step: 0.1}
@@ -345,7 +323,6 @@ animations:
     emoji: "🔮"
     left_shader: "optical_lens.glsl"
     right_shader: "optical_lens.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
       intensity: {type: "float", value: 1.0, min: 0.1, max: 2.0, step: 0.1}
@@ -358,7 +335,6 @@ animations:
     emoji: "🌀"
     left_shader: "hypnosis_tunnel.glsl"
     right_shader: "hypnosis_tunnel.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
       intensity: {type: "float", value: 1.0, min: 0.1, max: 2.0, step: 0.1}
@@ -372,7 +348,6 @@ animations:
     emoji: "🌀"
     left_shader: "hypnosis_classic.glsl"
     right_shader: "hypnosis_classic.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 2.0, min: 0.0, max: 5.0, step: 0.1}
       spiralScale: {type: "float", value: 20.0, min: 5.0, max: 50.0, step: 1.0}
@@ -385,7 +360,6 @@ animations:
     emoji: "🌊"
     left_shader: "chromatic_waves.glsl"
     right_shader: "chromatic_waves.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
       waveFrequency: {type: "float", value: 3.1415, min: 1.0, max: 10.0, step: 0.1}
@@ -399,7 +373,6 @@ animations:
     emoji: "⬡"
     left_shader: "hex_kaleidoscope.glsl"
     right_shader: "hex_kaleidoscope.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
       scale: {type: "float", value: 1.0, min: 0.5, max: 2.0, step: 0.1}
@@ -412,7 +385,6 @@ animations:
     emoji: "🔲"
     left_shader: "infinite_cube.glsl"
     right_shader: "infinite_cube.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.1, max: 3.0, step: 0.1}
       cameraAngle: {type: "float", value: 0.0, min: -3.14, max: 3.14, step: 0.1}
@@ -428,7 +400,6 @@ animations:
     emoji: "🪞"
     left_shader: "infinite_mirror.glsl"
     right_shader: "infinite_mirror.glsl"
-    rate: 60
     render_scale: 0.66
     uniforms:
       ledCount: {type: "float", value: 53.0, min: 8.0, max: 100.0, step: 1.0}
@@ -449,7 +420,6 @@ animations:
     emoji: "📡"
     left_shader: "echo_signal.glsl"
     right_shader: "echo_signal.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
       radius: {type: "float", value: 0.5, min: 0.1, max: 1.0, step: 0.05}
@@ -464,7 +434,6 @@ animations:
     emoji: "💍"
     left_shader: "rgb_ring.glsl"
     right_shader: "rgb_ring.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
       innerRadius: {type: "float", value: 0.6, min: 0.1, max: 0.9, step: 0.05}
@@ -481,7 +450,6 @@ animations:
     emoji: "⚡"
     left_shader: "plasma_globe.glsl"
     right_shader: "plasma_globe.glsl"
-    rate: 60
     render_scale: 0.25  # Complex volumetric raymarching shader, render at half resolution
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 2.0, step: 0.1}
@@ -498,7 +466,6 @@ animations:
     emoji: "👾"
     left_shader: "monster.glsl"
     right_shader: "monster.glsl"
-    rate: 60
     render_scale: 0.33  # Raymarching shader, render at half resolution for better performance
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
@@ -515,7 +482,6 @@ animations:
     emoji: "☀️"
     left_shader: "sun.glsl"
     right_shader: "sun.glsl"
-    rate: 60
     render_scale: 0.5
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
@@ -531,7 +497,6 @@ animations:
     emoji: "🏔️"
     left_shader: "fractal_land.glsl"
     right_shader: "fractal_land.glsl"
-    rate: 60
     render_scale: 0.25  # Complex raymarching shader
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
@@ -549,7 +514,6 @@ animations:
     emoji: "📡"
     left_shader: "radar.glsl"
     right_shader: "radar.glsl"
-    rate: 60
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
       scanSpeed: {type: "float", value: 1.0, min: 0.0, max: 5.0, step: 0.1}
@@ -565,7 +529,6 @@ animations:
     emoji: "🍄"
     left_shader: "mario.glsl"
     right_shader: "mario.glsl"
-    rate: 60
     render_scale: 0.75
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
@@ -578,7 +541,6 @@ animations:
     emoji: "☁️"
     left_shader: "protean_clouds.glsl"
     right_shader: "protean_clouds.glsl"
-    rate: 60
     render_scale: 0.1
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
@@ -594,7 +556,6 @@ animations:
     emoji: "⚙️"
     left_shader: "absolute_solver.glsl"
     right_shader: "absolute_solver.glsl"
-    rate: 60
     uniforms:
       gradBottom: {type: "vec3", value: [0.75, 0.2, 0.95], min: 0.0, max: 1.0, step: 0.01}  # Purple
       gradTop: {type: "vec3", value: [0.95, 0.85, 0.2], min: 0.0, max: 1.0, step: 0.01}     # Yellow
@@ -611,7 +572,6 @@ animations:
     emoji: "🌈"
     left_shader: "jax_abstraction.glsl"
     right_shader: "jax_abstraction.glsl"
-    rate: 60
     render_scale: 0.25  # Raymarching shader, render at half resolution for better performance
     uniforms:
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
@@ -627,7 +587,6 @@ animations:
     emoji: "🃏"
     left_shader: "balatro.glsl"
     right_shader: "balatro.glsl"
-    rate: 60
     uniforms:
       spinRotation: {type: "float", value: -2.0, min: -10.0, max: 10.0, step: 0.1}
       spinSpeed: {type: "float", value: 7.0, min: 0.0, max: 20.0, step: 0.5}
@@ -647,7 +606,6 @@ animations:
     emoji: "🎵"
     left_shader: "audio_fft.glsl"
     right_shader: "audio_fft.glsl"
-    rate: 60
     uniforms:
       gain: {type: "float", value: 1.0, min: 0.1, max: 5.0, step: 0.1}
 
@@ -657,7 +615,6 @@ animations:
     emoji: "📟"
     left_shader: "audio_lcd.glsl"
     right_shader: "audio_lcd.glsl"
-    rate: 60
     uniforms:
       gain: {type: "float", value: 1.0, min: 0.1, max: 5.0, step: 0.1}
 
@@ -667,7 +624,6 @@ animations:
     emoji: "🔮"
     left_shader: "audio_circle.glsl"
     right_shader: "audio_circle.glsl"
-    rate: 60
     uniforms:
       gain: {type: "float", value: 1.5, min: 0.1, max: 5.0, step: 0.1}
       speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
@@ -677,9 +633,7 @@ animations:
 
 # Transition settings for smooth shader changes
 transitions:
-  enabled: true
   duration: 1.0  # Transition duration in seconds (0.5-1.0s recommended)
-  easing: "smoothstep"  # Easing function: linear, smoothstep, ease-in-out
   blur:
     enabled: true  # Enable blur effect during transitions
     strength: 8.0  # Blur intensity (0.0 = no blur, 8.0 = moderate, 16.0 = strong)

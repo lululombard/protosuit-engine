@@ -32,7 +32,7 @@ class ExecLauncher(BaseLauncher):
         Args:
             script_path: Full path to the .sh script to execute
             display_config: Display configuration (width, height, positions)
-            system_config: System configuration (x_display, window_class)
+            system_config: System configuration (x_display)
             on_exit_callback: Function to call when script exits
             mqtt_client: MQTT client for input handling (optional)
         """
