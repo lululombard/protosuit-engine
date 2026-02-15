@@ -37,7 +37,7 @@ class SystemBridge:
         - protogen/fins/systembridge/status/metrics
         - protogen/fins/systembridge/status/fan_curve
         - protogen/fins/systembridge/status/throttle_temp
-        - protogen/visor/notifications
+        - protogen/global/notifications
     """
 
     THERMAL_ZONE = "/sys/class/thermal/thermal_zone0"

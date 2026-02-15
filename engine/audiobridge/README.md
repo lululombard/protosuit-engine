@@ -14,7 +14,7 @@ Manages PulseAudio volume control, audio output device switching, and Bluetooth 
 - `protogen/fins/audiobridge/status/volume` -current volume, min, max (retained)
 - `protogen/fins/audiobridge/status/audio_devices` -available output devices (retained)
 - `protogen/fins/audiobridge/status/audio_device/current` -active output device (retained)
-- `protogen/visor/notifications` -speaker connect/disconnect notifications
+- `protogen/global/notifications` -speaker connect/disconnect notifications
 
 ## Configuration
 

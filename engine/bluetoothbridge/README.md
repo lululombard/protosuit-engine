@@ -20,7 +20,7 @@ Manages Bluetooth scanning, pairing, connecting, and disconnecting via the BlueZ
 - `protogen/fins/bluetoothbridge/status/audio_devices` -audio device list (retained)
 - `protogen/fins/bluetoothbridge/status/connection` -per-device connection events
 - `protogen/fins/bluetoothbridge/status/last_audio_device` -last connected speaker (retained)
-- `protogen/visor/notifications` -user-facing connect/disconnect notifications
+- `protogen/global/notifications` -user-facing connect/disconnect notifications
 
 ## Configuration
 

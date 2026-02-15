@@ -31,8 +31,16 @@ If you're building a Protogen and want animated fin displays, feel free to adapt
 
 ```bash
 sudo apt update
+sudo apt upgrade -y
+sudo apt dist-upgrade
 sudo apt install git ansible -y
-git clone --recurse-submodules git@github.com:lululombard/protosuit-engine.git
+sudo reboot
+```
+
+3. Wait until the Pi reboots, and run:
+
+```bash
+git clone --recurse-submodules https://github.com/lululombard/protosuit-engine.git
 cd protosuit-engine
 ansible/scripts/deploy.sh
 ```
@@ -264,7 +272,7 @@ For more help, [open an issue on GitHub](https://github.com/lululombard/protosui
 - **Shader image/video support**: load images and videos as shader inputs (textures)
 
 ### Reliability
-- **Notifications**: expand `protogen/visor/notifications` usage across all services, rename to `protogen/global/notifications`
+- ~~**Notifications**: expand `protogen/visor/notifications` usage across all services, rename to `protogen/global/notifications`~~ Done
 
 ---
 

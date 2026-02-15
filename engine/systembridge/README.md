@@ -14,7 +14,7 @@ Exposes RPi 5 system health metrics, fan curve control, throttle temperature con
 - `protogen/fins/systembridge/status/metrics` — CPU%, memory%, disk%, temp, freq, fan RPM/PWM, uptime, throttle flags (retained)
 - `protogen/fins/systembridge/status/fan_curve` — current trip point temperatures (retained)
 - `protogen/fins/systembridge/status/throttle_temp` — current throttle temp setting (retained)
-- `protogen/visor/notifications` — fan curve / throttle / power event notifications
+- `protogen/global/notifications` — fan curve / throttle / power event notifications
 
 ## Configuration
 

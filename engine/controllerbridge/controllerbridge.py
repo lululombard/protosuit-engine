@@ -48,7 +48,7 @@ class ControllerBridge:
     Publishes:
         - protogen/fins/controllerbridge/status/assignments
         - protogen/fins/launcher/input/exec
-        - protogen/visor/notifications
+        - protogen/global/notifications
     """
 
     def __init__(self):

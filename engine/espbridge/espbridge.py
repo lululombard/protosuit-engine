@@ -76,7 +76,7 @@ class ESPBridge:
         "protogen/visor/esp/config/fancurve",
         "protogen/fins/renderer/status/shader",
         "protogen/fins/bluetoothbridge/status/devices",
-        "protogen/visor/notifications",
+        "protogen/global/notifications",
         "protogen/visor/teensy/menu/set",
         "protogen/visor/teensy/menu/get",
         "protogen/visor/teensy/menu/save",

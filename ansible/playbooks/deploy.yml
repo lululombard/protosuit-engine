@@ -73,3 +73,6 @@
       systemd:
         name: NetworkManager
         state: reloaded
+
+    - name: reload udev rules
+      command: udevadm control --reload-rules

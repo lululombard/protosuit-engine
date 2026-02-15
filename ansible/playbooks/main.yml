@@ -47,6 +47,15 @@
   command: loginctl enable-linger {{ pi_user }}
   changed_when: false
 
+- name: Start PulseAudio user service for current session
+  command: systemctl --user start pulseaudio
+  become_user: "{{ pi_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/1000"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus"
+  changed_when: false
+  ignore_errors: yes
+
 - name: Ensure mosquitto service is enabled and started
   systemd:
     name: mosquitto
@@ -206,6 +215,13 @@
     name: "{{ pi_user }}"
     groups: dialout
     append: yes
+
+- name: Install Teensy udev rules for USB upload
+  get_url:
+    url: https://www.pjrc.com/teensy/00-teensy.rules
+    dest: /etc/udev/rules.d/00-teensy.rules
+    mode: '0644'
+  notify: reload udev rules
 
 # Cast Bridge dependencies (AirPlay + Spotify Connect)
 - name: Install shairport-sync for AirPlay support

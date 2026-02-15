@@ -1243,7 +1243,7 @@ sessioncontrol = {{
         )
 
     def _publish_notification(self, service: str, event: str, message: str):
-        """Publish a notification event to the visor notification topic"""
+        """Publish a notification event to the global notification topic"""
         publish_notification(self.mqtt, "cast", event, service, message)
         logger.info(f"Notification: [{service}] {event} - {message}")
 

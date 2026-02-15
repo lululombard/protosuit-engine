@@ -1042,13 +1042,13 @@ Communicates with the ESP32 (fan/sensor controller) and Teensy (LED matrix contr
 
 ## Notifications
 
-**Topic:** `protogen/visor/notifications`
+**Topic:** `protogen/global/notifications`
 
-Cross-service notification bus. Published by bluetoothbridge, audiobridge, controllerbridge, and castbridge. Subscribed by espbridge, which forwards messages to the ESP32 OLED display.
+Cross-service notification bus. Published by bluetoothbridge, audiobridge, controllerbridge, castbridge, systembridge, and networkingbridge. Subscribed by the web UI (toast notifications) and espbridge (forwards to ESP32 OLED display).
 
 | Topic | Payload | R | Description |
 |---|---|---|---|
-| `protogen/visor/notifications` | JSON | | Service notification for OLED display |
+| `protogen/global/notifications` | JSON | | Service notification for web UI and OLED display |
 
 ```json
 {
@@ -1149,7 +1149,7 @@ mosquitto_sub -t 'protogen/fins/+/status/#' -t 'protogen/visor/+/status/#' -v
 ### Watch notifications
 
 ```bash
-mosquitto_sub -t 'protogen/visor/notifications' -v
+mosquitto_sub -t 'protogen/global/notifications' -v
 ```
 
 ### Dump album art to file

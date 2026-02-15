@@ -22,7 +22,7 @@ Manages shairport-sync (AirPlay) and spotifyd (Spotify Connect) services via sys
 - `protogen/fins/castbridge/status/{service}/health` -systemd health (retained)
 - `protogen/fins/castbridge/status/{service}/logs` -journal log stream
 - `protogen/fins/audiobridge/volume/set` -volume commands to audiobridge
-- `protogen/visor/notifications` -service lifecycle notifications
+- `protogen/global/notifications` -service lifecycle notifications
 
 ## Configuration
 

@@ -1,6 +1,6 @@
 """
 Shared notification publisher for Protosuit Engine services.
-Publishes structured notifications to protogen/visor/notifications.
+Publishes structured notifications to protogen/global/notifications.
 """
 
 import json
@@ -8,7 +8,7 @@ import time
 
 
 def publish_notification(mqtt_client, ntype: str, event: str, service: str, message: str):
-    """Publish a notification event to the visor notification topic.
+    """Publish a notification event to the global notification topic.
 
     Args:
         mqtt_client: Connected paho MQTT client instance
@@ -25,6 +25,6 @@ def publish_notification(mqtt_client, ntype: str, event: str, service: str, mess
         "timestamp": time.time(),
     }
     mqtt_client.publish(
-        "protogen/visor/notifications",
+        "protogen/global/notifications",
         json.dumps(payload),
     )

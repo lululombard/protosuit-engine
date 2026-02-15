@@ -53,7 +53,7 @@ class BluetoothBridge:
         - protogen/fins/bluetoothbridge/status/audio_devices
         - protogen/fins/bluetoothbridge/status/connection
         - protogen/fins/bluetoothbridge/status/last_audio_device
-        - protogen/visor/notifications
+        - protogen/global/notifications
     """
 
     def __init__(self):

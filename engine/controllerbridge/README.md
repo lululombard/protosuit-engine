@@ -12,7 +12,7 @@ Monitors Bluetooth gamepad connections via bluetoothbridge, reads evdev input ev
 ### Publishes
 - `protogen/fins/controllerbridge/status/assignments` -current controller-to-display assignments (retained)
 - `protogen/fins/launcher/input/exec` -forwarded input events (`{"key", "action", "display"}`, QoS 0)
-- `protogen/visor/notifications` -controller connect/disconnect notifications
+- `protogen/global/notifications` -controller connect/disconnect notifications
 
 ## Configuration
 

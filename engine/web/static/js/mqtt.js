@@ -24,6 +24,7 @@ function connectMQTT() {
 
         client.subscribe('protogen/fins/#');
         client.subscribe('protogen/visor/#');
+        client.subscribe('protogen/global/#');
     });
 
     client.on('message', (topic, message) => {
@@ -73,6 +74,8 @@ function connectMQTT() {
                 handleTeensyParamStatus(param, payload);
             } else if (topic === 'protogen/visor/teensy/menu/saved') {
                 handleTeensySaved();
+            } else if (topic === 'protogen/global/notifications') {
+                handleMqttNotification(payload);
             }
         } catch (e) {
             console.error(`[MQTT] Error handling ${topic}:`, e);
@@ -141,4 +144,33 @@ function sendCommand(topic, payload, silent = false) {
 
 function requestUniformState() {
     sendCommand('protogen/fins/uniform/query', 'all');
+}
+
+function handleMqttNotification(payload) {
+    try {
+        const data = JSON.parse(payload);
+        let type = 'info';
+        if (data.event === 'error') type = 'error';
+        else if (['connected', 'enabled'].includes(data.event)) type = 'success';
+        showNotification(data.message || payload, type);
+    } catch (e) {
+        showNotification(payload, 'info');
+    }
+}
+
+function showNotification(message, type = 'info') {
+    const existing = document.querySelector('.notification');
+    if (existing) existing.remove();
+
+    const el = document.createElement('div');
+    el.className = `notification notification-${type}`;
+    el.textContent = message;
+    document.body.appendChild(el);
+
+    setTimeout(() => el.classList.add('show'), 10);
+
+    setTimeout(() => {
+        el.classList.remove('show');
+        setTimeout(() => el.remove(), 300);
+    }, 3000);
 }

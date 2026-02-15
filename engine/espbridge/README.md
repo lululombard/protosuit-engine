@@ -16,7 +16,7 @@ Serial bridge between MQTT and ESP32. Forwards filtered MQTT messages to the ESP
   - `protogen/visor/esp/config/fancurve`
   - `protogen/fins/renderer/status/shader` (stripped to current+transition only)
   - `protogen/fins/bluetoothbridge/status/devices`
-  - `protogen/visor/notifications`
+  - `protogen/global/notifications`
   - `protogen/visor/teensy/menu/{set,get,save}`
 
 ### Publishes (from ESP32)

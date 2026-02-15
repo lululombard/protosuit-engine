@@ -9,6 +9,7 @@ import time
 import logging
 from typing import Optional, List, Dict
 
+from gi.repository import GLib
 from pydbus import SystemBus
 
 logger = logging.getLogger(__name__)
@@ -175,22 +176,22 @@ class NetworkManagerDbus:
         try:
             settings = {
                 "connection": {
-                    "id": ssid,
-                    "type": "802-11-wireless",
-                    "autoconnect": True,
+                    "id": GLib.Variant("s", ssid),
+                    "type": GLib.Variant("s", "802-11-wireless"),
+                    "autoconnect": GLib.Variant("b", True),
                 },
                 "802-11-wireless": {
-                    "ssid": ssid.encode("utf-8"),
-                    "mode": "infrastructure",
+                    "ssid": GLib.Variant("ay", ssid.encode("utf-8")),
+                    "mode": GLib.Variant("s", "infrastructure"),
                 },
-                "ipv4": {"method": "auto"},
-                "ipv6": {"method": "auto"},
+                "ipv4": {"method": GLib.Variant("s", "auto")},
+                "ipv6": {"method": GLib.Variant("s", "auto")},
             }
 
             if password:
                 settings["802-11-wireless-security"] = {
-                    "key-mgmt": "wpa-psk",
-                    "psk": password,
+                    "key-mgmt": GLib.Variant("s", "wpa-psk"),
+                    "psk": GLib.Variant("s", password),
                 }
 
             _conn_path, active_path = self.nm.AddAndActivateConnection(

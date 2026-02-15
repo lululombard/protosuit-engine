@@ -37,7 +37,7 @@ class AudioBridge:
         - protogen/fins/audiobridge/status/volume
         - protogen/fins/audiobridge/status/audio_devices
         - protogen/fins/audiobridge/status/audio_device/current
-        - protogen/visor/notifications
+        - protogen/global/notifications
     """
 
     def __init__(self):
