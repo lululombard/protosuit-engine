@@ -171,24 +171,33 @@ class ESPBridge:
         print("[ESPBridge] Stopped")
 
     def _init_serial(self) -> bool:
-        """Initialize serial connection to ESP32"""
-        try:
-            if self.serial and self.serial.is_open:
-                self.serial.close()
+        """Initialize serial connection to ESP32, with fallback to other ttyUSB devices."""
+        if self.serial and self.serial.is_open:
+            self.serial.close()
 
-            self.serial = serial.Serial(
-                port=self.serial_port,
-                baudrate=self.baud_rate,
-                timeout=0.1,
-                write_timeout=None,  # No write timeout - blocking writes
-            )
-            print(f"[ESPBridge] Serial connected to {self.serial_port}")
-            return True
+        # Try configured port first, then fall back to other ttyUSB devices
+        import glob
+        fallbacks = sorted(glob.glob("/dev/ttyUSB*"))
+        candidates = [self.serial_port] + [p for p in fallbacks if p != self.serial_port]
 
-        except serial.SerialException as e:
-            print(f"[ESPBridge] Serial error: {e}")
-            self.serial = None
-            return False
+        for port in candidates:
+            try:
+                self.serial = serial.Serial(
+                    port=port,
+                    baudrate=self.baud_rate,
+                    timeout=0.1,
+                    write_timeout=None,
+                )
+                if port != self.serial_port:
+                    print(f"[ESPBridge] {self.serial_port} unavailable, fell back to {port}")
+                print(f"[ESPBridge] Serial connected to {port}")
+                return True
+            except serial.SerialException:
+                continue
+
+        print(f"[ESPBridge] No serial port available (tried {candidates})")
+        self.serial = None
+        return False
 
     def _init_mqtt(self):
         """Initialize MQTT client"""
