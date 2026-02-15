@@ -22,4 +22,12 @@ polkit.addRule(function(action, subject) {
     if (action.id == "org.freedesktop.systemd1.reload-daemon") {
         return polkit.Result.YES;
     }
+
+    // Reboot/shutdown via logind (used by systembridge)
+    if (action.id == "org.freedesktop.login1.reboot" ||
+        action.id == "org.freedesktop.login1.reboot-multiple-sessions" ||
+        action.id == "org.freedesktop.login1.power-off" ||
+        action.id == "org.freedesktop.login1.power-off-multiple-sessions") {
+        return polkit.Result.YES;
+    }
 });

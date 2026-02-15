@@ -1,6 +1,6 @@
 # Protosuit Engine
 
-The `engine/` directory contains all Python services, shared utilities, and configuration modules that make up the Protosuit Engine software layer. Nine independent services communicate via MQTT, with shared modules for logging, MQTT client setup, D-Bus integration, and systemd service control.
+The `engine/` directory contains all Python services, shared utilities, and configuration modules that make up the Protosuit Engine software layer. Ten independent services communicate via MQTT, with shared modules for logging, MQTT client setup, D-Bus integration, and systemd service control.
 
 ## Services
 
@@ -15,6 +15,7 @@ The `engine/` directory contains all Python services, shared utilities, and conf
 | [CastBridge](castbridge/) | `castbridge/` | AirPlay, Spotify, lyrics | D-Bus, systemd, lrclib.net |
 | [NetworkingBridge](networkingbridge/) | `networkingbridge/` | Wi-Fi client/AP, NAT routing | D-Bus, systemd, NetworkManager |
 | [ESPBridge](espbridge/) | `espbridge/` | ESP32 serial bridge | pyserial (CRC-8/SMBUS) |
+| [SystemBridge](systembridge/) | `systembridge/` | System metrics, fan/thermal, power | psutil, D-Bus (logind) |
 
 **Supporting services** (not in engine/): X11 (`xserver`), MQTT broker (`mosquitto`), audio server (`pulseaudio`)
 
@@ -822,6 +823,99 @@ Manages Wi-Fi client and access point via NetworkManager D-Bus and systemd-manag
 
 ---
 
+## SystemBridge
+
+**Topic prefix:** `protogen/fins/systembridge/`
+
+Exposes RPi 5 system metrics (CPU, memory, disk, temperature, fan, throttle status), fan curve trip point control, throttle temperature configuration, and power controls (reboot/shutdown).
+
+### System Metrics (retained)
+
+Published every 5 seconds (configurable via `systembridge.publish_interval` in config.yaml).
+
+| Topic | Payload | R | Description |
+|---|---|---|---|
+| `status/metrics` | JSON | **R** | System health metrics |
+
+#### Metrics payload format
+
+```json
+{
+  "cpu_percent": 23.5,
+  "memory_percent": 45.2,
+  "disk_percent": 28.0,
+  "temperature": 80.9,
+  "cpu_freq_mhz": 2400,
+  "fan_rpm": 9500,
+  "fan_pwm": 250,
+  "fan_percent": 98,
+  "uptime_seconds": 3600,
+  "throttle_hex": "0x0",
+  "throttle_flags": {
+    "under_voltage_now": false,
+    "freq_capped_now": false,
+    "throttled_now": false,
+    "soft_temp_limit_now": false,
+    "under_voltage_occurred": false,
+    "freq_capped_occurred": false,
+    "throttled_occurred": false,
+    "soft_temp_limit_occurred": false
+  }
+}
+```
+
+### Fan Curve Control (retained)
+
+Controls the 4 thermal trip point temperatures that determine when the RPi fan speeds up. Changes are applied immediately to sysfs and persisted to `config.yaml`.
+
+| Topic | Payload | R | Description |
+|---|---|---|---|
+| `status/fan_curve` | JSON | **R** | Current fan curve trip points |
+| `fan_curve/set` | JSON | | Set fan curve trip points |
+
+#### Fan curve payload format
+
+```json
+{
+  "trip_1": 50,
+  "trip_2": 60,
+  "trip_3": 67.5,
+  "trip_4": 75
+}
+```
+
+Trip points map to fan PWM levels (fixed in hardware):
+- `trip_1`: Fan starts (PWM 75/255 = 29%)
+- `trip_2`: PWM 125/255 = 49%
+- `trip_3`: PWM 175/255 = 69%
+- `trip_4`: PWM 250/255 = 98%
+
+Validation: 30-100°C, strictly ascending, ≥5°C gaps between each.
+
+### Throttle Temperature (retained)
+
+Controls the CPU thermal throttle temperature via `temp_limit` in `/boot/firmware/config.txt`. **Requires reboot to take effect.**
+
+| Topic | Payload | R | Description |
+|---|---|---|---|
+| `status/throttle_temp` | JSON | **R** | Current throttle temp setting |
+| `throttle_temp/set` | JSON | | Set throttle temperature (60-90°C) |
+
+#### Throttle temp payload format
+
+```json
+{"temp": 85, "is_default": true}
+```
+
+### Power Controls
+
+| Topic | Payload | R | Description |
+|---|---|---|---|
+| `power/reboot` | any | | Reboot the system |
+| `power/shutdown` | any | | Shut down the system |
+
+---
+
 ## ESPBridge
 
 **Topic prefix:** `protogen/visor/`
@@ -1163,6 +1257,14 @@ protogen/
       status/connection           [R]
       status/hostapd/health       [R]
       status/dnsmasq/health       [R]
+    systembridge/
+      fan_curve/set
+      throttle_temp/set
+      power/reboot
+      power/shutdown
+      status/metrics              [R]
+      status/fan_curve            [R]
+      status/throttle_temp        [R]
     uniform/query
   visor/
     esp/set/fan

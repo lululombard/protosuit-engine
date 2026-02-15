@@ -54,6 +54,12 @@ function connectMQTT() {
                 handleLauncherExecStatus(payload);
             } else if (topic === 'protogen/fins/audiobridge/status/volume') {
                 handleLauncherVolumeStatus(payload);
+            } else if (topic === 'protogen/fins/systembridge/status/metrics') {
+                handleSystemMetrics(payload);
+            } else if (topic === 'protogen/fins/systembridge/status/fan_curve') {
+                handleSystemFanCurve(payload);
+            } else if (topic === 'protogen/fins/systembridge/status/throttle_temp') {
+                handleSystemThrottleTemp(payload);
             } else if (topic === 'protogen/visor/esp/status/sensors') {
                 handleEspSensorStatus(payload);
             } else if (topic === 'protogen/visor/esp/status/alive') {

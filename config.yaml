@@ -89,6 +89,15 @@ cast:
     enabled: true
     priority: ["airplay", "spotify"]  # Which service takes priority when both are playing
 
+# SystemBridge configuration (system metrics, fan control, power management)
+systembridge:
+  publish_interval: 5  # Publish metrics every N seconds
+  fan_curve:
+    trip_1: 30    # Fan starts (PWM 75/255 = 29%)
+    trip_2: 40    # PWM 125/255 = 49%
+    trip_3: 47.5  # PWM 175/255 = 69%
+    trip_4: 55    # PWM 250/255 = 98%
+
 animations:
   # Base animations (persistent, run indefinitely)
   #

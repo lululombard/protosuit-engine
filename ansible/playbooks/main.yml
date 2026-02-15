@@ -179,6 +179,28 @@
     mode: "0644"
   notify: reload systemd
 
+- name: Create protosuit-systembridge systemd service file
+  template:
+    src: "{{ playbook_dir }}/../templates/protosuit-systembridge.service.j2"
+    dest: /etc/systemd/system/protosuit-systembridge.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Allow user to manage system bridge resources without password
+  copy:
+    dest: /etc/sudoers.d/protosuit-system
+    content: |
+      # Allow protosuit user to write fan curve trip points via sysfs
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/class/thermal/thermal_zone0/trip_point_1_temp
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/class/thermal/thermal_zone0/trip_point_2_temp
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/class/thermal/thermal_zone0/trip_point_3_temp
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/class/thermal/thermal_zone0/trip_point_4_temp
+      # Allow writing throttle temp to boot config
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /usr/bin/tee /boot/firmware/config.txt
+      {{ pi_user }} ALL=(ALL) NOPASSWD: /bin/chmod 755 /boot/firmware/config.txt
+    mode: '0440'
+    validate: 'visudo -cf %s'
+
 - name: Add user to dialout group for ESP32 serial access
   user:
     name: "{{ pi_user }}"
@@ -619,6 +641,11 @@
     name: protosuit-espbridge
     enabled: yes
 
+- name: Enable protosuit-systembridge service
+  systemd:
+    name: protosuit-systembridge
+    enabled: yes
+
 - name: Start all protosuit services
   systemd:
     name: "{{ item }}"
@@ -633,3 +660,4 @@
     - protosuit-networkingbridge
     - protosuit-castbridge
     - protosuit-espbridge
+    - protosuit-systembridge

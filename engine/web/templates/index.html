@@ -116,6 +116,87 @@
 
         <!-- RIGHT COLUMN -->
         <div class="right-column">
+            <!-- System Status (RPi metrics from systembridge) -->
+            <section class="panel">
+                <h2>System</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <span class="label">CPU:</span>
+                        <span id="sysCpu" class="value">--</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">MEMORY:</span>
+                        <span id="sysMem" class="value">--</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">DISK:</span>
+                        <span id="sysDisk" class="value">--</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">TEMPERATURE:</span>
+                        <span id="sysTemp" class="value">--</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">CPU FREQ:</span>
+                        <span id="sysFreq" class="value">--</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">PI FAN:</span>
+                        <span id="sysFan" class="value">--</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">UPTIME:</span>
+                        <span id="sysUptime" class="value">--</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">THROTTLE:</span>
+                        <span id="sysThrottle" class="value">--</span>
+                    </div>
+                </div>
+
+                <!-- Pi Fan Curve -->
+                <div style="margin-top: 15px; padding: 10px; border: 1px solid #444; border-radius: 5px;">
+                    <a href="#" onclick="togglePiFanCurve(); return false;" style="font-size: 0.85em; color: #888;">
+                        <span id="piFanCurveToggleIcon">▶</span> Pi Fan Curve
+                    </a>
+                    <div id="piFanCurveEditor" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <span></span>
+                            <button onclick="resetPiFanCurve()" style="font-size: 0.8em; padding: 2px 8px;">Reset Defaults</button>
+                        </div>
+                        <table id="piFanCurveTable" style="width: 100%; margin-top: 5px; font-size: 0.85em;">
+                            <thead>
+                                <tr><th style="text-align: left;">Temp (C)</th><th>Fan %</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                        <button onclick="savePiFanCurve()" style="width: 100%; margin-top: 10px;">Save Curve</button>
+                    </div>
+                </div>
+
+                <!-- Throttle Temperature -->
+                <div style="margin-top: 10px; padding: 10px; border: 1px solid #444; border-radius: 5px;">
+                    <a href="#" onclick="toggleThrottleTemp(); return false;" style="font-size: 0.85em; color: #888;">
+                        <span id="throttleTempToggleIcon">▶</span> Throttle Temperature
+                    </a>
+                    <div id="throttleTempEditor" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">
+                        <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85em;">
+                            <span>Throttle at</span>
+                            <input type="number" id="throttleTempInput" style="width: 60px; padding: 4px;" min="60" max="90" step="1">
+                            <span>°C</span>
+                            <button onclick="saveThrottleTemp()" style="padding: 4px 12px;">Save</button>
+                        </div>
+                        <small style="color: #888; display: block; margin-top: 5px;">Requires reboot to take effect</small>
+                    </div>
+                </div>
+
+                <!-- Power Controls -->
+                <div class="button-group" style="margin-top: 15px;">
+                    <button onclick="systemReboot()" style="border-color: #ff6b6b; color: #ff6b6b;">Reboot</button>
+                    <button onclick="systemShutdown()" style="border-color: #ff6b6b; color: #ff6b6b;">Shutdown</button>
+                </div>
+            </section>
+
             <!-- Visor Status (ESP32 sensors) -->
             <section class="panel">
                 <h2>Visor Status</h2>
@@ -266,6 +347,7 @@
     <script src="{{ url_for('static', filename='js/preview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/fps-monitor.js') }}"></script>
     <script src="{{ url_for('static', filename='js/file_browser.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/system.js') }}"></script>
     <script src="{{ url_for('static', filename='js/teensy.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>

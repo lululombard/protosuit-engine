@@ -90,7 +90,7 @@ The dashboard includes a visor panel with fan curve editor and Teensy LED menu c
 
 ## Architecture
 
-Nine independent Python services communicating via MQTT, plus shared utilities for logging, D-Bus, and systemd control. See **[engine/README.md](engine/README.md)** for the full services table, shared modules, configuration reference, and complete MQTT API.
+Ten independent Python services communicating via MQTT, plus shared utilities for logging, D-Bus, and systemd control. See **[engine/README.md](engine/README.md)** for the full services table, shared modules, configuration reference, and complete MQTT API.
 
 - **MQTT**: All inter-service messaging under `protogen/fins/*` and `protogen/visor/*`
 - **D-Bus**: BlueZ (Bluetooth), systemd (service control), PulseAudio (audio sinks)
@@ -266,7 +266,6 @@ For more help, [open an issue on GitHub](https://github.com/lululombard/protosui
 
 ### Reliability
 - **Live web preview performance**: ffmpeg slows the whole system and the preview lags behind after extended use
-- **System bridge**: new service to expose CPU/memory/IO/storage usage, temperature, frequency, fan speed, undervoltage events, plus reboot and shutdown controls
 - **Notifications**: expand `protogen/visor/notifications` usage across all services, rename to `protogen/global/notifications`
 
 ---
