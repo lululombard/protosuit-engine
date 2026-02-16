@@ -72,7 +72,7 @@ See **[hardware/README.md](hardware/README.md)** for PCB details, USB connection
 - **AirPlay & Spotify Connect**: Stream audio with now-playing metadata and cover art
 - **Synced Lyrics**: Real-time synchronized lyrics from lrclib.net for AirPlay and Spotify
 - **Wi-Fi Management**: Dual-mode networking with AP hotspot (systemd-managed hostapd/dnsmasq), client mode via NetworkManager D-Bus, automatic NAT routing, and QR code sharing
-- **ESP32 Visor**: Temperature/humidity monitoring, auto fan curves, OLED status display
+- **ESP32 Visor**: OLED status dashboard (Pi metrics, FPS, Teensy state, DHT22 sensors), auto fan curves, notification overlay
 - **Teensy LED Visor**: ProtoTracer 3D LED rendering with face animations, audio visualization, and effects
 - **Web Control Interface**: Browser-based control with live preview, physics-based sliders, and performance monitoring
 - **PSP Remote Controller**: PSP homebrew app as wireless gamepad over MQTT
@@ -274,7 +274,6 @@ For more help, [open an issue on GitHub](https://github.com/lululombard/protosui
 - **Shader image/video support**: load images and videos as shader inputs (textures)
 - **Single web page**: Ditch the separate controller/bluetooth/networking/cast and integrate it on the single web page with modals
 - **Web UI refactor**: Terminal style, desktop with folders (presets, shaders, visor), needs to be phone compatible
-- **ESP32 Display refactor**: Needs to show Pi temp, fps, notifications
 
 ### Reliability
 - **Use same uniform names**: Ability to sync HueF/HueB for color1/color2 when available, same speed names, etc...

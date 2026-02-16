@@ -11,11 +11,15 @@ Serial bridge between MQTT and ESP32. Forwards filtered MQTT messages to the ESP
 ## MQTT Topics
 
 ### Subscribes
-- `protogen/#` -all messages, filtered to forward only topics the ESP32 handles:
+- `protogen/#` - all messages, filtered to forward only topics the ESP32 handles:
   - `protogen/visor/esp/set/fan`, `protogen/visor/esp/set/fanmode`
   - `protogen/visor/esp/config/fancurve`
   - `protogen/fins/renderer/status/shader` (stripped to current+transition only)
+  - `protogen/fins/renderer/status/performance` (stripped to fps only)
+  - `protogen/fins/renderer/status/preset` (future: preset name)
   - `protogen/fins/bluetoothbridge/status/devices`
+  - `protogen/fins/systembridge/status/metrics` (stripped to temperature, uptime, fan_percent, cpu_freq_mhz)
+  - `protogen/fins/launcher/status/{video,audio,exec}` (stripped to playing/running only, no available lists)
   - `protogen/global/notifications`
   - `protogen/visor/teensy/menu/{set,get,save}`
 

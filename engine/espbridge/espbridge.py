@@ -75,7 +75,13 @@ class ESPBridge:
         "protogen/visor/esp/set/fanmode",
         "protogen/visor/esp/config/fancurve",
         "protogen/fins/renderer/status/shader",
+        "protogen/fins/renderer/status/performance",
+        "protogen/fins/renderer/status/preset",     # future
         "protogen/fins/bluetoothbridge/status/devices",
+        "protogen/fins/systembridge/status/metrics",
+        "protogen/fins/launcher/status/video",
+        "protogen/fins/launcher/status/audio",
+        "protogen/fins/launcher/status/exec",
         "protogen/global/notifications",
         "protogen/visor/teensy/menu/set",
         "protogen/visor/teensy/menu/get",
@@ -245,7 +251,7 @@ class ESPBridge:
             if not any(topic.startswith(t) for t in self.ESP32_TOPICS):
                 return
 
-            # Strip large arrays from shader status (ESP32 has 512 byte buffer)
+            # Strip large payloads for ESP32's 512-byte serial buffer
             if topic == "protogen/fins/renderer/status/shader":
                 try:
                     data = json.loads(payload)
@@ -261,6 +267,40 @@ class ESPBridge:
                         return
                     self.last_shader_payload = payload
                     print(f"[ESPBridge] Shader SEND: retain={msg.retain} current={filtered['current']}")
+                except json.JSONDecodeError:
+                    pass
+
+            elif topic == "protogen/fins/systembridge/status/metrics":
+                try:
+                    data = json.loads(payload)
+                    filtered = {
+                        "temperature": data.get("temperature"),
+                        "uptime_seconds": data.get("uptime_seconds"),
+                        "fan_percent": data.get("fan_percent"),
+                        "cpu_freq_mhz": data.get("cpu_freq_mhz"),
+                    }
+                    payload = json.dumps(filtered, separators=(",", ":"))
+                except json.JSONDecodeError:
+                    pass
+
+            elif topic == "protogen/fins/renderer/status/performance":
+                try:
+                    data = json.loads(payload)
+                    filtered = {"fps": data.get("fps")}
+                    payload = json.dumps(filtered, separators=(",", ":"))
+                except json.JSONDecodeError:
+                    pass
+
+            elif topic in (
+                "protogen/fins/launcher/status/video",
+                "protogen/fins/launcher/status/audio",
+                "protogen/fins/launcher/status/exec",
+            ):
+                try:
+                    data = json.loads(payload)
+                    # Strip 'available' arrays, keep only playing/running state
+                    filtered = {k: v for k, v in data.items() if k != "available"}
+                    payload = json.dumps(filtered, separators=(",", ":"))
                 except json.JSONDecodeError:
                     pass
 

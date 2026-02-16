@@ -50,6 +50,10 @@
 // Timing
 #define SENSOR_PUBLISH_INTERVAL 1000
 #define PI_TIMEOUT 5000
+#define NOTIFICATION_DURATION 3000
+
+// Display thresholds
+#define PI_TEMP_WARN_THRESHOLD 75
 
 // Serial baud rates
 #define PI_BAUD 921600

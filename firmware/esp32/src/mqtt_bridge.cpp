@@ -11,6 +11,27 @@ static bool piAlive = false;
 static unsigned long lastPiHeartbeat = 0;
 static TeensyMenu teensyMenu;
 
+// Pi system metrics (from systembridge)
+static float piTemp = 0;
+static unsigned long piUptime = 0;
+static int piFanPercent = 0;
+static int piCpuFreqMhz = 0;
+
+// Renderer
+static float fps = 0;
+
+// Launcher activity names
+static String currentPreset;   // future
+static String currentVideo;
+static String currentExec;
+static String currentAudio;
+
+// Notification state
+static bool notificationActive = false;
+static unsigned long notificationTime = 0;
+static char notificationTitle[32];
+static char notificationMessage[128];
+
 // CRC-8/SMBUS lookup table (polynomial 0x07)
 static const uint8_t PROGMEM crc8Table[256] = {
     0x00,0x07,0x0E,0x09,0x1C,0x1B,0x12,0x15,0x38,0x3F,0x36,0x31,0x24,0x23,0x2A,0x2D,
@@ -48,15 +69,20 @@ static TeensyCommandCallback onTeensyCommand = nullptr;
 static const char* const faceLabels[] = {
     "DEFAULT","ANGRY","DOUBT","FROWN","LOOKUP","SAD","AUDIO1","AUDIO2","AUDIO3"
 };
+static const int faceLabelsCount = sizeof(faceLabels) / sizeof(faceLabels[0]);
+
 static const char* const colorLabels[] = {
     "BASE","YELLOW","ORANGE","WHITE","GREEN","PURPLE","RED","BLUE",
     "RAINBOW","RAINBOWNOISE","FLOWNOISE","HORIZONTALRAINBOW","BLACK"
 };
+static const int colorLabelsCount = sizeof(colorLabels) / sizeof(colorLabels[0]);
+
 static const char* const effectLabels[] = {
     "NONE","PHASEY","PHASEX","PHASER","GLITCHX",
     "MAGNET","FISHEYE","HBLUR","VBLUR","RBLUR"
 };
 static const char* const toggleLabels[] = {"OFF","ON"};
+
 // Mapping between Pi camelCase param names and Teensy protocol uppercase names
 struct ParamMapping {
     const char* camel;
@@ -101,6 +127,8 @@ static const ParamMapping* findByProto(const String& name) {
 void mqttBridgeInit() {
     Serial.begin(PI_BAUD);
     inputBuffer.reserve(512);
+    notificationTitle[0] = '\0';
+    notificationMessage[0] = '\0';
 }
 
 void mqttBridgeSetCallbacks(FanSpeedCallback fanCb, TeensyCommandCallback teensyCb) {
@@ -145,22 +173,12 @@ static void processMessage(const String& topic, const String& payload) {
         }
     }
     else if (topic.startsWith("protogen/fins/renderer/status/shader")) {
-        Serial.print("DEBUG: shader len=");
-        Serial.print(payload.length());
-        Serial.print(" data=");
-        Serial.println(payload);
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, payload);
-        if (err == DeserializationError::Ok) {
+        if (deserializeJson(doc, payload) == DeserializationError::Ok) {
             const char* shader = doc["current"]["left"];
-            Serial.print("DEBUG: parsed=");
-            Serial.println(shader ? shader : "(null)");
             if (shader) {
                 currentShader = shader;
             }
-        } else {
-            Serial.print("DEBUG: err=");
-            Serial.println(err.c_str());
         }
     }
     else if (topic.startsWith("protogen/fins/bluetoothbridge/status/devices")) {
@@ -174,6 +192,82 @@ static void processMessage(const String& topic, const String& payload) {
                 }
             }
             controllerCount = count;
+        }
+    }
+    else if (topic == "protogen/fins/systembridge/status/metrics") {
+        JsonDocument doc;
+        if (deserializeJson(doc, payload) == DeserializationError::Ok) {
+            if (doc.containsKey("temperature") && !doc["temperature"].isNull()) {
+                piTemp = doc["temperature"].as<float>();
+            }
+            if (doc.containsKey("uptime_seconds")) {
+                piUptime = doc["uptime_seconds"].as<unsigned long>();
+            }
+            if (doc.containsKey("fan_percent") && !doc["fan_percent"].isNull()) {
+                piFanPercent = doc["fan_percent"].as<int>();
+            }
+            if (doc.containsKey("cpu_freq_mhz") && !doc["cpu_freq_mhz"].isNull()) {
+                piCpuFreqMhz = doc["cpu_freq_mhz"].as<int>();
+            }
+        }
+    }
+    else if (topic == "protogen/fins/renderer/status/performance") {
+        JsonDocument doc;
+        if (deserializeJson(doc, payload) == DeserializationError::Ok) {
+            if (doc.containsKey("fps")) {
+                fps = doc["fps"].as<float>();
+            }
+        }
+    }
+    else if (topic == "protogen/fins/launcher/status/video") {
+        JsonDocument doc;
+        if (deserializeJson(doc, payload) == DeserializationError::Ok) {
+            const char* playing = doc["playing"];
+            currentVideo = playing ? playing : "";
+        }
+    }
+    else if (topic == "protogen/fins/launcher/status/exec") {
+        JsonDocument doc;
+        if (deserializeJson(doc, payload) == DeserializationError::Ok) {
+            const char* running = doc["running"];
+            currentExec = running ? running : "";
+        }
+    }
+    else if (topic == "protogen/fins/launcher/status/audio") {
+        JsonDocument doc;
+        if (deserializeJson(doc, payload) == DeserializationError::Ok) {
+            JsonArray playing = doc["playing"];
+            if (playing && playing.size() > 0) {
+                const char* first = playing[0];
+                currentAudio = first ? first : "";
+            } else {
+                currentAudio = "";
+            }
+        }
+    }
+    else if (topic == "protogen/fins/renderer/status/preset") {
+        // Future: parse preset name
+        JsonDocument doc;
+        if (deserializeJson(doc, payload) == DeserializationError::Ok) {
+            const char* name = doc["name"];
+            currentPreset = name ? name : "";
+        }
+    }
+    else if (topic == "protogen/global/notifications") {
+        JsonDocument doc;
+        if (deserializeJson(doc, payload) == DeserializationError::Ok) {
+            const char* ntype = doc["type"] | "";
+            const char* event = doc["event"] | "";
+            const char* service = doc["service"] | "";
+            const char* message = doc["message"] | "";
+
+            // Build title: "ntype service event"
+            snprintf(notificationTitle, sizeof(notificationTitle), "%s %s %s", ntype, service, event);
+            strncpy(notificationMessage, message, sizeof(notificationMessage) - 1);
+            notificationMessage[sizeof(notificationMessage) - 1] = '\0';
+
+            notificationActive = true;
+            notificationTime = millis();
         }
     }
     else if (topic == "protogen/visor/teensy/menu/set") {
@@ -281,6 +375,69 @@ int mqttBridgeGetControllerCount() {
 
 const TeensyMenu& mqttBridgeGetMenu() {
     return teensyMenu;
+}
+
+float mqttBridgeGetPiTemp() {
+    return piTemp;
+}
+
+unsigned long mqttBridgeGetPiUptime() {
+    return piUptime;
+}
+
+int mqttBridgeGetPiFanPercent() {
+    return piFanPercent;
+}
+
+int mqttBridgeGetPiCpuFreqMhz() {
+    return piCpuFreqMhz;
+}
+
+float mqttBridgeGetFps() {
+    return fps;
+}
+
+const char* mqttBridgeGetActivityName() {
+    if (currentPreset.length() > 0) return currentPreset.c_str();
+    if (currentVideo.length() > 0) return currentVideo.c_str();
+    if (currentExec.length() > 0) return currentExec.c_str();
+    if (currentAudio.length() > 0) return currentAudio.c_str();
+    return currentShader.c_str();
+}
+
+const char* mqttBridgeGetFaceLabel() {
+    if (teensyMenu.face < faceLabelsCount) {
+        return faceLabels[teensyMenu.face];
+    }
+    return "?";
+}
+
+const char* mqttBridgeGetColorLabel() {
+    if (teensyMenu.color < colorLabelsCount) {
+        return colorLabels[teensyMenu.color];
+    }
+    return "?";
+}
+
+bool mqttBridgeHasNotification() {
+    if (notificationActive && (millis() - notificationTime >= NOTIFICATION_DURATION)) {
+        notificationActive = false;
+    }
+    return notificationActive;
+}
+
+const char* mqttBridgeGetNotificationTitle() {
+    return notificationTitle;
+}
+
+const char* mqttBridgeGetNotificationMessage() {
+    return notificationMessage;
+}
+
+void mqttBridgeClearNotification() {
+    notificationActive = false;
+    notificationTitle[0] = '\0';
+    notificationMessage[0] = '\0';
 }
 
 static void publishParamStatus(const ParamMapping* m, uint8_t value) {

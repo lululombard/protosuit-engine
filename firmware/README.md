@@ -24,7 +24,7 @@ Restarts protosuit-espbridge service after upload.
 | Sensors | sensors.h/cpp | DHT22 temperature/humidity reading |
 | Fan | fan.h/cpp | PWM fan control + tachometer RPM |
 | Fan Curve | fan_curve.h/cpp | Auto fan curves, NVS persistence |
-| Display | display.h/cpp | SSD1306 OLED status display |
+| Display | display.h/cpp | SSD1306 OLED status dashboard + notification overlay |
 | MQTT Bridge | mqtt_bridge.h/cpp | Serial <-> MQTT gateway (Pi side) |
 | Teensy Comm | teensy_comm.h/cpp | UART communication with Teensy |
 | Config | config.h | GPIO pin definitions, constants |
@@ -38,7 +38,7 @@ Restarts protosuit-espbridge service after upload.
 - 512-byte buffer limit on ESP32 side (large payloads are filtered/stripped)
 
 **Python Bridge (espbridge/espbridge.py):**
-- Subscribes to `protogen/#`, filters to 9 specific topic patterns for forwarding
+- Subscribes to `protogen/#`, filters to 16 specific topic patterns for forwarding
 - CRC-8 lookup table (256 entries)
 - Caches retained MQTT messages, forwards once when ESP32 connects
 - Timeout: 10s no messages -> marks ESP32 offline
@@ -58,20 +58,39 @@ Restarts protosuit-espbridge service after upload.
 - Default humidity curve: 30%->0%, 40%->40%, 60%->60%, 80%->100%
 - Published every 30 seconds + on boot + on config change
 
-**OLED Display Layout:**
+**OLED Display Layout (128x64 SSD1306):**
+
+Normal mode (4-row dashboard):
 ```
 +-----------------------------+
-| PI    C:2    SHADER         |  (status bar)
+| 2h33 T65C F98% C2 2.4G     |  Row 1: Pi uptime, CPU temp, fan%, controllers, CPU freq
 +-----------------------------+
-| Fan:75% A   RPM:2150        |  (fan info)
+| 62fps aperture              |  Row 2: renderer FPS, activity name (priority fallback)
 +-----------------------------+
-|        24.5C    45%         |  (sensor readings)
-|        Temp    Humid        |
+| default base B75            |  Row 3: Teensy face label, color label, brightness
++-----------------------------+
+| T28.7C H47% F72%A           |  Row 4: DHT22 temp, humidity, ESP fan% + auto indicator
 +-----------------------------+
 ```
-- "PI" shows when Pi heartbeat active (5s timeout)
-- "A" indicates auto fan mode
-- Updated every ~1 second
+
+Notification overlay (3-second full-screen takeover):
+```
++-----------------------------+
+| bluetooth gamepad connected |  Title: type + service + event
++-----------------------------+
+| Controller connected:       |  Message: word-wrapped across
+| Xbox Wireless Controller    |  up to 4 lines (21 chars/line)
+|                             |
+|                             |
++-----------------------------+
+```
+
+- Row 1 Pi CPU temp blinks when >= 75°C (500ms toggle)
+- Row 2 activity name priority: preset > video > exec > audio > shader
+- Row 3 labels shown lowercase, truncated to 7 chars
+- Pi uptime format: `<60m` → `33m` | `1-24h` → `2h33` | `>=24h` → `2d5h`
+- Notifications auto-expire after 3 seconds (configurable via `NOTIFICATION_DURATION`)
+- Updated every ~1 second (250ms when temp blinking or notification active)
 
 **Teensy Menu System:**
 The ESP32 acts as a proxy between MQTT and Teensy, managing a menu with 12 parameters:
@@ -110,6 +129,7 @@ Schema published as retained MQTT on connect. Web UI auto-generates controls fro
 
 **Main Loop (every iteration):**
 - Process serial messages (MQTT bridge + Teensy)
+- Every 250ms: fast display refresh (when Pi temp blinking or notification active)
 - Every 1s: update RPM, read sensors, auto fan control, update display, publish sensors
 - Every 30s: republish fancurve config
 

@@ -41,15 +41,40 @@ static void publishSensorData() {
 }
 
 static void updateDisplayData() {
+    // Notification overlay takes over the display (auto-expires after NOTIFICATION_DURATION)
+    if (mqttBridgeHasNotification()) {
+        displayShowNotification(
+            mqttBridgeGetNotificationTitle(),
+            mqttBridgeGetNotificationMessage()
+        );
+        return;
+    }
+
     DisplayData data;
+
+    // Row 1 — Pi system
     data.piAlive = mqttBridgeIsPiAlive();
+    data.piUptime = mqttBridgeGetPiUptime();
+    data.piTemp = mqttBridgeGetPiTemp();
+    data.piFanPercent = mqttBridgeGetPiFanPercent();
     data.controllerCount = mqttBridgeGetControllerCount();
-    data.shader = mqttBridgeGetShader().c_str();
-    data.fanPercent = fanGetSpeedPercent();
-    data.fanRpm = fanGetRpm();
+    data.piCpuFreqMhz = mqttBridgeGetPiCpuFreqMhz();
+
+    // Row 2 — Activity
+    data.fps = mqttBridgeGetFps();
+    data.activityName = mqttBridgeGetActivityName();
+
+    // Row 3 — Teensy
+    data.faceName = mqttBridgeGetFaceLabel();
+    data.colorName = mqttBridgeGetColorLabel();
+    data.brightness = mqttBridgeGetMenu().bright;
+
+    // Row 4 — ESP sensors
     data.temperature = sensorsGetTemperature();
     data.humidity = sensorsGetHumidity();
+    data.fanPercent = fanGetSpeedPercent();
     data.fanAutoMode = fanCurveIsAutoMode();
+
     displayUpdate(data);
 }
 
@@ -94,6 +119,16 @@ void loop() {
 
         updateDisplayData();
         lastSensorUpdate = now;
+    }
+
+    // Also update display more frequently when notification is active (for smooth transitions)
+    // or when Pi temp is blinking (needs ~500ms refresh)
+    if (mqttBridgeHasNotification() || mqttBridgeGetPiTemp() >= PI_TEMP_WARN_THRESHOLD) {
+        static unsigned long lastFastUpdate = 0;
+        if (now - lastFastUpdate >= 250) {
+            updateDisplayData();
+            lastFastUpdate = now;
+        }
     }
 
     // Publish sensor data periodically

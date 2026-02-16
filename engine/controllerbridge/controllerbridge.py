@@ -20,6 +20,7 @@ from config.loader import ConfigLoader
 from utils.mqtt_client import create_mqtt_client
 from utils.notifications import publish_notification
 
+
 try:
     import evdev
     from evdev import InputDevice, ecodes
@@ -197,9 +198,6 @@ class ControllerBridge:
                 self._start_input_reading(mac)
                 self.publish_assignments_status()
                 print(f"[ControllerBridge] Controller ready: {name} ({mac})")
-
-                publish_notification(self.mqtt_client, "controller", "connected",
-                                     "gamepad", f"Controller connected: {name}")
             else:
                 print(f"[ControllerBridge] Could not find evdev device for {mac} after 5 attempts")
 
@@ -217,9 +215,6 @@ class ControllerBridge:
 
             self.publish_assignments_status()
             print(f"[ControllerBridge] Controller disconnected: {name} ({mac})")
-
-            publish_notification(self.mqtt_client, "controller", "disconnected",
-                                 "gamepad", f"Controller disconnected: {name}")
 
         except Exception as e:
             print(f"[ControllerBridge] Error handling disconnected controller: {e}")
@@ -500,7 +495,10 @@ class ControllerBridge:
                 self.assignments[d] = None
 
         self.assignments[display] = mac
+        name = self.connected_devices[mac].get("name", mac)
         print(f"[ControllerBridge] Assigned {mac} to {display}")
+        publish_notification(self.mqtt_client, "controller", "assigned",
+                             "gamepad", f"{name} -> {display} display")
 
         # Restart input thread with new assignment
         if mac in self.input_threads:

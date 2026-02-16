@@ -27,11 +27,38 @@ void mqttBridgeSetCallbacks(FanSpeedCallback fanCb, TeensyCommandCallback teensy
 void mqttBridgeProcess();
 void mqttBridgePublish(const char* topic, const char* payload);
 
+// Connection state
 bool mqttBridgeIsPiAlive();
 unsigned long mqttBridgeGetLastHeartbeat();
+
+// Original getters
 const String& mqttBridgeGetShader();
 int mqttBridgeGetControllerCount();
 const TeensyMenu& mqttBridgeGetMenu();
+
+// Pi system metrics
+float mqttBridgeGetPiTemp();
+unsigned long mqttBridgeGetPiUptime();
+int mqttBridgeGetPiFanPercent();
+int mqttBridgeGetPiCpuFreqMhz();
+
+// Renderer
+float mqttBridgeGetFps();
+
+// Activity name (priority: preset > video > exec > audio > shader)
+const char* mqttBridgeGetActivityName();
+
+// Teensy labels
+const char* mqttBridgeGetFaceLabel();
+const char* mqttBridgeGetColorLabel();
+
+// Notification state
+bool mqttBridgeHasNotification();
+const char* mqttBridgeGetNotificationTitle();
+const char* mqttBridgeGetNotificationMessage();
+void mqttBridgeClearNotification();
+
+// Teensy communication
 void mqttBridgeHandleTeensyResponse(const String& msg);
 void mqttBridgeRequestTeensySync();
 void mqttBridgePublishSchema();

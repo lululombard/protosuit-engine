@@ -920,7 +920,7 @@ Controls the CPU thermal throttle temperature via `temp_limit` in `/boot/firmwar
 
 **Topic prefix:** `protogen/visor/`
 
-Communicates with the ESP32 (fan/sensor controller) and Teensy (LED matrix controller) over serial, bridged to MQTT.
+Communicates with the ESP32 (fan/sensor controller) and Teensy (LED matrix controller) over serial, bridged to MQTT. The ESPBridge filters and strips large payloads before forwarding to the ESP32 (512-byte serial buffer limit). Forwarded topics include system metrics, renderer performance, launcher status, shader state, device list, and notifications.
 
 ### ESP32 Commands
 
@@ -1044,7 +1044,7 @@ Communicates with the ESP32 (fan/sensor controller) and Teensy (LED matrix contr
 
 **Topic:** `protogen/global/notifications`
 
-Cross-service notification bus. Published by bluetoothbridge, audiobridge, controllerbridge, castbridge, systembridge, and networkingbridge. Subscribed by the web UI (toast notifications) and espbridge (forwards to ESP32 OLED display).
+Cross-service notification bus. Published by bluetoothbridge, audiobridge, controllerbridge, castbridge, systembridge, and networkingbridge. Subscribed by the web UI (toast notifications) and espbridge (forwards to ESP32 OLED display as a 3-second overlay).
 
 | Topic | Payload | R | Description |
 |---|---|---|---|
@@ -1052,11 +1052,17 @@ Cross-service notification bus. Published by bluetoothbridge, audiobridge, contr
 
 ```json
 {
+  "type": "bluetooth",
   "event": "connected",
-  "service": "bluetooth",
-  "message": "Xbox Controller connected"
+  "service": "gamepad",
+  "message": "Controller connected: Xbox Controller",
+  "timestamp": 1692345678.123
 }
 ```
+
+On the ESP32 OLED, notifications are displayed as a full-screen overlay for 3 seconds:
+- **Title line**: `type service event` (e.g. "bluetooth gamepad connected")
+- **Message**: word-wrapped across up to 4 lines (21 chars per line)
 
 ---
 
