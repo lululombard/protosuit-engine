@@ -114,6 +114,8 @@ class CastBridge:
         self._last_spotify_volume = None        # float, 0.0-1.0 MPRIS scale
         self._spotify_mpris_proxy = None        # pydbus proxy for MPRIS Player
         self._spotify_state_change_time = 0     # suppress volumeset around play/pause
+        self._pending_volumeset = None          # debounce buffer for volumeset events
+        self._volumeset_timer = None            # threading.Timer for debounced processing
 
         # Lyrics service
         self._lyrics = LyricsService()
@@ -491,7 +493,13 @@ class CastBridge:
             self._set_spotify_volume_mpris(mpris_vol)
 
     def _handle_spotify_volume_event(self, data: dict):
-        """Handle volumeset event from spotifyd."""
+        """Handle volumeset event from spotifyd.
+
+        Debounces by 1 second so that state-change events (play/pause/stop)
+        arriving shortly after can cancel stale volume reports.  spotifyd
+        fires volumeset with its internal librespot volume on state
+        transitions, which races with the actual state event over MQTT.
+        """
         if not self._spotify_session_active:
             return
 
@@ -499,13 +507,45 @@ class CastBridge:
         system_vol = round(raw_volume / 655.35)
         system_vol = max(0, min(100, system_vol))
 
+        # Immediate guard: still reject if we KNOW a state change just happened
         now = time.monotonic()
-
-        # Ignore volumeset events that arrive right after play/pause/start —
-        # spotifyd echoes its internal librespot volume on state transitions,
-        # which can be stale/max when volume_controller = "none"
         if (now - self._spotify_state_change_time) < 2.0:
             logger.debug(f"Ignoring volumeset {raw_volume} — too close to state change")
+            return
+
+        # Debounce: store and delay processing so a state-change event
+        # arriving within 1s can cancel this (handles the reverse race)
+        self._cancel_pending_volumeset()
+        self._pending_volumeset = (raw_volume, system_vol)
+        self._volumeset_timer = threading.Timer(
+            1.0, self._process_pending_volumeset)
+        self._volumeset_timer.daemon = True
+        self._volumeset_timer.start()
+
+    def _cancel_pending_volumeset(self):
+        """Cancel any debounced volumeset waiting to fire."""
+        if self._volumeset_timer is not None:
+            self._volumeset_timer.cancel()
+            self._volumeset_timer = None
+        if self._pending_volumeset is not None:
+            logger.debug(f"Cancelled pending volumeset {self._pending_volumeset[0]}")
+            self._pending_volumeset = None
+
+    def _process_pending_volumeset(self):
+        """Process a debounced volumeset event after the delay has elapsed."""
+        self._volumeset_timer = None
+        pending = self._pending_volumeset
+        self._pending_volumeset = None
+
+        if pending is None or not self._spotify_session_active:
+            return
+
+        raw_volume, system_vol = pending
+        now = time.monotonic()
+
+        # Re-check state change guard (a state event may have arrived during debounce)
+        if (now - self._spotify_state_change_time) < 2.0:
+            logger.debug(f"Ignoring volumeset {raw_volume} — state change during debounce")
             return
 
         if (self._spotify_volume_source == "audiobridge"
@@ -845,6 +885,7 @@ sessioncontrol = {{
 
         # spotifyd events: "start" (new track), "play" (resume)
         elif event in ("start", "play"):
+            self._cancel_pending_volumeset()
             self._spotify_state_change_time = time.monotonic()
             was_active = self._spotify_session_active
             self._spotify_session_active = True
@@ -866,6 +907,7 @@ sessioncontrol = {{
 
         # spotifyd event: "pause"
         elif event == "pause":
+            self._cancel_pending_volumeset()
             self._spotify_state_change_time = time.monotonic()
             self._spotify_playback["playing"] = False
             self._spotify_playback["position_ms"] = data.get("position_ms", 0)
@@ -873,7 +915,8 @@ sessioncontrol = {{
 
         # spotifyd event: "stop" — session disconnected
         elif event == "stop":
-            self._spotify_playback["playing"] = False
+            self._cancel_pending_volumeset()
+            self._reset_spotify_playback()
             self._stop_spotify_ticker()
             self._spotify_session_active = False
             self._spotify_mpris_proxy = None
@@ -1108,9 +1151,22 @@ sessioncontrol = {{
             self._airplay_dbus_proxy = None
             self._volume_source = None
             self._last_airplay_volume = None
+            self._airplay_playback["title"] = ""
+            self._airplay_playback["artist"] = ""
+            self._airplay_playback["album"] = ""
+            self._airplay_playback["genre"] = ""
+            self._airplay_playback["track_id"] = ""
+            self._airplay_playback["duration_ms"] = 0
+            self._airplay_playback["position_ms"] = 0
             self._airplay_playback["start_frame"] = 0
             self._airplay_playback["prgr_start"] = 0
             self._airplay_playback["prgr_end"] = 0
+            # Clear retained cover art
+            self.mqtt.publish(
+                "protogen/fins/castbridge/status/airplay/playback/cover",
+                b"",
+                retain=True
+            )
 
         self._publish_airplay_playback()
 
