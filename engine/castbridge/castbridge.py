@@ -113,6 +113,7 @@ class CastBridge:
         self._spotify_volume_source_time = 0
         self._last_spotify_volume = None        # float, 0.0-1.0 MPRIS scale
         self._spotify_mpris_proxy = None        # pydbus proxy for MPRIS Player
+        self._spotify_state_change_time = 0     # suppress volumeset around play/pause
 
         # Lyrics service
         self._lyrics = LyricsService()
@@ -492,6 +493,14 @@ class CastBridge:
         system_vol = max(0, min(100, system_vol))
 
         now = time.monotonic()
+
+        # Ignore volumeset events that arrive right after play/pause/start —
+        # spotifyd echoes its internal librespot volume on state transitions,
+        # which can be stale/max when volume_controller = "none"
+        if (now - self._spotify_state_change_time) < 2.0:
+            logger.debug(f"Ignoring volumeset {raw_volume} — too close to state change")
+            return
+
         if (self._spotify_volume_source == "audiobridge"
                 and (now - self._spotify_volume_source_time) < self._volume_cooldown):
             return
@@ -829,6 +838,7 @@ sessioncontrol = {{
 
         # spotifyd events: "start" (new track), "play" (resume)
         elif event in ("start", "play"):
+            self._spotify_state_change_time = time.monotonic()
             was_active = self._spotify_session_active
             self._spotify_session_active = True
             self._spotify_playback["playing"] = True
@@ -849,6 +859,7 @@ sessioncontrol = {{
 
         # spotifyd event: "pause"
         elif event == "pause":
+            self._spotify_state_change_time = time.monotonic()
             self._spotify_playback["playing"] = False
             self._spotify_playback["position_ms"] = data.get("position_ms", 0)
             self._stop_spotify_ticker()
