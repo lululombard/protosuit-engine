@@ -251,16 +251,19 @@ class ControllerBridge:
                     print(f"[ControllerBridge]   evdev: {d.path} name={d.name!r} phys={d.phys!r}")
 
             # Pass 1: MAC in uniq field (device's actual BT address)
+            # Require gamepad buttons to avoid matching touchpad/motion event devices
             mac_normalized = mac.replace(":", "").lower()
             for device in devices:
                 if device.path in already_assigned:
                     continue
                 caps = device.capabilities()
-                if ecodes.EV_KEY in caps or ecodes.EV_ABS in caps:
-                    uniq = device.uniq
-                    if uniq and mac_normalized == uniq.replace(":", "").lower():
-                        print(f"[ControllerBridge] Found by MAC (uniq): {device.path} ({device.name})")
-                        return device.path
+                if ecodes.EV_KEY in caps and ecodes.EV_ABS in caps:
+                    keys = caps[ecodes.EV_KEY]
+                    if ecodes.BTN_SOUTH in keys or ecodes.BTN_GAMEPAD in keys:
+                        uniq = device.uniq
+                        if uniq and mac_normalized == uniq.replace(":", "").lower():
+                            print(f"[ControllerBridge] Found by MAC (uniq): {device.path} ({device.name})")
+                            return device.path
 
             # Pass 2: exact name match, then substring
             if expected_name:
