@@ -486,6 +486,28 @@ class CastBridge:
         else:
             logger.debug("Spotify session start: no system volume cached yet, skipping initial sync")
 
+    def _push_volume_to_spotify(self, reason: str):
+        """Re-push current system volume to Spotify to override librespot's
+        stale internal volume (max when volume_controller = 'none')."""
+        if self._last_system_volume is None:
+            return
+        mpris_vol = self._system_to_spotify_volume(self._last_system_volume)
+        self._last_spotify_volume = mpris_vol
+        self._spotify_volume_source = "audiobridge"
+        self._spotify_volume_source_time = time.monotonic()
+        threading.Thread(
+            target=self._delayed_spotify_volume_push,
+            args=(mpris_vol, reason),
+            daemon=True
+        ).start()
+
+    def _delayed_spotify_volume_push(self, mpris_vol: float, reason: str):
+        """Short delay to let librespot's stale volume report propagate first,
+        then overwrite it with the correct value."""
+        time.sleep(0.5)
+        if self._spotify_session_active:
+            self._set_spotify_volume_mpris(mpris_vol, reason)
+
     def _initial_spotify_volume_sync(self, mpris_vol: float):
         """Wait for MPRIS connection, then push volume to Spotify."""
         time.sleep(2)
@@ -864,6 +886,8 @@ sessioncontrol = {{
             if not was_active:
                 logger.info("Spotify session started, enabling volume sync")
                 self._on_spotify_session_start()
+            else:
+                self._push_volume_to_spotify(f"{event} event")
             self._start_spotify_ticker()
             return  # Ticker will publish
 
@@ -873,6 +897,7 @@ sessioncontrol = {{
             self._spotify_playback["playing"] = False
             self._spotify_playback["position_ms"] = data.get("position_ms", 0)
             self._stop_spotify_ticker()
+            self._push_volume_to_spotify("pause event")
 
         # spotifyd event: "stop" — session disconnected
         elif event == "stop":
