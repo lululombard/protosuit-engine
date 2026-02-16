@@ -410,7 +410,7 @@ class CastBridge:
             self._spotify_volume_source_time = now
             threading.Thread(
                 target=self._set_spotify_volume_mpris,
-                args=(mpris_vol,),
+                args=(mpris_vol, f"audiobridge volume changed to {system_vol}%"),
                 daemon=True
             ).start()
 
@@ -490,7 +490,7 @@ class CastBridge:
         """Wait for MPRIS connection, then push volume to Spotify."""
         time.sleep(2)
         if self._spotify_session_active:
-            self._set_spotify_volume_mpris(mpris_vol)
+            self._set_spotify_volume_mpris(mpris_vol, "initial session sync")
 
     def _handle_spotify_volume_event(self, data: dict):
         """Handle volumeset event from spotifyd."""
@@ -527,12 +527,13 @@ class CastBridge:
             json.dumps({"volume": system_vol})
         )
 
-    def _set_spotify_volume_mpris(self, mpris_vol: float):
+    def _set_spotify_volume_mpris(self, mpris_vol: float, reason: str = ""):
         """Set Spotify volume via MPRIS D-Bus property."""
         try:
             proxy = self._get_spotify_mpris()
             if proxy is None:
                 return
+            logger.info(f"Pushing volume {mpris_vol:.2f} to Spotify MPRIS ({reason})")
             proxy.Volume = mpris_vol
         except Exception as e:
             logger.warning(f"Set Spotify MPRIS volume failed: {e}")
