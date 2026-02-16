@@ -388,6 +388,8 @@ class SystemBridge:
                 client.subscribe("protogen/fins/systembridge/throttle_temp/set")
                 client.subscribe("protogen/fins/systembridge/power/reboot")
                 client.subscribe("protogen/fins/systembridge/power/shutdown")
+                client.subscribe("protogen/fins/config/reload")
+                client.subscribe("protogen/fins/systembridge/config/reload")
             else:
                 print(f"[SystemBridge] Failed to connect to MQTT: {rc}")
 
@@ -446,8 +448,19 @@ class SystemBridge:
                 print("[SystemBridge] Shutdown requested")
                 threading.Thread(target=self._do_shutdown, daemon=True).start()
 
+            elif topic in ("protogen/fins/config/reload", "protogen/fins/systembridge/config/reload"):
+                self._handle_config_reload()
+
         except Exception as e:
             print(f"[SystemBridge] Error handling {topic}: {e}")
+
+    def _handle_config_reload(self):
+        """Reload configuration from file."""
+        print("[SystemBridge] Reloading configuration...")
+        self.config_loader.reload()
+        sb_config = self.config_loader.config.get("systembridge", {})
+        self.publish_interval = sb_config.get("publish_interval", 5)
+        print("[SystemBridge] Configuration reloaded")
 
     # ======== Status Publishing ========
 

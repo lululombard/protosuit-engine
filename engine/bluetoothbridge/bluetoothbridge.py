@@ -277,6 +277,8 @@ class BluetoothBridge:
                 "protogen/fins/bluetoothbridge/bluetooth/restart",
                 "protogen/fins/bluetoothbridge/forget_disconnected",
                 "protogen/fins/bluetoothbridge/status/last_audio_device",
+                "protogen/fins/config/reload",
+                "protogen/fins/bluetoothbridge/config/reload",
             ]
             for topic in topics:
                 client.subscribe(topic)
@@ -318,8 +320,17 @@ class BluetoothBridge:
                 self.forget_disconnected()
             elif topic == "protogen/fins/bluetoothbridge/status/last_audio_device":
                 self._restore_last_audio_device(payload)
+            elif topic in ("protogen/fins/config/reload", "protogen/fins/bluetoothbridge/config/reload"):
+                self.handle_config_reload()
         except Exception as e:
             print(f"[BluetoothBridge] Error handling MQTT: {e}")
+
+    def handle_config_reload(self):
+        """Reload configuration from file."""
+        print("[BluetoothBridge] Reloading configuration...")
+        self.config_loader.reload()
+        self._load_adapter_config()
+        print("[BluetoothBridge] Configuration reloaded")
 
     # ======== Forget Disconnected ========
 

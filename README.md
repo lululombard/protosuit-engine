@@ -269,10 +269,15 @@ For more help, [open an issue on GitHub](https://github.com/lululombard/protosui
 - Custom display driver circuitry instead of separate HDMI-MIPI boards
 
 ### Features
+- **Presets**: Shaders with uniforms in a saved state, along with Teensy parameters, be able to set one as default
+- **PSP Control**: Be able to switch presets with PSP, control launcher, etc.
 - **Shader image/video support**: load images and videos as shader inputs (textures)
+- **Single web page**: Ditch the separate controller/bluetooth/networking/cast and integrate it on the single web page with modals
+- **Web UI refactor**: Terminal style, desktop with folders (presets, shaders, visor), needs to be phone compatible
+- **ESP32 Display refactor**: Needs to show Pi temp, fps, notifications
 
 ### Reliability
-- ~~**Notifications**: expand `protogen/visor/notifications` usage across all services, rename to `protogen/global/notifications`~~ Done
+- **Use same uniform names**: Ability to sync HueF/HueB for color1/color2 when available, same speed names, etc...
 
 ---
 

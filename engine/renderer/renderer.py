@@ -139,6 +139,7 @@ class Renderer:
         self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/file")
         self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/uniform")
         self.mqtt_client.subscribe("protogen/fins/renderer/config/reload")
+        self.mqtt_client.subscribe("protogen/fins/config/reload")
         self.mqtt_client.subscribe("protogen/fins/launcher/status/exec")
         self.mqtt_client.subscribe("protogen/fins/launcher/status/video")
 
@@ -189,7 +190,7 @@ class Renderer:
                 self.handle_shader_command(payload)
             elif topic == "protogen/fins/renderer/set/shader/uniform":
                 self.handle_uniform_command(payload)
-            elif topic == "protogen/fins/renderer/config/reload":
+            elif topic in ("protogen/fins/renderer/config/reload", "protogen/fins/config/reload"):
                 self.handle_control_command("reload_config")
             elif topic == "protogen/fins/launcher/status/exec":
                 self.handle_exec_status(payload)
@@ -398,6 +399,9 @@ class Renderer:
             transition_config = self.config_loader.get_transition_config()
             self.blur_enabled = transition_config.blur.enabled
             self.blur_strength = transition_config.blur.strength
+            self.scan_shaders()
+            self.publish_shader_status()
+            self.publish_uniform_status()
             print("[Renderer] Configuration reloaded")
         except Exception as e:
             print(f"[Renderer] Error reloading config: {e}")
@@ -893,6 +897,11 @@ class Renderer:
         if new_shader is None:
             print(f"[Renderer] Failed to compile shader for {display}")
             return
+
+        # If this shader needs audio and mic isn't available, trigger a retry
+        if new_shader.get("uses_audio_texture") and not self.audio_capture.available:
+            print("[Renderer] FFT shader loaded but no mic - requesting audio retry")
+            self.audio_capture.request_retry()
 
         if state["current"] is None:
             # First shader, no transition

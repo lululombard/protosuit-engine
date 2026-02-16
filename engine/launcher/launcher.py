@@ -80,6 +80,7 @@ class Launcher:
                 client.subscribe("protogen/fins/launcher/kill/video")
                 client.subscribe("protogen/fins/launcher/kill/exec")
                 client.subscribe("protogen/fins/launcher/config/reload")
+                client.subscribe("protogen/fins/config/reload")
                 client.subscribe("protogen/fins/launcher/input/exec")
 
                 print("[Launcher] Subscribed to topics")
@@ -130,7 +131,7 @@ class Launcher:
                 self.handle_kill_exec(payload)
 
             # Config reload
-            elif topic == "protogen/fins/launcher/config/reload":
+            elif topic in ("protogen/fins/launcher/config/reload", "protogen/fins/config/reload"):
                 self.handle_config_reload()
 
             # Input handling for exec

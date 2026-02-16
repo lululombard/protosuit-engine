@@ -219,3 +219,7 @@ function firmwareRestart() {
         sendCommand('protogen/visor/esp/restart', '');
     }
 }
+
+function reloadConfig() {
+    sendCommand('protogen/fins/config/reload', '');
+}

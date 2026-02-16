@@ -161,6 +161,9 @@ class AudioBridge:
                 client.subscribe("protogen/fins/audiobridge/audio/device/set")
                 # Restore last selected device from retained message
                 client.subscribe("protogen/fins/audiobridge/status/audio_device/current")
+                # Config reload
+                client.subscribe("protogen/fins/config/reload")
+                client.subscribe("protogen/fins/audiobridge/config/reload")
             else:
                 print(f"[AudioBridge] Failed to connect to MQTT: {rc}")
 
@@ -191,10 +194,27 @@ class AudioBridge:
                 self.handle_bt_audio_devices_update(payload)
             elif topic == "protogen/fins/audiobridge/status/audio_device/current":
                 self._restore_audio_device_preference(payload)
+            elif topic in ("protogen/fins/config/reload", "protogen/fins/audiobridge/config/reload"):
+                self.handle_config_reload()
         except Exception as e:
             print(f"[AudioBridge] Error handling {topic}: {e}")
             import traceback
             traceback.print_exc()
+
+    def handle_config_reload(self):
+        """Reload configuration from file."""
+        print("[AudioBridge] Reloading configuration...")
+        self.config_loader.reload()
+        audio_config = self.config_loader.config.get("audiobridge", {})
+        volume_config = audio_config.get("volume", {})
+        self.default_volume = volume_config.get("default", 50)
+        self.volume_min = volume_config.get("min", 0)
+        self.volume_max = volume_config.get("max", 100)
+        device_config = audio_config.get("audio_device", {})
+        self.auto_reconnect = device_config.get("auto_reconnect", True)
+        self.fallback_to_non_hdmi = device_config.get("fallback_to_non_hdmi", True)
+        self.exclude_hdmi = device_config.get("exclude_hdmi", True)
+        print("[AudioBridge] Configuration reloaded")
 
     # ======== Volume Control ========
 

@@ -121,6 +121,13 @@ class CastBridge:
         # Load defaults from config.yaml, then override with actual service configs
         self._load_config()
 
+    def _handle_config_reload(self):
+        """Reload configuration from file."""
+        logger.info("Reloading configuration...")
+        self.config = ConfigLoader().config
+        self._load_config()
+        logger.info("Configuration reloaded")
+
     def _load_config(self):
         """Load configuration: defaults from config.yaml, then parse actual service configs"""
         cast_config = self.config.get('cast', {})
@@ -1052,6 +1059,18 @@ sessioncontrol = {{
         self.mqtt.message_callback_add(
             "protogen/fins/audiobridge/status/volume",
             self._handle_audiobridge_volume
+        )
+
+        # Config reload
+        self.mqtt.subscribe("protogen/fins/config/reload")
+        self.mqtt.message_callback_add(
+            "protogen/fins/config/reload",
+            lambda client, userdata, msg: self._handle_config_reload()
+        )
+        self.mqtt.subscribe("protogen/fins/castbridge/config/reload")
+        self.mqtt.message_callback_add(
+            "protogen/fins/castbridge/config/reload",
+            lambda client, userdata, msg: self._handle_config_reload()
         )
 
         logger.info("Subscribed to all MQTT topics")

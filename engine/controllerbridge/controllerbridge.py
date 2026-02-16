@@ -99,6 +99,8 @@ class ControllerBridge:
                 client.subscribe("protogen/fins/bluetoothbridge/status/devices")
                 client.subscribe("protogen/fins/controllerbridge/assign")
                 client.subscribe("protogen/fins/controllerbridge/status/assignments")
+                client.subscribe("protogen/fins/config/reload")
+                client.subscribe("protogen/fins/controllerbridge/config/reload")
             else:
                 print(f"[ControllerBridge] Failed to connect to MQTT: {rc}")
 
@@ -122,10 +124,19 @@ class ControllerBridge:
                 self._handle_assign(payload)
             elif topic == "protogen/fins/controllerbridge/status/assignments":
                 self._restore_assignments(payload)
+            elif topic in ("protogen/fins/config/reload", "protogen/fins/controllerbridge/config/reload"):
+                self.handle_config_reload()
         except Exception as e:
             print(f"[ControllerBridge] Error handling {topic}: {e}")
             import traceback
             traceback.print_exc()
+
+    def handle_config_reload(self):
+        """Reload configuration from file."""
+        print("[ControllerBridge] Reloading configuration...")
+        self.config_loader.reload()
+        self._load_button_mapping()
+        print("[ControllerBridge] Configuration reloaded")
 
     # ======== Device Tracking ========
 

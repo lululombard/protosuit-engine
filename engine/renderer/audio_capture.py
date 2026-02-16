@@ -37,6 +37,7 @@ class AudioCapture:
         self._buffer_lock = threading.Lock()
         self._ring_buffer = np.zeros(self.FFT_SIZE, dtype=np.float32)
         self._buffer_pos = 0
+        self._retry_event = threading.Event()  # Trigger immediate retry
 
         # Smoothing for FFT magnitudes
         self._smoothed_fft = np.zeros(self.TEXTURE_WIDTH, dtype=np.float32)
@@ -85,6 +86,11 @@ class AudioCapture:
     def available(self) -> bool:
         """Whether audio capture is active and producing data."""
         return self._available
+
+    def request_retry(self):
+        """Request an immediate device retry (e.g. when switching to FFT preset)."""
+        if not self._available:
+            self._retry_event.set()
 
     def get_texture_data(self) -> bytes:
         """
@@ -182,17 +188,23 @@ class AudioCapture:
             # Try to open device if not available
             if not self._available:
                 now = time.time()
-                if now - last_retry >= self.RETRY_INTERVAL:
+                forced = self._retry_event.is_set()
+                if forced:
+                    self._retry_event.clear()
+                if forced or now - last_retry >= self.RETRY_INTERVAL:
                     last_retry = now
-                    device_idx = self._find_usb_mic()
-                    if device_idx is not None:
-                        try:
-                            self._open_stream(device_idx)
-                        except Exception as e:
-                            print(f"[AudioCapture] Failed to open device: {e}")
-                            self._close_stream()
-                    else:
-                        print("[AudioCapture] No microphone found, retrying...")
+                    try:
+                        device_idx = self._find_usb_mic()
+                        if device_idx is not None:
+                            try:
+                                self._open_stream(device_idx)
+                            except Exception as e:
+                                print(f"[AudioCapture] Failed to open device: {e}")
+                                self._close_stream()
+                        else:
+                            print("[AudioCapture] No microphone found, retrying...")
+                    except Exception as e:
+                        print(f"[AudioCapture] Device query failed: {e}")
 
                 time.sleep(0.1)
                 continue
