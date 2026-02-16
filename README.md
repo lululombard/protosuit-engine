@@ -67,6 +67,7 @@ See **[hardware/README.md](hardware/README.md)** for PCB details, USB connection
 - **Media Playback**: Videos (exclusive), audio (stackable), synchronized playback
 - **Executables**: Run shell scripts (Doom, Super Haxagon, Ring Ding) across both displays
 - **Bluetooth Device Management**: Discover, pair, and connect devices via D-Bus (BlueZ API)
+- **Presets**: Save and restore complete visor states (shader + uniforms + Teensy params) with a default preset that auto-restores after media playback, gamepad combo activation, and web UI management
 - **Gamepad Input**: Assign controllers to displays with evdev-based input reading and MQTT forwarding
 - **Audio Device Control**: Manage output devices and volume via pulsectl (PulseAudio), with auto-reconnect
 - **AirPlay & Spotify Connect**: Stream audio with now-playing metadata and cover art
@@ -269,7 +270,6 @@ For more help, [open an issue on GitHub](https://github.com/lululombard/protosui
 - Custom display driver circuitry instead of separate HDMI-MIPI boards
 
 ### Features
-- **Presets**: Shaders with uniforms in a saved state, along with Teensy parameters, be able to set one as default
 - **PSP Control**: Be able to switch presets with PSP, control launcher, etc.
 - **Shader image/video support**: load images and videos as shader inputs (textures)
 - **Single web page**: Ditch the separate controller/bluetooth/networking/cast and integrate it on the single web page with modals

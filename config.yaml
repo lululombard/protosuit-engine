@@ -1,6 +1,7 @@
 # Default animation to show on startup
 # When launching external programs, engine automatically switches to "blank" for minimal overhead
-default_animation: "aperture"
+# Default to blank, use presets for a default animation
+default_animation: "blank"
 
 # System configuration
 system:

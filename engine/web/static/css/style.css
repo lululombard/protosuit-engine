@@ -912,6 +912,152 @@ small {
     box-shadow: 0 0 10px rgba(243, 156, 18, 0.4);
 }
 
+/* Preset cards */
+.preset-card {
+    margin-bottom: 10px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.preset-card.preset-active {
+    border-left-color: var(--accent-neon);
+}
+
+.preset-card.preset-default {
+    border-left-color: var(--accent-primary);
+}
+
+.preset-card.preset-active.preset-default {
+    border-left-color: var(--accent-neon);
+}
+
+.preset-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.preset-name {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    font-size: 1em;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.preset-active-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: var(--accent-neon);
+    border-radius: 50%;
+    box-shadow: 0 0 6px var(--accent-neon);
+}
+
+.preset-default-badge {
+    font-size: 0.7em;
+    padding: 2px 6px;
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.preset-info {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8em;
+    color: var(--text-dim);
+    margin-top: 6px;
+}
+
+.preset-actions {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.preset-btn {
+    padding: 4px 10px;
+    font-size: 0.75em;
+    margin: 0;
+}
+
+.preset-btn-danger {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.preset-btn-danger:hover {
+    background: var(--danger);
+    color: var(--bg-primary);
+}
+
+.preset-edit-area {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.preset-edit-section {
+    margin-bottom: 12px;
+}
+
+.preset-edit-section label {
+    display: block;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.preset-edit-section select {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85em;
+    padding: 6px 8px;
+}
+
+.preset-combo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+}
+
+.preset-combo-btn {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    font-size: 0.8em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.preset-combo-btn:has(input:checked) {
+    border-color: var(--accent-primary);
+    background: rgba(243, 156, 18, 0.1);
+}
+
+.preset-combo-btn input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
+}
+
 /* Notification toast */
 .notification {
     position: fixed;

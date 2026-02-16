@@ -6,7 +6,7 @@ let bluetoothIsConnected = false;
 // State
 let bluetoothScanning = false;
 let bluetoothDevices = [];
-let bluetoothAssignments = { left: null, right: null };
+let bluetoothAssignments = { left: null, right: null, presets: null };
 let bluetoothConnectedDevices = new Set();
 let discoveredAudioDevices = [];  // Discovered BT audio devices from scanning
 let audioDevices = [];  // Available PipeWire/PulseAudio sinks
@@ -246,6 +246,17 @@ function initBluetooth() {
         }
     });
 
+    const presetsSelect = document.getElementById('presets-select');
+    presetsSelect.addEventListener('change', (e) => {
+        const mac = e.target.value;
+        if (mac === '__REMOVE__') {
+            removeAssignment('presets');
+            e.target.value = '';
+        } else if (mac) {
+            assignController(mac, 'presets');
+        }
+    });
+
     // Audio device select
     const audioSelect = document.getElementById('audio-device-select');
     audioSelect.addEventListener('change', (e) => {
@@ -482,12 +493,13 @@ function createDeviceCard(device, deviceType) {
 function updateAssignmentSelects() {
     const leftSelect = document.getElementById('left-select');
     const rightSelect = document.getElementById('right-select');
+    const presetsSelect = document.getElementById('presets-select');
 
     // Get connected devices
     const connectedDevs = bluetoothDevices.filter(d => d.connected);
 
-    // Update both selects
-    [leftSelect, rightSelect].forEach(select => {
+    // Update all selects
+    [leftSelect, rightSelect, presetsSelect].forEach(select => {
         const currentValue = select.value;
 
         // Add default and remove options
@@ -570,6 +582,36 @@ function updateAssignments() {
         rightController.classList.remove('disconnected');
         rightController.innerHTML = '<div class="no-assignment">No controller assigned</div>';
         rightSelect.value = '';
+    }
+
+    // Update presets assignment
+    const presetsPanel = document.getElementById('presets-assignment');
+    const presetsController = document.getElementById('presets-controller');
+    const presetsSelect = document.getElementById('presets-select');
+
+    if (bluetoothAssignments.presets) {
+        const isConnected = bluetoothAssignments.presets.connected !== false;
+        const statusText = isConnected ? '' : ' (disconnected)';
+        presetsPanel.classList.add('active');
+        presetsController.classList.add('assigned');
+        if (!isConnected) {
+            presetsController.classList.add('disconnected');
+        } else {
+            presetsController.classList.remove('disconnected');
+        }
+        presetsController.innerHTML = `
+            <div class="controller-info">
+                <div class="controller-name">${bluetoothAssignments.presets.name}${statusText}</div>
+                <div class="controller-mac">${bluetoothAssignments.presets.mac}</div>
+            </div>
+        `;
+        presetsSelect.value = bluetoothAssignments.presets.mac;
+    } else {
+        presetsPanel.classList.remove('active');
+        presetsController.classList.remove('assigned');
+        presetsController.classList.remove('disconnected');
+        presetsController.innerHTML = '<div class="no-assignment">No controller assigned</div>';
+        presetsSelect.value = '';
     }
 }
 

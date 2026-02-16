@@ -67,6 +67,7 @@ class VideoLauncher(BaseLauncher):
                     "--ao=alsa",
                     "--no-osc",
                     "--no-osd-bar",
+                    "--framedrop=decoder+vo",
                     f"--geometry={total_width}x{total_height}+{self.display_config.left_x}+{self.display_config.y}",
                     f"--autofit={total_width}x{total_height}",
                     "--really-quiet",

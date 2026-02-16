@@ -60,7 +60,7 @@ class ControllerBridge:
         # Device tracking
         self.known_devices: Dict[str, Dict] = {}      # {mac: {name, connected}} from bluetoothbridge
         self.connected_devices: Dict[str, Dict] = {}   # {mac: {name, evdev_path}}
-        self.assignments: Dict[str, Optional[str]] = {"left": None, "right": None}
+        self.assignments: Dict[str, Optional[str]] = {"left": None, "right": None, "presets": None}
 
         # Input reading threads
         self.input_threads: Dict[str, threading.Thread] = {}
@@ -68,6 +68,10 @@ class ControllerBridge:
 
         # Button mapping
         self.button_mapping = self._load_button_mapping()
+
+        # Preset combo detection
+        self.preset_combos: Dict = {}       # {frozenset(btn_names): preset_name}
+        self.combo_cooldown: Dict[str, float] = {}  # {mac: last_combo_time}
 
         print("[ControllerBridge] Initialized")
 
@@ -100,6 +104,7 @@ class ControllerBridge:
                 client.subscribe("protogen/fins/bluetoothbridge/status/devices")
                 client.subscribe("protogen/fins/controllerbridge/assign")
                 client.subscribe("protogen/fins/controllerbridge/status/assignments")
+                client.subscribe("protogen/fins/launcher/status/presets")
                 client.subscribe("protogen/fins/config/reload")
                 client.subscribe("protogen/fins/controllerbridge/config/reload")
             else:
@@ -125,6 +130,8 @@ class ControllerBridge:
                 self._handle_assign(payload)
             elif topic == "protogen/fins/controllerbridge/status/assignments":
                 self._restore_assignments(payload)
+            elif topic == "protogen/fins/launcher/status/presets":
+                self._update_preset_combos(payload)
             elif topic in ("protogen/fins/config/reload", "protogen/fins/controllerbridge/config/reload"):
                 self.handle_config_reload()
         except Exception as e:
@@ -368,6 +375,7 @@ class ControllerBridge:
             dpad_x_state = 0
             dpad_y_state = 0
             was_assigned = False
+            pressed_buttons = set()  # Raw button names for combo detection
 
             while not stop_event.is_set():
                 r, _, _ = select.select([device.fd], [], [], 0.01)
@@ -383,22 +391,102 @@ class ControllerBridge:
                     continue
 
                 # Find assignment
-                display = None
-                for disp, assigned_mac in self.assignments.items():
+                assigned_slot = None
+                for slot, assigned_mac in self.assignments.items():
                     if assigned_mac == mac:
-                        display = disp
+                        assigned_slot = slot
                         break
 
-                if not display:
+                if not assigned_slot:
                     was_assigned = False
                     continue
 
                 # Discard buffered events on first assignment
                 if not was_assigned:
-                    print(f"[ControllerBridge] {mac} assigned to {display}, discarding {len(events)} buffered events")
+                    print(f"[ControllerBridge] {mac} assigned to {assigned_slot}, discarding {len(events)} buffered events")
                     was_assigned = True
+                    pressed_buttons.clear()
                     continue
 
+                # Presets controller: combo detection only, no input forwarding
+                if assigned_slot == "presets":
+                    combo_changed = False
+                    for event in events:
+                        if event.type == ecodes.EV_KEY:
+                            btn_names = ecodes.BTN.get(event.code)
+                            if btn_names:
+                                if isinstance(btn_names, str):
+                                    btn_names = [btn_names]
+                                for btn_name in btn_names:
+                                    if event.value == 1:
+                                        pressed_buttons.add(btn_name)
+                                        combo_changed = True
+                                    elif event.value == 0:
+                                        pressed_buttons.discard(btn_name)
+
+                        elif event.type == ecodes.EV_ABS:
+                            abs_names = ecodes.ABS.get(event.code)
+                            if isinstance(abs_names, tuple):
+                                abs_name = abs_names[0]
+                            elif isinstance(abs_names, str):
+                                abs_name = abs_names
+                            else:
+                                continue
+
+                            # Dpad as combo buttons
+                            if abs_name == "ABS_HAT0X":
+                                pressed_buttons.discard("DPAD_LEFT")
+                                pressed_buttons.discard("DPAD_RIGHT")
+                                if event.value == -1:
+                                    pressed_buttons.add("DPAD_LEFT")
+                                    combo_changed = True
+                                elif event.value == 1:
+                                    pressed_buttons.add("DPAD_RIGHT")
+                                    combo_changed = True
+                            elif abs_name == "ABS_HAT0Y":
+                                pressed_buttons.discard("DPAD_UP")
+                                pressed_buttons.discard("DPAD_DOWN")
+                                if event.value == -1:
+                                    pressed_buttons.add("DPAD_UP")
+                                    combo_changed = True
+                                elif event.value == 1:
+                                    pressed_buttons.add("DPAD_DOWN")
+                                    combo_changed = True
+                            # L2/R2 triggers (analog axis treated as button)
+                            elif abs_name == "ABS_Z":
+                                if event.value > 128:
+                                    if "ABS_Z" not in pressed_buttons:
+                                        pressed_buttons.add("ABS_Z")
+                                        combo_changed = True
+                                else:
+                                    pressed_buttons.discard("ABS_Z")
+                            elif abs_name == "ABS_RZ":
+                                if event.value > 128:
+                                    if "ABS_RZ" not in pressed_buttons:
+                                        pressed_buttons.add("ABS_RZ")
+                                        combo_changed = True
+                                else:
+                                    pressed_buttons.discard("ABS_RZ")
+
+                    # Check combos when a button was pressed
+                    if combo_changed and self.preset_combos:
+                        now = time.time()
+                        cooldown = self.combo_cooldown.get(mac, 0)
+                        if now - cooldown >= 1.0:
+                            for combo_set, preset_name in self.preset_combos.items():
+                                if combo_set.issubset(pressed_buttons):
+                                    print(f"[ControllerBridge] Combo matched: {preset_name}")
+                                    self.combo_cooldown[mac] = now
+                                    self.mqtt_client.publish(
+                                        "protogen/fins/launcher/preset/activate",
+                                        json.dumps({"name": preset_name}),
+                                        qos=0
+                                    )
+                                    break
+                    continue
+
+                # Left/right display: forward input to launcher
+                display = assigned_slot
                 for event in events:
                     if event.type == ecodes.EV_KEY:
                         button_names = ecodes.BTN.get(event.code)
@@ -516,14 +604,30 @@ class ControllerBridge:
             if not payload:
                 return
             data = json.loads(payload)
-            for display in ["left", "right"]:
-                if display in data and data[display]:
-                    mac = data[display].get("mac")
+            for slot in ["left", "right", "presets"]:
+                if slot in data and data[slot]:
+                    mac = data[slot].get("mac")
                     if mac:
-                        self.assignments[display] = mac
-                        print(f"[ControllerBridge] Restored assignment: {mac} -> {display}")
+                        self.assignments[slot] = mac
+                        print(f"[ControllerBridge] Restored assignment: {mac} -> {slot}")
         except Exception as e:
             print(f"[ControllerBridge] Error restoring assignments: {e}")
+
+    def _update_preset_combos(self, payload: str):
+        """Update preset combo lookup from launcher presets status."""
+        try:
+            data = json.loads(payload)
+            combos = {}
+            for preset in data.get("presets", []):
+                combo = preset.get("gamepad_combo")
+                if combo and len(combo) > 0:
+                    key = frozenset(combo)
+                    combos[key] = preset["name"]
+            self.preset_combos = combos
+            if combos:
+                print(f"[ControllerBridge] Loaded {len(combos)} preset combos")
+        except Exception as e:
+            print(f"[ControllerBridge] Error updating preset combos: {e}")
 
     # ======== Status Publishing ========
 

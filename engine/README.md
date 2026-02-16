@@ -7,11 +7,11 @@ The `engine/` directory contains all Python services, shared utilities, and conf
 | Service | Directory | Role | Tech |
 |---------|-----------|------|------|
 | [Renderer](renderer/) | `renderer/` | OpenGL shader rendering | ModernGL + Pygame |
-| [Launcher](launcher/) | `launcher/` | Audio/video/executable playback | mpv, ffplay, xdotool |
+| [Launcher](launcher/) | `launcher/` | Audio/video/executable playback, presets | mpv, ffplay, xdotool |
 | [Web](web/) | `web/` | Browser control interface | Flask |
 | [BluetoothBridge](bluetoothbridge/) | `bluetoothbridge/` | BT discovery, pairing, connection | D-Bus, BlueZ |
 | [AudioBridge](audiobridge/) | `audiobridge/` | Audio device/volume management | pulsectl, PulseAudio |
-| [ControllerBridge](controllerbridge/) | `controllerbridge/` | Gamepad input forwarding | evdev + D-Bus |
+| [ControllerBridge](controllerbridge/) | `controllerbridge/` | Gamepad input forwarding, preset combos | evdev + D-Bus |
 | [CastBridge](castbridge/) | `castbridge/` | AirPlay, Spotify, lyrics | D-Bus, systemd, lrclib.net |
 | [NetworkingBridge](networkingbridge/) | `networkingbridge/` | Wi-Fi client/AP, NAT routing | D-Bus, systemd, NetworkManager |
 | [ESPBridge](espbridge/) | `espbridge/` | ESP32 serial bridge | pyserial (CRC-8/SMBUS) |
@@ -206,6 +206,10 @@ All inter-service communication in the Protosuit Engine uses MQTT via the local 
 | `kill/video` | empty | | Force kill video |
 | `kill/exec` | empty | | Force kill executable |
 | `config/reload` | empty | | Rescan asset directories |
+| `preset/save` | JSON | | Save or update a preset |
+| `preset/delete` | JSON | | Delete a preset by name |
+| `preset/activate` | JSON | | Activate a preset by name |
+| `preset/set_default` | JSON | | Set or clear the default preset |
 
 #### `start/audio`
 
@@ -258,6 +262,7 @@ JSON form:
 | `status/audio` | JSON | **R** | Currently playing and available audio files |
 | `status/video` | JSON | **R** | Currently playing and available video files |
 | `status/exec` | JSON | **R** | Currently running executable and available scripts |
+| `status/presets` | JSON | **R** | All presets, active preset, and default preset |
 
 #### `status/audio`
 
@@ -284,6 +289,74 @@ JSON form:
   "running": "script.sh",
   "pid": 1234,
   "available": ["script.sh", "game.sh"]
+}
+```
+
+#### `preset/save`
+
+```json
+{
+  "name": "Angry Mode",
+  "shader": "stars",
+  "uniforms": {
+    "speed": {"display": "both", "type": "float", "value": 3.0},
+    "color1": {"display": "both", "type": "vec3", "value": [1.0, 0.0, 0.0]}
+  },
+  "teensy": {"face": 2, "color": 5, "hueF": 120},
+  "launcher_action": null,
+  "gamepad_combo": null
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Preset name (used as key) |
+| `shader` | string | yes | Animation name to load |
+| `uniforms` | object | yes | Uniform values keyed by name |
+| `teensy` | object | yes | Teensy parameter values |
+| `launcher_action` | object/null | no | Auto-start media: `{"type": "video"|"exec"|"audio", "file": "filename"}` |
+| `gamepad_combo` | array/null | no | Raw evdev button names: `["BTN_SOUTH", "BTN_EAST"]` |
+
+#### `preset/delete`
+
+```json
+{"name": "Angry Mode"}
+```
+
+#### `preset/activate`
+
+```json
+{"name": "Angry Mode"}
+```
+
+Applies the preset's shader, uniforms, teensy params, and optionally starts a launcher action.
+
+#### `preset/set_default`
+
+```json
+{"name": "Angry Mode"}
+```
+
+Set `name` to `null` to clear the default. The default preset auto-applies on boot and when a video or executable finishes.
+
+#### `status/presets`
+
+```json
+{
+  "presets": [
+    {
+      "name": "Angry Mode",
+      "shader": "stars",
+      "uniforms": {
+        "speed": {"display": "both", "type": "float", "value": 3.0}
+      },
+      "teensy": {"face": 2, "color": 5},
+      "launcher_action": null,
+      "gamepad_combo": ["BTN_SOUTH", "BTN_EAST"]
+    }
+  ],
+  "active_preset": "Angry Mode",
+  "default_preset": null
 }
 ```
 
@@ -435,15 +508,15 @@ Manages audio output devices and volume via pulsectl (PulseAudio).
 
 **Topic prefix:** `protogen/fins/controllerbridge/`
 
-Reads gamepad input via evdev, forwards to launcher as MQTT.
+Reads gamepad input via evdev, forwards to launcher as MQTT. Supports three assignment slots: left display, right display, and a dedicated presets controller for gamepad combo activation.
 
-**Data flow:** bluetoothbridge publishes device list -> controllerbridge maps MAC to evdev -> reads input -> publishes to `launcher/input/exec`.
+**Data flow:** bluetoothbridge publishes device list -> controllerbridge maps MAC to evdev -> reads input -> publishes to `launcher/input/exec` (left/right) or `launcher/preset/activate` (presets).
 
 ### Commands
 
 | Topic | Payload | R | Description |
 |---|---|---|---|
-| `assign` | JSON | **R** | Assign or unassign a controller to a display |
+| `assign` | JSON | **R** | Assign or unassign a controller to a slot |
 
 #### `assign`
 
@@ -455,19 +528,28 @@ Assign a controller:
 }
 ```
 
-Unassign a display:
+Valid display values: `"left"`, `"right"`, `"presets"`
+
+Unassign a slot:
 ```json
 {
   "mac": null,
-  "display": "left"
+  "display": "presets"
 }
 ```
+
+### Subscribes
+
+| Topic | Payload | R | Description |
+|---|---|---|---|
+| `protogen/fins/bluetoothbridge/status/devices` | JSON | **R** | Gamepad connection/disconnection events |
+| `protogen/fins/launcher/status/presets` | JSON | **R** | Preset gamepad combos for combo detection |
 
 ### Status (retained)
 
 | Topic | Payload | R | Description |
 |---|---|---|---|
-| `status/assignments` | JSON | **R** | Current controller-to-display mapping |
+| `status/assignments` | JSON | **R** | Current controller-to-slot assignments |
 
 #### `status/assignments`
 
@@ -478,9 +560,18 @@ Unassign a display:
     "name": "Xbox Wireless Controller",
     "connected": true
   },
-  "right": null
+  "right": null,
+  "presets": null
 }
 ```
+
+### Publishes (cross-service)
+
+| Topic | Payload | R | Description |
+|---|---|---|---|
+| `protogen/fins/launcher/input/exec` | JSON | | Forwarded input from left/right controllers |
+| `protogen/fins/launcher/preset/activate` | JSON | | Preset activation from gamepad combo match |
+| `protogen/global/notifications` | JSON | | Controller connect/disconnect notifications |
 
 ---
 
@@ -1146,6 +1237,25 @@ mosquitto_pub -t 'protogen/visor/esp/set/fan' -m '75'
 mosquitto_pub -t 'protogen/visor/teensy/menu/set' -m '{"param":"bright","value":200}'
 ```
 
+### Save a preset
+
+```bash
+mosquitto_pub -t 'protogen/fins/launcher/preset/save' \
+  -m '{"name":"Angry","shader":"stars","uniforms":{"speed":{"display":"both","type":"float","value":3.0}},"teensy":{"face":2,"color":5},"launcher_action":null,"gamepad_combo":null}'
+```
+
+### Activate a preset
+
+```bash
+mosquitto_pub -t 'protogen/fins/launcher/preset/activate' -m '{"name":"Angry"}'
+```
+
+### Set default preset
+
+```bash
+mosquitto_pub -t 'protogen/fins/launcher/preset/set_default' -m '{"name":"Angry"}'
+```
+
 ### Watch all retained status topics
 
 ```bash
@@ -1190,10 +1300,15 @@ protogen/
       kill/video
       kill/exec
       config/reload
+      preset/save
+      preset/delete
+      preset/activate
+      preset/set_default
       setup
       status/audio                [R]
       status/video                [R]
       status/exec                 [R]
+      status/presets              [R]
     bluetoothbridge/
       scan/start
       scan/stop

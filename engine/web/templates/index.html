@@ -73,6 +73,17 @@
                 </div>
             </section>
 
+            <!-- Presets -->
+            <section class="panel">
+                <h2>Presets</h2>
+                <div id="presetsList">
+                    <p><em>No presets saved</em></p>
+                </div>
+                <div class="button-group" style="margin-top: 15px;">
+                    <button onclick="saveCurrentAsPreset()">Save Current as Preset</button>
+                </div>
+            </section>
+
             <!-- File Browser -->
             <section class="panel">
                 <h2>File Browser</h2>
@@ -351,6 +362,7 @@
     <script src="{{ url_for('static', filename='js/file_browser.js') }}"></script>
     <script src="{{ url_for('static', filename='js/system.js') }}"></script>
     <script src="{{ url_for('static', filename='js/teensy.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/presets.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 

@@ -74,6 +74,8 @@ function connectMQTT() {
                 handleTeensyParamStatus(param, payload);
             } else if (topic === 'protogen/visor/teensy/menu/saved') {
                 handleTeensySaved();
+            } else if (topic === 'protogen/fins/launcher/status/presets') {
+                handlePresetsStatus(payload);
             } else if (topic === 'protogen/global/notifications') {
                 handleMqttNotification(payload);
             }

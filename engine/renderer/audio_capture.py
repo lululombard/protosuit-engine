@@ -38,6 +38,7 @@ class AudioCapture:
         self._ring_buffer = np.zeros(self.FFT_SIZE, dtype=np.float32)
         self._buffer_pos = 0
         self._retry_event = threading.Event()  # Trigger immediate retry
+        self._retry_until = 0.0  # Deadline for burst retry window
 
         # Smoothing for FFT magnitudes
         self._smoothed_fft = np.zeros(self.TEXTURE_WIDTH, dtype=np.float32)
@@ -88,8 +89,9 @@ class AudioCapture:
         return self._available
 
     def request_retry(self):
-        """Request an immediate device retry (e.g. when switching to FFT preset)."""
+        """Request immediate device retries (e.g. when switching to FFT shader)."""
         if not self._available:
+            self._retry_until = time.time() + 10.0  # Retry every 2s for 10s
             self._retry_event.set()
 
     def get_texture_data(self) -> bytes:
@@ -119,9 +121,19 @@ class AudioCapture:
                 self._ring_buffer[: n - first] = samples[first:]
             self._buffer_pos = end % self.FFT_SIZE
 
-    def _find_usb_mic(self):
+    def _find_usb_mic(self, rescan=False):
         """Find a USB microphone device index."""
         import sounddevice as sd
+
+        if rescan:
+            # Force PortAudio to rebuild device list so newly connected
+            # USB devices (or devices that finished enumerating after boot)
+            # become visible to query_devices()
+            try:
+                sd._terminate()
+                sd._initialize()
+            except Exception:
+                pass
 
         devices = sd.query_devices()
         for i, dev in enumerate(devices):
@@ -191,17 +203,24 @@ class AudioCapture:
                 forced = self._retry_event.is_set()
                 if forced:
                     self._retry_event.clear()
-                if forced or now - last_retry >= self.RETRY_INTERVAL:
+
+                # Use shorter interval during burst retry window (after shader switch)
+                in_burst = now < self._retry_until
+                interval = 2.0 if in_burst else self.RETRY_INTERVAL
+
+                if forced or now - last_retry >= interval:
                     last_retry = now
                     try:
-                        device_idx = self._find_usb_mic()
+                        # Rescan on retries so PortAudio picks up
+                        # USB devices that appeared after boot
+                        device_idx = self._find_usb_mic(rescan=True)
                         if device_idx is not None:
                             try:
                                 self._open_stream(device_idx)
                             except Exception as e:
                                 print(f"[AudioCapture] Failed to open device: {e}")
                                 self._close_stream()
-                        else:
+                        elif not in_burst:
                             print("[AudioCapture] No microphone found, retrying...")
                     except Exception as e:
                         print(f"[AudioCapture] Device query failed: {e}")

@@ -8,7 +8,8 @@ import signal
 import json
 import os
 import glob
-from typing import Optional, List
+import threading
+from typing import Optional, List, Dict
 import sys
 
 # Add project root to path
@@ -19,6 +20,7 @@ from launcher.launchers.audio_launcher import AudioLauncher
 from launcher.launchers.video_launcher import VideoLauncher
 from launcher.launchers.exec_launcher import ExecLauncher
 from utils.mqtt_client import create_mqtt_client
+from utils.service_controller import ServiceController
 
 
 class Launcher:
@@ -31,9 +33,12 @@ class Launcher:
         - protogen/fins/launcher/kill/{audio,video,exec}
         - protogen/fins/launcher/config/reload
         - protogen/fins/launcher/input/exec
+        - protogen/fins/launcher/preset/{save,delete,activate,set_default}
+        - protogen/fins/launcher/status/presets  (retained restore)
 
     Publishes:
         - protogen/fins/launcher/status/{audio,video,exec}
+        - protogen/fins/launcher/status/presets
     """
 
     def __init__(self):
@@ -60,6 +65,12 @@ class Launcher:
         self.video_dir = os.path.join(os.getcwd(), "assets", "video")
         self.exec_dir = os.path.join(os.getcwd(), "assets", "executables")
 
+        # Presets
+        self.presets: List[Dict] = []
+        self.active_preset: Optional[str] = None
+        self.default_preset: Optional[str] = None
+        self._presets_restored = False
+
         print("[Launcher] Initialized")
 
     def init_mqtt(self):
@@ -83,6 +94,13 @@ class Launcher:
                 client.subscribe("protogen/fins/config/reload")
                 client.subscribe("protogen/fins/launcher/input/exec")
 
+                # Preset topics
+                client.subscribe("protogen/fins/launcher/preset/save")
+                client.subscribe("protogen/fins/launcher/preset/delete")
+                client.subscribe("protogen/fins/launcher/preset/activate")
+                client.subscribe("protogen/fins/launcher/preset/set_default")
+                client.subscribe("protogen/fins/launcher/status/presets")
+
                 print("[Launcher] Subscribed to topics")
             else:
                 print(f"[Launcher] Failed to connect to MQTT broker: {rc}")
@@ -102,6 +120,8 @@ class Launcher:
         self.publish_audio_status()
         self.publish_video_status()
         self.publish_exec_status()
+
+        # Default preset is applied after retained presets are restored (see _restore_presets)
 
     def on_mqtt_message(self, topic: str, payload: str):
         """Handle incoming MQTT messages"""
@@ -138,6 +158,18 @@ class Launcher:
             elif topic == "protogen/fins/launcher/input/exec":
                 if self.exec_launcher:
                     self.exec_launcher.handle_input_message(payload)
+
+            # Preset commands
+            elif topic == "protogen/fins/launcher/preset/save":
+                self.handle_preset_save(payload)
+            elif topic == "protogen/fins/launcher/preset/delete":
+                self.handle_preset_delete(payload)
+            elif topic == "protogen/fins/launcher/preset/activate":
+                self.handle_preset_activate(payload)
+            elif topic == "protogen/fins/launcher/preset/set_default":
+                self.handle_preset_set_default(payload)
+            elif topic == "protogen/fins/launcher/status/presets":
+                self._restore_presets(payload)
 
         except Exception as e:
             print(f"[Launcher] Error handling message on {topic}: {e}")
@@ -477,6 +509,7 @@ class Launcher:
         print("[Launcher] Video playback ended")
         self.video_launcher = None
         self.publish_video_status()
+        self._apply_default_preset()
 
     def _on_exec_exit(self):
         """Callback when executable exits"""
@@ -484,6 +517,225 @@ class Launcher:
         self.exec_launcher = None
         self.current_exec_name = None
         self.publish_exec_status()
+        self._apply_default_preset()
+
+    # ======== Presets ========
+
+    def _restore_presets(self, payload: str):
+        """Restore presets from retained MQTT message (one-shot on startup)."""
+        if self._presets_restored:
+            return
+        self._presets_restored = True
+
+        try:
+            data = json.loads(payload)
+            self.presets = data.get("presets", [])
+            self.default_preset = data.get("default_preset")
+            self.active_preset = data.get("active_preset")
+            print(f"[Launcher] Restored {len(self.presets)} presets"
+                  f" (default: {self.default_preset})")
+
+            # Apply default preset once renderer is up
+            if self.default_preset:
+                threading.Thread(
+                    target=self._wait_and_apply_default,
+                    daemon=True
+                ).start()
+        except Exception as e:
+            print(f"[Launcher] Error restoring presets: {e}")
+
+    def handle_preset_save(self, payload: str):
+        """Save or update a preset."""
+        try:
+            preset = json.loads(payload)
+            name = preset.get("name")
+            if not name:
+                print("[Launcher] Preset save: missing name")
+                return
+
+            # Ensure required fields
+            preset.setdefault("shader", None)
+            preset.setdefault("uniforms", {})
+            preset.setdefault("teensy", {})
+            preset.setdefault("launcher_action", None)
+            preset.setdefault("gamepad_combo", None)
+
+            # Upsert by name
+            for i, p in enumerate(self.presets):
+                if p["name"] == name:
+                    self.presets[i] = preset
+                    print(f"[Launcher] Updated preset: {name}")
+                    break
+            else:
+                self.presets.append(preset)
+                print(f"[Launcher] Saved new preset: {name}")
+
+            self.publish_presets_status()
+
+        except Exception as e:
+            print(f"[Launcher] Error saving preset: {e}")
+
+    def handle_preset_delete(self, payload: str):
+        """Delete a preset by name."""
+        try:
+            data = json.loads(payload)
+            name = data.get("name")
+            if not name:
+                return
+
+            self.presets = [p for p in self.presets if p["name"] != name]
+
+            if self.default_preset == name:
+                self.default_preset = None
+            if self.active_preset == name:
+                self.active_preset = None
+
+            print(f"[Launcher] Deleted preset: {name}")
+            self.publish_presets_status()
+
+        except Exception as e:
+            print(f"[Launcher] Error deleting preset: {e}")
+
+    def handle_preset_activate(self, payload: str, skip_launcher_action: bool = False):
+        """Activate a preset: apply shader, uniforms, teensy, and optionally launcher action."""
+        try:
+            if isinstance(payload, str):
+                data = json.loads(payload)
+            else:
+                data = payload
+            name = data.get("name")
+            if not name:
+                return
+
+            preset = next((p for p in self.presets if p["name"] == name), None)
+            if not preset:
+                print(f"[Launcher] Preset not found: {name}")
+                return
+
+            print(f"[Launcher] Activating preset: {name}")
+
+            # Apply shader
+            shader = preset.get("shader")
+            if shader and self.mqtt_client:
+                shader_cmd = json.dumps({
+                    "display": "both",
+                    "name": shader,
+                    "transition_duration": 0.75
+                })
+                self.mqtt_client.publish(
+                    "protogen/fins/renderer/set/shader/file", shader_cmd
+                )
+
+            # Apply uniforms
+            for uniform_name, uniform_data in preset.get("uniforms", {}).items():
+                if self.mqtt_client:
+                    uniform_cmd = json.dumps({
+                        "display": uniform_data.get("display", "both"),
+                        "name": uniform_name,
+                        "type": uniform_data.get("type", "float"),
+                        "value": uniform_data.get("value")
+                    })
+                    self.mqtt_client.publish(
+                        "protogen/fins/renderer/set/shader/uniform", uniform_cmd
+                    )
+
+            # Apply teensy params
+            for param, value in preset.get("teensy", {}).items():
+                if self.mqtt_client:
+                    teensy_cmd = json.dumps({"param": param, "value": value})
+                    self.mqtt_client.publish(
+                        "protogen/visor/teensy/menu/set", teensy_cmd
+                    )
+
+            # Kill running launcher actions, then start new one
+            if not skip_launcher_action:
+                # Detach exit callbacks before stopping to prevent default preset restore
+                if self.video_launcher:
+                    self.video_launcher.on_exit_callback = None
+                if self.exec_launcher:
+                    self.exec_launcher.on_exit_callback = None
+                self.handle_stop_video()
+                self.handle_stop_exec()
+
+                action = preset.get("launcher_action")
+                if action:
+                    action_type = action.get("type")
+                    action_file = action.get("file")
+                    if action_type == "video" and action_file:
+                        self.handle_start_video(action_file)
+                    elif action_type == "exec" and action_file:
+                        self.handle_start_exec(action_file)
+                    elif action_type == "audio" and action_file:
+                        self.handle_start_audio(action_file)
+
+            self.active_preset = name
+            self.publish_presets_status()
+
+        except Exception as e:
+            print(f"[Launcher] Error activating preset: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def handle_preset_set_default(self, payload: str):
+        """Set or clear the default preset."""
+        try:
+            data = json.loads(payload)
+            name = data.get("name")
+            self.default_preset = name
+            print(f"[Launcher] Default preset: {name}")
+            self.publish_presets_status()
+
+        except Exception as e:
+            print(f"[Launcher] Error setting default preset: {e}")
+
+    def _wait_and_apply_default(self):
+        """Wait for renderer to be active via D-Bus, then apply default preset."""
+        import time
+        renderer = ServiceController("protosuit-renderer")
+        for _ in range(30):  # Up to 30 seconds
+            if renderer.is_active():
+                print("[Launcher] Renderer is active, waiting for it to initialize...")
+                time.sleep(3)
+                print("[Launcher] Applying default preset")
+                self.handle_preset_activate(
+                    json.dumps({"name": self.default_preset})
+                )
+                return
+            time.sleep(1)
+        print("[Launcher] Timed out waiting for renderer, applying default preset anyway")
+        self.handle_preset_activate(
+            json.dumps({"name": self.default_preset})
+        )
+
+    def _apply_default_preset(self):
+        """Apply the default preset (skip launcher action to avoid loops)."""
+        if not self.default_preset:
+            return
+
+        print(f"[Launcher] Applying default preset: {self.default_preset}")
+        self.handle_preset_activate(
+            json.dumps({"name": self.default_preset}),
+            skip_launcher_action=True
+        )
+
+    def publish_presets_status(self):
+        """Publish full presets state as retained MQTT."""
+        if not self.mqtt_client:
+            return
+
+        try:
+            status = {
+                "presets": self.presets,
+                "active_preset": self.active_preset,
+                "default_preset": self.default_preset,
+            }
+            self.mqtt_client.publish(
+                "protogen/fins/launcher/status/presets",
+                json.dumps(status),
+                retain=True
+            )
+        except Exception as e:
+            print(f"[Launcher] Error publishing presets status: {e}")
 
     def cleanup(self):
         """Clean up all resources"""
