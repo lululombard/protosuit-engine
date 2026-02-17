@@ -81,6 +81,7 @@
                 </div>
                 <div class="button-group" style="margin-top: 15px;">
                     <button onclick="saveCurrentAsPreset()">Save Current as Preset</button>
+                    <button onclick="importPresetJson()">Import Preset</button>
                 </div>
             </section>
 
@@ -289,6 +290,8 @@
                 <div id="teensyMenuControls">
                     <p><em>Waiting for schema...</em></p>
                 </div>
+                <h3 style="margin-top: 15px;">LED Strip Hue Override</h3>
+                <div id="espHueControls"></div>
                 <div class="button-group" style="margin-top: 15px;">
                     <button onclick="teensyRefresh()">Refresh</button>
                     <button onclick="teensySave()" id="teensySaveBtn">Save to EEPROM</button>

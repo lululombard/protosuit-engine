@@ -11,6 +11,10 @@ static bool piAlive = false;
 static unsigned long lastPiHeartbeat = 0;
 static TeensyMenu teensyMenu;
 
+// ESP hue overrides (-1 = follow teensy, 0-254 = override)
+static int16_t espHueF = -1;
+static int16_t espHueB = -1;
+
 // Pi system metrics (from systembridge)
 static float piTemp = 0;
 static unsigned long piUptime = 0;
@@ -124,6 +128,25 @@ static const ParamMapping* findByProto(const String& name) {
     return nullptr;
 }
 
+// Update LED strips with effective hue (respecting ESP overrides)
+static void updateLedStrips() {
+    bool hasOverride = (espHueF >= 0 && espHueF <= 254) || (espHueB >= 0 && espHueB <= 254);
+    uint8_t hueF = (espHueF >= 0 && espHueF <= 254) ? (uint8_t)espHueF : teensyMenu.hueF;
+    uint8_t hueB = (espHueB >= 0 && espHueB <= 254) ? (uint8_t)espHueB : teensyMenu.hueB;
+    // Force BASE color mode when override is active so hue values take effect
+    uint8_t color = hasOverride ? 0 : teensyMenu.color;
+    ledStripsSetColor(color, hueF, hueB, teensyMenu.bright);
+}
+
+static void publishEspHueStatus() {
+    JsonDocument doc;
+    doc["hueF"] = espHueF;
+    doc["hueB"] = espHueB;
+    char buffer[48];
+    serializeJson(doc, buffer);
+    mqttBridgePublish("protogen/visor/esp/status/hue", buffer);
+}
+
 void mqttBridgeInit() {
     Serial.begin(PI_BAUD);
     inputBuffer.reserve(512);
@@ -170,6 +193,30 @@ static void processMessage(const String& topic, const String& payload) {
         if (fanCurveSetConfig(payload.c_str())) {
             fanCurveSave();
             mqttBridgePublish("protogen/visor/esp/status/fancurve", fanCurveConfigToJson().c_str());
+        }
+    }
+    else if (topic == "protogen/visor/esp/set/hue") {
+        JsonDocument doc;
+        if (deserializeJson(doc, payload) == DeserializationError::Ok) {
+            bool changed = false;
+            if (doc.containsKey("hueF")) {
+                int16_t val = doc["hueF"].as<int16_t>();
+                if (val >= -1 && val <= 254 && val != espHueF) {
+                    espHueF = val;
+                    changed = true;
+                }
+            }
+            if (doc.containsKey("hueB")) {
+                int16_t val = doc["hueB"].as<int16_t>();
+                if (val >= -1 && val <= 254 && val != espHueB) {
+                    espHueB = val;
+                    changed = true;
+                }
+            }
+            if (changed) {
+                updateLedStrips();
+                publishEspHueStatus();
+            }
         }
     }
     else if (topic.startsWith("protogen/fins/renderer/status/shader")) {
@@ -289,7 +336,7 @@ static void processMessage(const String& topic, const String& payload) {
                     // Update LED strips when relevant params change
                     String p = String(param);
                     if (p == "color" || p == "hueF" || p == "hueB" || p == "bright") {
-                        ledStripsSetColor(teensyMenu.color, teensyMenu.hueF, teensyMenu.hueB, teensyMenu.bright);
+                        updateLedStrips();
                     } else if (p == "face") {
                         ledStripsSetFace(teensyMenu.face);
                     }
@@ -488,7 +535,7 @@ void mqttBridgeHandleTeensyResponse(const String& msg) {
             // Sync LED strips when Teensy reports param values (boot sync)
             String proto = String(m->proto);
             if (proto == "COLOR" || proto == "HUEF" || proto == "HUEB" || proto == "BRIGHT") {
-                ledStripsSetColor(teensyMenu.color, teensyMenu.hueF, teensyMenu.hueB, teensyMenu.bright);
+                updateLedStrips();
             } else if (proto == "FACE") {
                 ledStripsSetFace(teensyMenu.face);
             }
@@ -520,4 +567,8 @@ void mqttBridgePublishSchema() {
 
 void mqttBridgeRequestTeensySync() {
     if (onTeensyCommand) onTeensyCommand("GET ALL");
+}
+
+void mqttBridgePublishEspHueStatus() {
+    publishEspHueStatus();
 }

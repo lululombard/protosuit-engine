@@ -147,6 +147,7 @@ void loop() {
     if (!initialSyncDone && now >= 3000) {
         initialSyncDone = true;
         mqttBridgePublishSchema();
+        mqttBridgePublishEspHueStatus();
         mqttBridgeRequestTeensySync();
     }
 

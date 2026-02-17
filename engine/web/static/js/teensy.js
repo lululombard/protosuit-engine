@@ -80,6 +80,9 @@ function buildTeensyControls() {
     for (const [param, data] of Object.entries(teensyValues)) {
         updateTeensyControl(param, data);
     }
+
+    // Build ESP hue override controls
+    buildEspHueControls();
 }
 
 function buildToggleControl(param, label, spec) {
@@ -179,4 +182,112 @@ function teensyRefresh() {
 
 function teensySave() {
     sendCommand('protogen/visor/teensy/menu/save', '', true);
+}
+
+// ======== ESP32 LED Strip Hue Overrides ========
+
+let espHueValues = { hueF: -1, hueB: -1 };
+let espHueSliderTimers = {};
+
+function handleEspHueStatus(payload) {
+    try {
+        espHueValues = JSON.parse(payload);
+        updateEspHueUI();
+    } catch (e) {
+        console.error('Error parsing ESP hue status:', e);
+    }
+}
+
+function buildEspHueControls() {
+    const container = document.getElementById('espHueControls');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="teensy-param">
+            <div class="teensy-param-header">
+                <span class="teensy-param-label">ESP Hue Front</span>
+                <span class="teensy-param-value" id="espHueFValue">Follow Teensy</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85em; white-space: nowrap; cursor: pointer;">
+                    <input type="checkbox" id="espHueFFollow" checked
+                        onchange="toggleEspHueFollow('hueF', this.checked)">
+                    Follow
+                </label>
+                <input type="range" id="espHueFSlider" min="0" max="254" value="0" disabled
+                    style="flex: 1; opacity: 0.5;"
+                    oninput="espHueSliderInput('hueF', parseInt(this.value))">
+            </div>
+        </div>
+        <div class="teensy-param">
+            <div class="teensy-param-header">
+                <span class="teensy-param-label">ESP Hue Back</span>
+                <span class="teensy-param-value" id="espHueBValue">Follow Teensy</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85em; white-space: nowrap; cursor: pointer;">
+                    <input type="checkbox" id="espHueBFollow" checked
+                        onchange="toggleEspHueFollow('hueB', this.checked)">
+                    Follow
+                </label>
+                <input type="range" id="espHueBSlider" min="0" max="254" value="0" disabled
+                    style="flex: 1; opacity: 0.5;"
+                    oninput="espHueSliderInput('hueB', parseInt(this.value))">
+            </div>
+        </div>
+    `;
+
+    updateEspHueUI();
+}
+
+function updateEspHueUI() {
+    ['hueF', 'hueB'].forEach(param => {
+        const suffix = param === 'hueF' ? 'F' : 'B';
+        const slider = document.getElementById(`espHue${suffix}Slider`);
+        const valEl = document.getElementById(`espHue${suffix}Value`);
+        const follow = document.getElementById(`espHue${suffix}Follow`);
+        if (!slider || !valEl || !follow) return;
+
+        const isFollow = espHueValues[param] === -1;
+        follow.checked = isFollow;
+        slider.disabled = isFollow;
+        slider.style.opacity = isFollow ? '0.5' : '1';
+        if (isFollow) {
+            valEl.textContent = 'Follow Teensy';
+        } else {
+            valEl.textContent = espHueValues[param] + ' / 254';
+            if (document.activeElement !== slider) {
+                slider.value = espHueValues[param];
+            }
+        }
+    });
+}
+
+function sendEspHue() {
+    sendCommand('protogen/visor/esp/set/hue',
+        JSON.stringify({ hueF: espHueValues.hueF, hueB: espHueValues.hueB }), true);
+}
+
+function toggleEspHueFollow(param, checked) {
+    espHueValues[param] = checked ? -1 : 0;
+    updateEspHueUI();
+    sendEspHue();
+}
+
+function espHueSliderInput(param, value) {
+    const suffix = param === 'hueF' ? 'F' : 'B';
+    const valEl = document.getElementById(`espHue${suffix}Value`);
+    if (valEl) valEl.textContent = value + ' / 254';
+
+    if (espHueSliderTimers[param]) return;
+    espHueValues[param] = value;
+    sendEspHue();
+    espHueSliderTimers[param] = setTimeout(() => {
+        espHueSliderTimers[param] = null;
+        const slider = document.getElementById(`espHue${suffix}Slider`);
+        if (slider) {
+            espHueValues[param] = parseInt(slider.value);
+            sendEspHue();
+        }
+    }, 100);
 }

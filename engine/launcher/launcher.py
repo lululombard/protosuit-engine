@@ -557,6 +557,7 @@ class Launcher:
             preset.setdefault("shader", None)
             preset.setdefault("uniforms", {})
             preset.setdefault("teensy", {})
+            preset.setdefault("esp", {})
             preset.setdefault("launcher_action", None)
             preset.setdefault("gamepad_combo", None)
 
@@ -646,6 +647,17 @@ class Launcher:
                     self.mqtt_client.publish(
                         "protogen/visor/teensy/menu/set", teensy_cmd
                     )
+
+            # Apply ESP hue overrides
+            esp_params = preset.get("esp", {})
+            if self.mqtt_client:
+                hue_cmd = json.dumps({
+                    "hueF": esp_params.get("hueF", -1),
+                    "hueB": esp_params.get("hueB", -1)
+                })
+                self.mqtt_client.publish(
+                    "protogen/visor/esp/set/hue", hue_cmd
+                )
 
             # Kill running launcher actions, then start new one
             if not skip_launcher_action:

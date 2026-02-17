@@ -74,6 +74,7 @@ class ESPBridge:
         "protogen/visor/esp/set/fan",
         "protogen/visor/esp/set/fanmode",
         "protogen/visor/esp/config/fancurve",
+        "protogen/visor/esp/set/hue",
         "protogen/fins/renderer/status/shader",
         "protogen/fins/renderer/status/performance",
         "protogen/fins/renderer/status/preset",     # future
@@ -427,6 +428,7 @@ class ESPBridge:
                         topic.endswith("/alive") or
                         topic.endswith("/sensors") or
                         topic.endswith("/fancurve") or
+                        topic == "protogen/visor/esp/status/hue" or
                         topic.startswith("protogen/visor/teensy/menu/status/") or
                         topic == "protogen/visor/teensy/menu/schema"
                     )

@@ -62,3 +62,4 @@ void mqttBridgeClearNotification();
 void mqttBridgeHandleTeensyResponse(const String& msg);
 void mqttBridgeRequestTeensySync();
 void mqttBridgePublishSchema();
+void mqttBridgePublishEspHueStatus();

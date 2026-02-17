@@ -56,6 +56,7 @@ function buildPresetsUI() {
                     <button onclick="activatePreset('${escapeAttr(preset.name)}')" class="preset-btn">Activate</button>
                     <button onclick="toggleDefaultPreset('${escapeAttr(preset.name)}')" class="preset-btn">${isDefault ? 'Unset Default' : 'Set Default'}</button>
                     <button onclick="startEditPreset('${escapeAttr(preset.name)}')" class="preset-btn">Edit</button>
+                    <button onclick="exportPresetJson('${escapeAttr(preset.name)}')" class="preset-btn">Export</button>
                     <button onclick="deletePreset('${escapeAttr(preset.name)}')" class="preset-btn preset-btn-danger">Delete</button>
                 </div>
             </div>
@@ -107,11 +108,19 @@ function saveCurrentAsPreset() {
         }
     }
 
+    // Get current ESP hue overrides
+    const esp = {};
+    if (typeof espHueValues !== 'undefined') {
+        esp.hueF = espHueValues.hueF !== undefined ? espHueValues.hueF : -1;
+        esp.hueB = espHueValues.hueB !== undefined ? espHueValues.hueB : -1;
+    }
+
     const preset = {
         name: name.trim(),
         shader: shader,
         uniforms: uniforms,
         teensy: teensy,
+        esp: esp,
         launcher_action: null,
         gamepad_combo: null
     };
@@ -306,11 +315,57 @@ function resavePresetState(name) {
         }
     }
 
+    const esp = {};
+    if (typeof espHueValues !== 'undefined') {
+        esp.hueF = espHueValues.hueF !== undefined ? espHueValues.hueF : -1;
+        esp.hueB = espHueValues.hueB !== undefined ? espHueValues.hueB : -1;
+    }
+
     const updated = Object.assign({}, preset, {
         shader: shader,
         uniforms: uniforms,
-        teensy: teensy
+        teensy: teensy,
+        esp: esp
     });
 
     sendCommand('protogen/fins/launcher/preset/save', JSON.stringify(updated));
+}
+
+function exportPresetJson(name) {
+    const preset = presetsData.find(p => p.name === name);
+    if (!preset) return;
+    const blob = new Blob([JSON.stringify(preset, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importPresetJson() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const preset = JSON.parse(ev.target.result);
+                if (!preset.name) {
+                    alert('Invalid preset: missing name');
+                    return;
+                }
+                const existing = presetsData.find(p => p.name === preset.name);
+                if (existing && !confirm(`Preset "${preset.name}" already exists. Overwrite?`)) return;
+                sendCommand('protogen/fins/launcher/preset/save', JSON.stringify(preset));
+            } catch (err) {
+                alert('Failed to parse JSON: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
 }

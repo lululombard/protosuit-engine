@@ -67,6 +67,8 @@ function connectMQTT() {
                 handleEspAliveStatus(payload);
             } else if (topic === 'protogen/visor/esp/status/fancurve') {
                 handleFanCurveStatus(payload);
+            } else if (topic === 'protogen/visor/esp/status/hue') {
+                handleEspHueStatus(payload);
             } else if (topic === 'protogen/visor/teensy/menu/schema') {
                 handleTeensySchema(payload);
             } else if (topic.startsWith('protogen/visor/teensy/menu/status/')) {
