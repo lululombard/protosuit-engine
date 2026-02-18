@@ -119,7 +119,12 @@ class Renderer:
         audio_config = self.config_loader.config.get("audio_capture", {})
         self.audio_capture = AudioCapture(
             ref_level=audio_config.get("ref_level", 50.0),
+            noise_filter=audio_config.get("noise_filter", True),
+            auto_gain=audio_config.get("auto_gain", True),
+            min_gain=audio_config.get("min_gain", 1.0),
             max_gain=audio_config.get("max_gain", 5.0),
+            peak_attack=audio_config.get("peak_attack", 0.4),
+            peak_release=audio_config.get("peak_release", 0.15),
         )
 
         # MQTT

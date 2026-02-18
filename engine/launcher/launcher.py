@@ -614,6 +614,8 @@ class Launcher:
                 return
 
             print(f"[Launcher] Activating preset: {name}")
+            self.active_preset = name
+            self.publish_presets_status()
 
             # Apply shader
             shader = preset.get("shader")

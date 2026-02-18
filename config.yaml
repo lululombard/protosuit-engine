@@ -674,7 +674,12 @@ animations:
 # Audio FFT capture settings for audio-reactive shaders
 audio_capture:
   ref_level: 50.0     # Fixed reference level for normalizing raw FFT magnitudes
-  max_gain: 15.0       # Maximum auto-gain multiplier (caps amplification in quiet moments)
+  noise_filter: false  # Enable/disable noise floor subtraction (removes steady-state hum/fan noise)
+  auto_gain: true     # Enable/disable auto-gain (false = fixed gain using min_gain value)
+  min_gain: 1.0       # Minimum auto-gain multiplier (floor, also used as fixed gain when auto_gain is off)
+  max_gain: 5.0      # Maximum auto-gain multiplier (caps amplification in quiet moments)
+  peak_attack: 0.2      # How fast gain reacts to loud sounds (0=ignore, 1=instant)
+  peak_release: 0.3     # How fast gain recovers after loud sounds (0=never, 1=instant)
 
 # Transition settings for smooth shader changes
 transitions:

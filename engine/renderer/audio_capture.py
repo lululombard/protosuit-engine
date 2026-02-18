@@ -24,7 +24,7 @@ class AudioCapture:
     PROCESS_HZ = 60  # Match render frame rate
     RETRY_INTERVAL = 10.0  # Seconds between device retry attempts
 
-    def __init__(self, ref_level=50.0, max_gain=5.0):
+    def __init__(self, ref_level=50.0, noise_filter=True, auto_gain=True, min_gain=1.0, max_gain=5.0, peak_attack=0.4, peak_release=0.15):
         self._lock = threading.Lock()
         self._fft_data = np.zeros(self.TEXTURE_WIDTH, dtype=np.float32)
         self._waveform_data = np.full(self.TEXTURE_WIDTH, 0.5, dtype=np.float32)
@@ -35,6 +35,9 @@ class AudioCapture:
 
         # Gain settings (from config)
         self._ref_level = ref_level    # Fixed reference for raw FFT normalization
+        self._noise_filter = noise_filter  # Enable/disable noise floor subtraction
+        self._auto_gain = auto_gain    # Enable/disable auto-gain
+        self._min_gain = min_gain      # Floor for auto-gain (also fixed gain when auto_gain is off)
         self._max_gain = max_gain      # Cap for auto-gain multiplier
 
         # Ring buffer for audio samples from callback
@@ -55,8 +58,8 @@ class AudioCapture:
 
         # Auto-gain: smoothed peak tracker for adaptive normalization
         self._peak_smooth = 0.0
-        self._peak_attack = 0.4   # Rise quickly to follow transients
-        self._peak_release = 0.02 # Decay slowly so quiet gaps stay natural
+        self._peak_attack = peak_attack   # Rise quickly to follow transients
+        self._peak_release = peak_release # Decay after loud sounds (higher = faster recovery)
 
         # Windowing function (Hann window reduces spectral leakage)
         self._window = np.hanning(self.FFT_SIZE).astype(np.float32)
@@ -257,30 +260,35 @@ class AudioCapture:
 
                 # Noise floor subtraction: remove steady-state noise (fans, hum)
                 # The noise floor adapts slowly, so transient sounds stand out
-                if self._noise_floor is None:
-                    self._noise_floor = magnitudes.copy()
-                else:
-                    self._noise_floor = (
-                        self._noise_floor * (1.0 - self._noise_adapt_rate)
-                        + magnitudes * self._noise_adapt_rate
-                    )
-                magnitudes = np.maximum(magnitudes - self._noise_floor, 0.0)
+                if self._noise_filter:
+                    if self._noise_floor is None:
+                        self._noise_floor = magnitudes.copy()
+                    else:
+                        self._noise_floor = (
+                            self._noise_floor * (1.0 - self._noise_adapt_rate)
+                            + magnitudes * self._noise_adapt_rate
+                        )
+                    magnitudes = np.maximum(magnitudes - self._noise_floor, 0.0)
 
                 # Normalize with fixed reference, then apply capped auto-gain
                 magnitudes /= self._ref_level
 
-                # Track smoothed peak for auto-gain (fast attack, slow release)
-                peak = float(magnitudes.max())
-                if peak > self._peak_smooth:
-                    self._peak_smooth += (peak - self._peak_smooth) * self._peak_attack
-                else:
-                    self._peak_smooth += (peak - self._peak_smooth) * self._peak_release
+                if self._auto_gain:
+                    # Track smoothed peak for auto-gain (fast attack, slow release)
+                    peak = float(magnitudes.max())
+                    if peak > self._peak_smooth:
+                        self._peak_smooth += (peak - self._peak_smooth) * self._peak_attack
+                    else:
+                        self._peak_smooth += (peak - self._peak_smooth) * self._peak_release
 
-                # Auto-gain: boost quiet signals, but cap the multiplier
-                if self._peak_smooth > 1e-6:
-                    auto_gain = min(1.0 / self._peak_smooth, self._max_gain)
+                    # Auto-gain: boost quiet signals, clamp between min and max
+                    if self._peak_smooth > 1e-6:
+                        auto_gain = np.clip(1.0 / self._peak_smooth, self._min_gain, self._max_gain)
+                    else:
+                        auto_gain = self._min_gain
                 else:
-                    auto_gain = 1.0
+                    auto_gain = self._min_gain
+
                 magnitudes = np.clip(magnitudes * auto_gain, 0.0, 1.0).astype(
                     np.float32
                 )
