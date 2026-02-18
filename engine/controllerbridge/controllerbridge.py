@@ -73,6 +73,19 @@ class ControllerBridge:
         self.preset_combos: Dict = {}       # {frozenset(btn_names): preset_name}
         self.combo_cooldown: Dict[str, float] = {}  # {mac: last_combo_time}
 
+        # Assignment combo keys (e.g. PS+L1 -> left display)
+        self.assignment_combos: Dict[str, frozenset] = {}
+        self.assignment_colors: Dict[str, tuple] = {}
+        self._load_assignment_config()
+
+        # System action combos (detected on presets controller, restored from retained MQTT)
+        self.action_combos: Dict[str, frozenset] = {}  # {action_id: frozenset(buttons)}
+        self._pending_dangerous: Dict[str, float] = {}  # {action: timestamp} for double-tap safety
+
+        # State tracking for toggle actions
+        self.service_states = {"airplay": False, "spotify": False, "ap": False}
+        self._current_volume = 50  # Tracked from audiobridge status
+
         print("[ControllerBridge] Initialized")
 
     def _load_button_mapping(self) -> Dict:
@@ -92,6 +105,88 @@ class ControllerBridge:
             "ABS_HAT0Y": "dpad_y",
         }
 
+    def _load_assignment_config(self):
+        """Load assignment combo keys and LED colors from config."""
+        try:
+            config = self.config_loader.config
+            cb_config = config.get("controllerbridge", {})
+
+            # Load assignment combos
+            combos = cb_config.get("assignment_combos", {})
+            self.assignment_combos = {}
+            for slot, buttons in combos.items():
+                if isinstance(buttons, list) and len(buttons) > 0:
+                    self.assignment_combos[slot] = frozenset(buttons)
+            if self.assignment_combos:
+                print(f"[ControllerBridge] Loaded assignment combos: "
+                      f"{', '.join(f'{s}={list(b)}' for s, b in self.assignment_combos.items())}")
+
+            # Load assignment colors
+            colors = cb_config.get("assignment_colors", {})
+            self.assignment_colors = {}
+            for slot, rgb in colors.items():
+                if isinstance(rgb, list) and len(rgb) == 3:
+                    self.assignment_colors[slot] = tuple(rgb)
+            if self.assignment_colors:
+                print(f"[ControllerBridge] Loaded assignment colors: "
+                      f"{', '.join(f'{s}={c}' for s, c in self.assignment_colors.items())}")
+
+        except Exception as e:
+            print(f"[ControllerBridge] Error loading assignment config: {e}")
+
+    # ======== LED Control ========
+
+    def _find_led_path(self, evdev_path: str) -> Optional[str]:
+        """Resolve evdev path to sysfs LED base path for DS4 controllers.
+
+        Maps /dev/input/eventN -> /sys/class/leds/inputM: (N and M may differ).
+        Returns the base path prefix (e.g. '/sys/class/leds/input15:') or None.
+        """
+        try:
+            event_name = os.path.basename(evdev_path)  # "event6"
+            sysfs_device = f"/sys/class/input/{event_name}/device"
+            if not os.path.exists(sysfs_device):
+                return None
+            device_path = os.path.realpath(sysfs_device)
+            input_name = os.path.basename(device_path)  # "input15"
+            led_base = f"/sys/class/leds/{input_name}:"
+
+            # Verify DS4 LEDs exist
+            if os.path.exists(f"{led_base}red/brightness"):
+                print(f"[ControllerBridge] Found LED path: {led_base}")
+                return led_base
+        except Exception as e:
+            print(f"[ControllerBridge] Error finding LED path for {evdev_path}: {e}")
+        return None
+
+    def _set_led_color(self, mac: str, r: int, g: int, b: int):
+        """Set DS4 light bar color via sysfs. Fails gracefully for non-DS4 controllers."""
+        device_info = self.connected_devices.get(mac)
+        if not device_info:
+            return
+
+        led_path = device_info.get("led_path")
+        if not led_path:
+            return
+
+        try:
+            for color, value in [("red", r), ("green", g), ("blue", b)]:
+                with open(f"{led_path}{color}/brightness", "w") as f:
+                    f.write(str(max(0, min(255, value))))
+            print(f"[ControllerBridge] LED {mac}: ({r}, {g}, {b})")
+        except (IOError, OSError) as e:
+            print(f"[ControllerBridge] LED write failed for {mac}: {e}")
+
+    def _set_led_for_slot(self, mac: str, slot: Optional[str]):
+        """Set DS4 LED to the configured color for a given assignment slot."""
+        if slot and slot in self.assignment_colors:
+            r, g, b = self.assignment_colors[slot]
+        elif "unassigned" in self.assignment_colors:
+            r, g, b = self.assignment_colors["unassigned"]
+        else:
+            return
+        self._set_led_color(mac, r, g, b)
+
     # ======== MQTT ========
 
     def init_mqtt(self):
@@ -104,9 +199,20 @@ class ControllerBridge:
                 client.subscribe("protogen/fins/bluetoothbridge/status/devices")
                 client.subscribe("protogen/fins/controllerbridge/assign")
                 client.subscribe("protogen/fins/controllerbridge/status/assignments")
+                client.subscribe("protogen/fins/controllerbridge/combo/set")
+                client.subscribe("protogen/fins/controllerbridge/color/set")
+                client.subscribe("protogen/fins/controllerbridge/action_combo/set")
+                client.subscribe("protogen/fins/controllerbridge/status/combo_config")
+                client.subscribe("protogen/fins/controllerbridge/status/color_config")
+                client.subscribe("protogen/fins/controllerbridge/status/action_combo_config")
                 client.subscribe("protogen/fins/launcher/status/presets")
                 client.subscribe("protogen/fins/config/reload")
                 client.subscribe("protogen/fins/controllerbridge/config/reload")
+                # Service state topics for toggle actions
+                client.subscribe("protogen/fins/castbridge/status/airplay/health")
+                client.subscribe("protogen/fins/castbridge/status/spotify/health")
+                client.subscribe("protogen/fins/networkingbridge/status/ap")
+                client.subscribe("protogen/fins/audiobridge/status/volume")
             else:
                 print(f"[ControllerBridge] Failed to connect to MQTT: {rc}")
 
@@ -121,6 +227,9 @@ class ControllerBridge:
         # Wait briefly for retained assignments
         time.sleep(0.5)
 
+        # Combos, colors, and action combos all restored from retained MQTT messages.
+        # Config.yaml provides defaults (loaded in __init__), overridden by retained msgs.
+
     def on_mqtt_message(self, topic: str, payload: str):
         """Handle incoming MQTT messages."""
         try:
@@ -130,8 +239,28 @@ class ControllerBridge:
                 self._handle_assign(payload)
             elif topic == "protogen/fins/controllerbridge/status/assignments":
                 self._restore_assignments(payload)
+            elif topic == "protogen/fins/controllerbridge/combo/set":
+                self._handle_combo_set(payload)
+            elif topic == "protogen/fins/controllerbridge/color/set":
+                self._handle_color_set(payload)
+            elif topic == "protogen/fins/controllerbridge/action_combo/set":
+                self._handle_action_combo_set(payload)
+            elif topic == "protogen/fins/controllerbridge/status/combo_config":
+                self._restore_combos(payload)
+            elif topic == "protogen/fins/controllerbridge/status/color_config":
+                self._restore_colors(payload)
+            elif topic == "protogen/fins/controllerbridge/status/action_combo_config":
+                self._restore_action_combos(payload)
             elif topic == "protogen/fins/launcher/status/presets":
                 self._update_preset_combos(payload)
+            elif topic == "protogen/fins/castbridge/status/airplay/health":
+                self._update_service_state("airplay", payload)
+            elif topic == "protogen/fins/castbridge/status/spotify/health":
+                self._update_service_state("spotify", payload)
+            elif topic == "protogen/fins/networkingbridge/status/ap":
+                self._update_service_state("ap", payload)
+            elif topic == "protogen/fins/audiobridge/status/volume":
+                self._update_volume_state(payload)
             elif topic in ("protogen/fins/config/reload", "protogen/fins/controllerbridge/config/reload"):
                 self.handle_config_reload()
         except Exception as e:
@@ -198,12 +327,23 @@ class ControllerBridge:
                 print(f"[ControllerBridge] evdev not found for {mac}, retrying ({attempt + 1}/5)...")
 
             if evdev_path:
+                led_path = self._find_led_path(evdev_path)
                 self.connected_devices[mac] = {
                     "name": name,
                     "evdev_path": evdev_path,
+                    "led_path": led_path,
                 }
                 self._start_input_reading(mac)
                 self.publish_assignments_status()
+
+                # Set LED to assignment color (or unassigned)
+                current_slot = None
+                for slot, assigned_mac in self.assignments.items():
+                    if assigned_mac == mac:
+                        current_slot = slot
+                        break
+                self._set_led_for_slot(mac, current_slot)
+
                 print(f"[ControllerBridge] Controller ready: {name} ({mac})")
             else:
                 print(f"[ControllerBridge] Could not find evdev device for {mac} after 5 attempts")
@@ -365,17 +505,76 @@ class ControllerBridge:
         if mac in self.input_stop_events:
             del self.input_stop_events[mac]
 
+    def _update_pressed_buttons(self, pressed_buttons: set, events) -> bool:
+        """Update pressed button set from evdev events. Returns True if any button was pressed."""
+        changed = False
+        for event in events:
+            if event.type == ecodes.EV_KEY:
+                btn_names = ecodes.BTN.get(event.code)
+                if btn_names:
+                    if isinstance(btn_names, str):
+                        btn_names = [btn_names]
+                    for btn_name in btn_names:
+                        if event.value == 1:
+                            pressed_buttons.add(btn_name)
+                            changed = True
+                        elif event.value == 0:
+                            pressed_buttons.discard(btn_name)
+
+            elif event.type == ecodes.EV_ABS:
+                abs_names = ecodes.ABS.get(event.code)
+                if isinstance(abs_names, tuple):
+                    abs_name = abs_names[0]
+                elif isinstance(abs_names, str):
+                    abs_name = abs_names
+                else:
+                    continue
+
+                if abs_name == "ABS_HAT0X":
+                    pressed_buttons.discard("DPAD_LEFT")
+                    pressed_buttons.discard("DPAD_RIGHT")
+                    if event.value == -1:
+                        pressed_buttons.add("DPAD_LEFT")
+                        changed = True
+                    elif event.value == 1:
+                        pressed_buttons.add("DPAD_RIGHT")
+                        changed = True
+                elif abs_name == "ABS_HAT0Y":
+                    pressed_buttons.discard("DPAD_UP")
+                    pressed_buttons.discard("DPAD_DOWN")
+                    if event.value == -1:
+                        pressed_buttons.add("DPAD_UP")
+                        changed = True
+                    elif event.value == 1:
+                        pressed_buttons.add("DPAD_DOWN")
+                        changed = True
+                elif abs_name == "ABS_Z":
+                    if event.value > 128:
+                        if "ABS_Z" not in pressed_buttons:
+                            pressed_buttons.add("ABS_Z")
+                            changed = True
+                    else:
+                        pressed_buttons.discard("ABS_Z")
+                elif abs_name == "ABS_RZ":
+                    if event.value > 128:
+                        if "ABS_RZ" not in pressed_buttons:
+                            pressed_buttons.add("ABS_RZ")
+                            changed = True
+                    else:
+                        pressed_buttons.discard("ABS_RZ")
+        return changed
+
     def _input_reading_worker(self, mac: str, evdev_path: str, stop_event: threading.Event):
         """Worker thread for reading gamepad input."""
         try:
             device = evdev.InputDevice(evdev_path)
             print(f"[ControllerBridge] Reading from {device.name} at {evdev_path}")
 
-            button_states = {}
             dpad_x_state = 0
             dpad_y_state = 0
             was_assigned = False
             pressed_buttons = set()  # Raw button names for combo detection
+            first_read = True  # Discard first batch of buffered events
 
             while not stop_event.is_set():
                 r, _, _ = select.select([device.fd], [], [], 0.01)
@@ -390,7 +589,36 @@ class ControllerBridge:
                 if not events:
                     continue
 
-                # Find assignment
+                # Discard initial buffered events from before we started reading
+                if first_read:
+                    first_read = False
+                    pressed_buttons.clear()
+                    continue
+
+                # Always track pressed buttons (for assignment combos)
+                combo_changed = self._update_pressed_buttons(pressed_buttons, events)
+
+                # Check assignment combos (works regardless of current slot)
+                if combo_changed and self.assignment_combos:
+                    # Sort by length descending: PS+L1+R1 (3) before PS+L1 (2)
+                    for slot, combo_set in sorted(
+                        self.assignment_combos.items(),
+                        key=lambda x: len(x[1]),
+                        reverse=True
+                    ):
+                        if combo_set.issubset(pressed_buttons):
+                            # Don't re-assign if already on this slot
+                            current_slot = None
+                            for s, m in self.assignments.items():
+                                if m == mac:
+                                    current_slot = s
+                                    break
+                            if current_slot != slot:
+                                print(f"[ControllerBridge] Assignment combo: {mac} -> {slot}")
+                                self.assign_display(mac, slot)
+                            break
+
+                # Find current assignment
                 assigned_slot = None
                 for slot, assigned_mac in self.assignments.items():
                     if assigned_mac == mac:
@@ -403,77 +631,22 @@ class ControllerBridge:
 
                 # Discard buffered events on first assignment
                 if not was_assigned:
-                    print(f"[ControllerBridge] {mac} assigned to {assigned_slot}, discarding {len(events)} buffered events")
+                    print(f"[ControllerBridge] {mac} assigned to {assigned_slot}, discarding buffered events")
                     was_assigned = True
-                    pressed_buttons.clear()
                     continue
 
-                # Presets controller: combo detection only, no input forwarding
+                # Presets controller: preset combo + action combo detection, no input forwarding
                 if assigned_slot == "presets":
-                    combo_changed = False
-                    for event in events:
-                        if event.type == ecodes.EV_KEY:
-                            btn_names = ecodes.BTN.get(event.code)
-                            if btn_names:
-                                if isinstance(btn_names, str):
-                                    btn_names = [btn_names]
-                                for btn_name in btn_names:
-                                    if event.value == 1:
-                                        pressed_buttons.add(btn_name)
-                                        combo_changed = True
-                                    elif event.value == 0:
-                                        pressed_buttons.discard(btn_name)
-
-                        elif event.type == ecodes.EV_ABS:
-                            abs_names = ecodes.ABS.get(event.code)
-                            if isinstance(abs_names, tuple):
-                                abs_name = abs_names[0]
-                            elif isinstance(abs_names, str):
-                                abs_name = abs_names
-                            else:
-                                continue
-
-                            # Dpad as combo buttons
-                            if abs_name == "ABS_HAT0X":
-                                pressed_buttons.discard("DPAD_LEFT")
-                                pressed_buttons.discard("DPAD_RIGHT")
-                                if event.value == -1:
-                                    pressed_buttons.add("DPAD_LEFT")
-                                    combo_changed = True
-                                elif event.value == 1:
-                                    pressed_buttons.add("DPAD_RIGHT")
-                                    combo_changed = True
-                            elif abs_name == "ABS_HAT0Y":
-                                pressed_buttons.discard("DPAD_UP")
-                                pressed_buttons.discard("DPAD_DOWN")
-                                if event.value == -1:
-                                    pressed_buttons.add("DPAD_UP")
-                                    combo_changed = True
-                                elif event.value == 1:
-                                    pressed_buttons.add("DPAD_DOWN")
-                                    combo_changed = True
-                            # L2/R2 triggers (analog axis treated as button)
-                            elif abs_name == "ABS_Z":
-                                if event.value > 128:
-                                    if "ABS_Z" not in pressed_buttons:
-                                        pressed_buttons.add("ABS_Z")
-                                        combo_changed = True
-                                else:
-                                    pressed_buttons.discard("ABS_Z")
-                            elif abs_name == "ABS_RZ":
-                                if event.value > 128:
-                                    if "ABS_RZ" not in pressed_buttons:
-                                        pressed_buttons.add("ABS_RZ")
-                                        combo_changed = True
-                                else:
-                                    pressed_buttons.discard("ABS_RZ")
-
-                    # Check combos when a button was pressed
                     if combo_changed and self.preset_combos:
                         now = time.time()
                         cooldown = self.combo_cooldown.get(mac, 0)
                         if now - cooldown >= 1.0:
-                            for combo_set, preset_name in self.preset_combos.items():
+                            # Sort by length descending so L1+DPAD_UP matches before DPAD_UP alone
+                            for combo_set, preset_name in sorted(
+                                self.preset_combos.items(),
+                                key=lambda x: len(x[0]),
+                                reverse=True
+                            ):
                                 if combo_set.issubset(pressed_buttons):
                                     print(f"[ControllerBridge] Combo matched: {preset_name}")
                                     self.combo_cooldown[mac] = now
@@ -483,6 +656,17 @@ class ControllerBridge:
                                         qos=0
                                     )
                                     break
+                    # Check system action combos
+                    if combo_changed and self.action_combos:
+                        for action_id, buttons in sorted(
+                            self.action_combos.items(),
+                            key=lambda x: len(x[1]),
+                            reverse=True
+                        ):
+                            if buttons.issubset(pressed_buttons):
+                                print(f"[ControllerBridge] Action combo matched: {action_id}")
+                                self._execute_action(action_id)
+                                break
                     continue
 
                 # Left/right display: forward input to launcher
@@ -570,8 +754,8 @@ class ControllerBridge:
             print(f"[ControllerBridge] Removed assignment for {display}")
 
             if old_mac and old_mac in self.connected_devices:
-                self._stop_input_reading(old_mac)
-                self._start_input_reading(old_mac)
+                self._set_led_for_slot(old_mac, None)
+                self._restart_input_thread_if_safe(old_mac)
 
             self.publish_assignments_status()
             return
@@ -591,12 +775,22 @@ class ControllerBridge:
         publish_notification(self.mqtt_client, "controller", "assigned",
                              "gamepad", f"{name} -> {display} display")
 
-        # Restart input thread with new assignment
-        if mac in self.input_threads:
-            self._stop_input_reading(mac)
-            self._start_input_reading(mac)
+        # Set LED color for new assignment
+        self._set_led_for_slot(mac, display)
+
+        # Restart input thread (skip if called from within the input thread itself)
+        self._restart_input_thread_if_safe(mac)
 
         self.publish_assignments_status()
+
+    def _restart_input_thread_if_safe(self, mac: str):
+        """Restart input thread unless we're being called from that thread (avoids deadlock)."""
+        if mac in self.input_threads:
+            if self.input_threads[mac] is threading.current_thread():
+                # Called from combo within the input worker — thread picks up new slot naturally
+                return
+            self._stop_input_reading(mac)
+            self._start_input_reading(mac)
 
     def _restore_assignments(self, payload: str):
         """Restore assignments from retained MQTT message."""
@@ -628,6 +822,267 @@ class ControllerBridge:
                 print(f"[ControllerBridge] Loaded {len(combos)} preset combos")
         except Exception as e:
             print(f"[ControllerBridge] Error updating preset combos: {e}")
+
+    # ======== Assignment Combo Config ========
+
+    def _handle_combo_set(self, payload: str):
+        """Handle combo config update from web UI."""
+        try:
+            data = json.loads(payload)
+            slot = data.get("slot")
+            buttons = data.get("buttons")
+            if not slot or slot not in ("left", "right", "presets"):
+                return
+            if not isinstance(buttons, list) or len(buttons) == 0:
+                # Remove combo for this slot
+                self.assignment_combos.pop(slot, None)
+            else:
+                self.assignment_combos[slot] = frozenset(buttons)
+
+            print(f"[ControllerBridge] Updated assignment combo: {slot} = {buttons}")
+            self.publish_combo_config()
+        except Exception as e:
+            print(f"[ControllerBridge] Error handling combo set: {e}")
+
+    def _restore_combos(self, payload: str):
+        """Restore assignment combos from retained MQTT message (overrides config defaults)."""
+        try:
+            if not payload:
+                return
+            data = json.loads(payload)
+            restored = {}
+            for slot, buttons in data.items():
+                if slot in ("left", "right", "presets") and isinstance(buttons, list) and buttons:
+                    restored[slot] = frozenset(buttons)
+            if restored:
+                self.assignment_combos = restored
+                print(f"[ControllerBridge] Restored {len(restored)} assignment combos from MQTT")
+        except Exception as e:
+            print(f"[ControllerBridge] Error restoring assignment combos: {e}")
+
+    def publish_combo_config(self):
+        """Publish current assignment combo config via MQTT (retained)."""
+        if not self.mqtt_client:
+            return
+        config = {}
+        for slot, combo_set in self.assignment_combos.items():
+            config[slot] = sorted(combo_set)
+        self.mqtt_client.publish(
+            "protogen/fins/controllerbridge/status/combo_config",
+            json.dumps(config),
+            retain=True,
+        )
+
+    # ======== Assignment Color Config ========
+
+    def _handle_color_set(self, payload: str):
+        """Handle color config update from web UI."""
+        try:
+            data = json.loads(payload)
+            slot = data.get("slot")
+            color = data.get("color")
+            if not slot or slot not in ("left", "right", "presets", "unassigned"):
+                return
+            if not isinstance(color, list) or len(color) != 3:
+                return
+            rgb = tuple(max(0, min(255, int(c))) for c in color)
+            self.assignment_colors[slot] = rgb
+
+            print(f"[ControllerBridge] Updated assignment color: {slot} = {rgb}")
+
+            # Apply immediately to controllers on this slot
+            for s, mac in self.assignments.items():
+                if s == slot and mac:
+                    self._set_led_color(mac, *rgb)
+
+            # For "unassigned", apply to all unassigned controllers
+            if slot == "unassigned":
+                assigned_macs = set(m for m in self.assignments.values() if m)
+                for mac in self.connected_devices:
+                    if mac not in assigned_macs:
+                        self._set_led_color(mac, *rgb)
+
+            self.publish_color_config()
+        except Exception as e:
+            print(f"[ControllerBridge] Error handling color set: {e}")
+
+    def _restore_colors(self, payload: str):
+        """Restore assignment colors from retained MQTT message (overrides config defaults)."""
+        try:
+            if not payload:
+                return
+            data = json.loads(payload)
+            restored = {}
+            for slot, rgb in data.items():
+                if slot in ("left", "right", "presets", "unassigned") and isinstance(rgb, list) and len(rgb) == 3:
+                    restored[slot] = tuple(int(c) for c in rgb)
+            if restored:
+                self.assignment_colors = restored
+                print(f"[ControllerBridge] Restored {len(restored)} assignment colors from MQTT")
+        except Exception as e:
+            print(f"[ControllerBridge] Error restoring assignment colors: {e}")
+
+    def publish_color_config(self):
+        """Publish current assignment color config via MQTT (retained)."""
+        if not self.mqtt_client:
+            return
+        config = {}
+        for slot, rgb in self.assignment_colors.items():
+            config[slot] = list(rgb)
+        self.mqtt_client.publish(
+            "protogen/fins/controllerbridge/status/color_config",
+            json.dumps(config),
+            retain=True,
+        )
+
+    # ======== System Action Combos ========
+
+    # Action dispatch map: action_id -> (mqtt_topic, toggle_key_or_None)
+    ACTION_DISPATCH = {
+        "airplay_toggle": ("protogen/fins/castbridge/airplay/enable", "airplay"),
+        "spotify_toggle": ("protogen/fins/castbridge/spotify/enable", "spotify"),
+        "reboot":         ("protogen/fins/systembridge/power/reboot", None),
+        "shutdown":       ("protogen/fins/systembridge/power/shutdown", None),
+        "ap_toggle":      ("protogen/fins/networkingbridge/ap/enable", "ap"),
+        "esp_restart":    ("protogen/visor/esp/restart", None),
+    }
+
+    # Volume actions: action_id -> step delta
+    VOLUME_ACTIONS = {
+        "volume_up_1":   1,  "volume_down_1":   -1,
+        "volume_up_5":   5,  "volume_down_5":   -5,
+        "volume_up_10":  10, "volume_down_10":  -10,
+    }
+
+    DANGEROUS_ACTIONS = {"reboot", "shutdown"}
+
+    def _update_service_state(self, service: str, payload: str):
+        """Track service enabled state for toggle actions."""
+        try:
+            data = json.loads(payload)
+            # castbridge health uses is_enabled, networkingbridge ap uses enabled
+            enabled = data.get("is_enabled", data.get("enabled", False))
+            self.service_states[service] = bool(enabled)
+        except Exception:
+            pass
+
+    def _update_volume_state(self, payload: str):
+        """Track current volume from audiobridge status."""
+        try:
+            data = json.loads(payload)
+            self._current_volume = int(data.get("volume", self._current_volume))
+        except Exception:
+            pass
+
+    def _execute_action(self, action: str):
+        """Execute a system action triggered by a gamepad combo."""
+        if not self.mqtt_client:
+            return
+
+        # Volume adjust actions
+        step = self.VOLUME_ACTIONS.get(action)
+        if step is not None:
+            new_vol = max(0, min(100, self._current_volume + step))
+            self.mqtt_client.publish(
+                "protogen/fins/audiobridge/volume/set",
+                json.dumps({"volume": new_vol}),
+            )
+            print(f"[ControllerBridge] Volume {'+' if step > 0 else ''}{step}% -> {new_vol}%")
+            return
+
+        dispatch = self.ACTION_DISPATCH.get(action)
+        if not dispatch:
+            print(f"[ControllerBridge] Unknown action: {action}")
+            return
+
+        topic, toggle_key = dispatch
+
+        # Double-tap safety for dangerous actions
+        if action in self.DANGEROUS_ACTIONS:
+            now = time.time()
+            pending_time = self._pending_dangerous.get(action, 0)
+            if now - pending_time <= 3.0:
+                # Second press within 3s — confirmed, execute
+                self._pending_dangerous.pop(action, None)
+                print(f"[ControllerBridge] Action confirmed: {action}")
+                publish_notification(self.mqtt_client, "controller", "action",
+                                     "gamepad", f"System {action} confirmed")
+                self.mqtt_client.publish(topic, "")
+            else:
+                # First press — warn
+                self._pending_dangerous[action] = now
+                print(f"[ControllerBridge] Action pending confirmation: {action}")
+                publish_notification(self.mqtt_client, "controller", "warning",
+                                     "gamepad", f"Press again within 3s to {action}")
+            return
+
+        if toggle_key:
+            # Toggle action — invert current state
+            current = self.service_states.get(toggle_key, False)
+            new_state = not current
+            payload = json.dumps({"enable": new_state})
+            self.mqtt_client.publish(topic, payload)
+            state_word = "enabled" if new_state else "disabled"
+            print(f"[ControllerBridge] Action: {action} -> {state_word}")
+            publish_notification(self.mqtt_client, "controller", "action",
+                                 "gamepad", f"{toggle_key.title()} {state_word}")
+        else:
+            # One-shot action (esp_restart)
+            print(f"[ControllerBridge] Action: {action}")
+            publish_notification(self.mqtt_client, "controller", "action",
+                                 "gamepad", f"{action.replace('_', ' ').title()}")
+            self.mqtt_client.publish(topic, "")
+
+    def _handle_action_combo_set(self, payload: str):
+        """Handle action combo config update from web UI."""
+        try:
+            data = json.loads(payload)
+            action = data.get("action")
+            if not action:
+                return
+
+            if data.get("delete"):
+                self.action_combos.pop(action, None)
+                print(f"[ControllerBridge] Deleted action combo: {action}")
+            else:
+                buttons = data.get("buttons", [])
+                if isinstance(buttons, list) and len(buttons) > 0:
+                    self.action_combos[action] = frozenset(buttons)
+                    print(f"[ControllerBridge] Updated action combo: {action} = {buttons}")
+                else:
+                    self.action_combos.pop(action, None)
+
+            self.publish_action_combo_config()
+        except Exception as e:
+            print(f"[ControllerBridge] Error handling action combo set: {e}")
+
+    def _restore_action_combos(self, payload: str):
+        """Restore action combos from retained MQTT message."""
+        try:
+            if not payload:
+                return
+            data = json.loads(payload)
+            self.action_combos = {}
+            for action_id, buttons in data.items():
+                if isinstance(buttons, list) and len(buttons) > 0:
+                    self.action_combos[action_id] = frozenset(buttons)
+            if self.action_combos:
+                print(f"[ControllerBridge] Restored {len(self.action_combos)} action combos from MQTT")
+        except Exception as e:
+            print(f"[ControllerBridge] Error restoring action combos: {e}")
+
+    def publish_action_combo_config(self):
+        """Publish current action combo config via MQTT (retained)."""
+        if not self.mqtt_client:
+            return
+        config = {}
+        for action_id, buttons in self.action_combos.items():
+            config[action_id] = sorted(buttons)
+        self.mqtt_client.publish(
+            "protogen/fins/controllerbridge/status/action_combo_config",
+            json.dumps(config),
+            retain=True,
+        )
 
     # ======== Status Publishing ========
 

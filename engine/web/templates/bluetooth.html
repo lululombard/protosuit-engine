@@ -86,6 +86,86 @@
         </div>
     </div>
 
+    <!-- Assignment Shortcuts Section -->
+    <div class="section">
+        <h2 class="section-title">ASSIGNMENT SHORTCUTS</h2>
+        <p class="section-description">Button combos to quickly reassign a controller. Press these on any connected gamepad.</p>
+        <div class="combo-list">
+            <div class="combo-row" data-slot="left">
+                <div class="combo-slot-label">LEFT DISPLAY</div>
+                <div class="combo-buttons" id="combo-left"></div>
+                <input type="color" class="color-picker" data-slot="left" id="color-left" title="LED Color">
+                <button class="btn btn-small combo-edit-btn" data-slot="left">Edit</button>
+            </div>
+            <div class="combo-row" data-slot="right">
+                <div class="combo-slot-label">RIGHT DISPLAY</div>
+                <div class="combo-buttons" id="combo-right"></div>
+                <input type="color" class="color-picker" data-slot="right" id="color-right" title="LED Color">
+                <button class="btn btn-small combo-edit-btn" data-slot="right">Edit</button>
+            </div>
+            <div class="combo-row" data-slot="presets">
+                <div class="combo-slot-label">PRESETS</div>
+                <div class="combo-buttons" id="combo-presets"></div>
+                <input type="color" class="color-picker" data-slot="presets" id="color-presets" title="LED Color">
+                <button class="btn btn-small combo-edit-btn" data-slot="presets">Edit</button>
+            </div>
+            <div class="combo-row" data-slot="unassigned">
+                <div class="combo-slot-label">UNASSIGNED</div>
+                <div class="combo-buttons"><span class="combo-none">No combo</span></div>
+                <input type="color" class="color-picker" data-slot="unassigned" id="color-unassigned" title="LED Color">
+            </div>
+        </div>
+        <!-- Inline combo editor (hidden by default) -->
+        <div id="combo-editor" class="combo-editor" style="display: none;">
+            <div class="combo-editor-header">
+                <span>Editing: <strong id="combo-editor-slot"></strong></span>
+                <button class="btn btn-small" id="combo-editor-cancel">Cancel</button>
+            </div>
+            <div class="combo-editor-buttons" id="combo-editor-buttons"></div>
+            <button class="btn primary-btn btn-small" id="combo-editor-save">Save</button>
+        </div>
+    </div>
+
+    <!-- System Action Combos Section -->
+    <div class="section">
+        <h2 class="section-title">SYSTEM ACTION COMBOS</h2>
+        <p class="section-description">Button combos on the presets controller that trigger system actions. Reboot/shutdown require pressing twice within 3 seconds.</p>
+        <div class="action-combo-list" id="action-combo-list">
+            <div class="empty-state">No action combos configured.</div>
+        </div>
+        <button class="btn btn-small" id="add-action-combo-btn">+ Add Action Combo</button>
+        <!-- Inline action combo editor (hidden by default) -->
+        <div id="action-combo-editor" class="combo-editor" style="display: none;">
+            <div class="combo-editor-header">
+                <span>Action Combo</span>
+                <button class="btn btn-small" id="action-combo-editor-cancel">Cancel</button>
+            </div>
+            <div class="action-combo-field-row">
+                <label>Action:</label>
+                <select id="action-combo-action-select" class="controller-select">
+                    <option value="">Select action...</option>
+                    <option value="airplay_toggle">AirPlay Toggle</option>
+                    <option value="spotify_toggle">Spotify Toggle</option>
+                    <option value="reboot">Reboot</option>
+                    <option value="shutdown">Shutdown</option>
+                    <option value="ap_toggle">AP Toggle</option>
+                    <option value="esp_restart">Restart ESP32</option>
+                    <option value="volume_up_1">Volume Up 1%</option>
+                    <option value="volume_down_1">Volume Down 1%</option>
+                    <option value="volume_up_5">Volume Up 5%</option>
+                    <option value="volume_down_5">Volume Down 5%</option>
+                    <option value="volume_up_10">Volume Up 10%</option>
+                    <option value="volume_down_10">Volume Down 10%</option>
+                </select>
+            </div>
+            <div class="combo-editor-buttons" id="action-combo-editor-buttons"></div>
+            <div class="action-combo-editor-actions">
+                <button class="btn primary-btn btn-small" id="action-combo-editor-save">Save</button>
+                <button class="btn btn-small action-combo-delete-btn" id="action-combo-editor-delete" style="display: none;">Delete</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Audio Output Section -->
     <div class="section">
         <h2 class="section-title">AUDIO OUTPUT</h2>

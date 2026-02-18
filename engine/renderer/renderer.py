@@ -70,6 +70,9 @@ class Renderer:
                 "scale_changing": False,
                 "scale_change_frame_count": 0,
                 "uniforms": {},  # Custom uniforms for this display
+                "uniform_transition_start": None,  # Smooth uniform-only transition
+                "uniform_transition_duration": 0.6,
+                "uniforms_from": {},  # Snapshot at transition start
             },
             "right": {
                 "current": None,
@@ -85,6 +88,9 @@ class Renderer:
                 "scale_changing": False,
                 "scale_change_frame_count": 0,
                 "uniforms": {},
+                "uniform_transition_start": None,
+                "uniform_transition_duration": 0.6,
+                "uniforms_from": {},
             },
         }
 
@@ -110,7 +116,11 @@ class Renderer:
         self.audio_texture = None
 
         # Audio capture for FFT shaders
-        self.audio_capture = AudioCapture()
+        audio_config = self.config_loader.config.get("audio_capture", {})
+        self.audio_capture = AudioCapture(
+            ref_level=audio_config.get("ref_level", 50.0),
+            max_gain=audio_config.get("max_gain", 5.0),
+        )
 
         # MQTT
         self.mqtt_client = None
@@ -267,6 +277,48 @@ class Renderer:
             else:
                 displays_to_load = [display]
 
+            # Check if the same shader files are already running (skip recompile)
+            same_shader = all(
+                self.shaders[d]["current"] is not None
+                and self.shaders[d]["transition_start"] is None
+                and self.shaders[d]["current_name"] is not None
+                and self.shaders[d]["current_name"] in self.shader_metadata
+                and self.shader_metadata[self.shaders[d]["current_name"]].get(f"{d}_shader")
+                    == metadata.get(f"{d}_shader")
+                and self.shaders[d]["render_scale"] == scale
+                for d in displays_to_load
+            )
+
+            if same_shader:
+                # Same shader files — smooth uniform transition only
+                print(f"[Renderer] Same shader for '{anim_name}', transitioning uniforms only")
+                for disp in displays_to_load:
+                    state = self.shaders[disp]
+                    # Snapshot current values (resolve any in-progress transition)
+                    state["uniforms_from"] = self._resolve_uniform_transition(state)
+                    state["uniform_transition_start"] = time.time()
+                    state["uniform_transition_duration"] = 0.6
+                    state["current_name"] = anim_name
+
+                # Apply new default uniforms (these become the transition targets)
+                uniforms = metadata.get("uniforms", {})
+                for uniform_name, uniform_config in uniforms.items():
+                    if isinstance(uniform_config, dict) and (
+                        "left" in uniform_config or "right" in uniform_config
+                    ):
+                        for disp in displays_to_load:
+                            if disp in uniform_config:
+                                self._apply_uniform(
+                                    disp, uniform_name, uniform_config[disp]
+                                )
+                    else:
+                        for disp in displays_to_load:
+                            self._apply_uniform(disp, uniform_name, uniform_config)
+
+                self.publish_shader_status()
+                self.publish_uniform_status()
+                return
+
             for disp in displays_to_load:
                 shader_file = metadata.get(f"{disp}_shader")
                 if not shader_file:
@@ -333,6 +385,31 @@ class Renderer:
 
         except Exception as e:
             print(f"[Renderer] Error applying uniform '{uniform_name}': {e}")
+
+    def _lerp_uniform(self, a, b, t):
+        """Linearly interpolate between two uniform values"""
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            result = a + (b - a) * t
+            return int(round(result)) if isinstance(a, int) and isinstance(b, int) else result
+        elif isinstance(a, tuple) and isinstance(b, tuple):
+            return tuple(a[i] + (b[i] - a[i]) * t for i in range(min(len(a), len(b))))
+        return b  # Can't interpolate, snap to target
+
+    def _resolve_uniform_transition(self, state):
+        """Compute current interpolated uniform values mid-transition, return as dict"""
+        if state["uniform_transition_start"] is None:
+            return dict(state["uniforms"])
+        elapsed = time.time() - state["uniform_transition_start"]
+        alpha = min(1.0, elapsed / state["uniform_transition_duration"])
+        # Smoothstep easing
+        alpha = alpha * alpha * (3.0 - 2.0 * alpha)
+        resolved = {}
+        for name, target_val in state["uniforms"].items():
+            if name in state["uniforms_from"]:
+                resolved[name] = self._lerp_uniform(state["uniforms_from"][name], target_val, alpha)
+            else:
+                resolved[name] = target_val
+        return resolved
 
     def handle_uniform_command(self, payload: str):
         """Handle uniform update command
@@ -956,13 +1033,37 @@ class Renderer:
         if "iResolution" in program:
             program["iResolution"].value = (float(render_width), float(render_height))
 
-        # Update custom uniforms
-        for uniform_name, uniform_value in state["uniforms"].items():
-            if uniform_name in program:
-                try:
-                    program[uniform_name].value = uniform_value
-                except Exception as e:
-                    print(f"[Renderer] Could not set uniform '{uniform_name}': {e}")
+        # Update custom uniforms (with smooth interpolation if transitioning)
+        if state["uniform_transition_start"] is not None:
+            elapsed = time.time() - state["uniform_transition_start"]
+            alpha = min(1.0, elapsed / state["uniform_transition_duration"])
+            # Smoothstep easing
+            alpha = alpha * alpha * (3.0 - 2.0 * alpha)
+
+            for uniform_name, uniform_value in state["uniforms"].items():
+                if uniform_name in program:
+                    try:
+                        if uniform_name in state["uniforms_from"]:
+                            effective = self._lerp_uniform(
+                                state["uniforms_from"][uniform_name], uniform_value, alpha
+                            )
+                        else:
+                            effective = uniform_value
+                        program[uniform_name].value = effective
+                    except Exception as e:
+                        print(f"[Renderer] Could not set uniform '{uniform_name}': {e}")
+
+            # Complete transition
+            if elapsed >= state["uniform_transition_duration"]:
+                state["uniform_transition_start"] = None
+                state["uniforms_from"] = {}
+        else:
+            for uniform_name, uniform_value in state["uniforms"].items():
+                if uniform_name in program:
+                    try:
+                        program[uniform_name].value = uniform_value
+                    except Exception as e:
+                        print(f"[Renderer] Could not set uniform '{uniform_name}': {e}")
 
         # Bind audio texture for shaders that use it
         if shader_obj.get("uses_audio_texture") and self.audio_texture:

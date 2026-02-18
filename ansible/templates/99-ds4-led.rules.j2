@@ -1,0 +1,6 @@
+# Allow non-root users to control DS4/DualSense controller light bar via sysfs
+# Deployed by ansible for Protosuit Engine controllerbridge
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="input*:red", RUN+="/bin/chmod 0666 /sys/%p/brightness"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="input*:green", RUN+="/bin/chmod 0666 /sys/%p/brightness"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="input*:blue", RUN+="/bin/chmod 0666 /sys/%p/brightness"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="input*:global", RUN+="/bin/chmod 0666 /sys/%p/brightness"

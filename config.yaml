@@ -71,6 +71,18 @@ controllerbridge:
     BTN_EAST: "b"       # B button (PlayStation Circle, Xbox B)
     ABS_HAT0X: "dpad_x" # D-pad X axis
     ABS_HAT0Y: "dpad_y" # D-pad Y axis
+  # Combo keys to quickly reassign a controller to a display slot
+  # Press these button combos on any connected controller to reassign it
+  assignment_combos:
+    left: ["BTN_MODE", "BTN_TL"]              # PS + L1 -> left display
+    right: ["BTN_MODE", "BTN_TR"]             # PS + R1 -> right display
+    presets: ["BTN_MODE", "BTN_TL", "BTN_TR"] # PS + L1 + R1 -> preset controller
+  # DS4 light bar colors per assignment slot (RGB 0-255)
+  assignment_colors:
+    left: [255, 255, 255]
+    right: [255, 0, 0]
+    presets: [182, 129, 0]
+    unassigned: [0, 0, 30]
 
 # ESP32 bridge configuration
 esp32:
@@ -632,6 +644,7 @@ animations:
     type: base
     name: "Audio Circle"
     emoji: "🔮"
+    render_scale: 0.5
     left_shader: "audio_circle.glsl"
     right_shader: "audio_circle.glsl"
     uniforms:
@@ -640,6 +653,28 @@ animations:
       ringRadius: {type: "float", value: 0.3, min: 0.1, max: 0.45, step: 0.01}
       barLength: {type: "float", value: 0.15, min: 0.05, max: 0.3, step: 0.01}
       glowIntensity: {type: "float", value: 1.0, min: 0.0, max: 2.0, step: 0.1}
+      rainbow: {type: "float", value: 1.0, min: 0.0, max: 1.0, step: 1.0}
+      baseColor: {type: "vec3", value: [1.0, 1.0, 1.0], min: 0.0, max: 1.0, step: 0.01}
+
+  audio_circle_bars:
+    type: base
+    name: "Audio Circle Bars"
+    emoji: "🎚️"
+    render_scale: 0.5
+    left_shader: "audio_circle_bars.glsl"
+    right_shader: "audio_circle_bars.glsl"
+    uniforms:
+      speed: {type: "float", value: 1.0, min: 0.0, max: 3.0, step: 0.1}
+      ringRadius: {type: "float", value: 0.24, min: 0.1, max: 0.45, step: 0.01}
+      barLength: {type: "float", value: 0.33, min: 0.05, max: 0.6, step: 0.01}
+      barCount: {type: "float", value: 20.0, min: 5.0, max: 60.0, step: 1.0}
+      rainbow: {type: "float", value: 1.0, min: 0.0, max: 1.0, step: 1.0}
+      baseColor: {type: "vec3", value: [1.0, 1.0, 1.0], min: 0.0, max: 1.0, step: 0.01}
+
+# Audio FFT capture settings for audio-reactive shaders
+audio_capture:
+  ref_level: 50.0     # Fixed reference level for normalizing raw FFT magnitudes
+  max_gain: 15.0       # Maximum auto-gain multiplier (caps amplification in quiet moments)
 
 # Transition settings for smooth shader changes
 transitions:

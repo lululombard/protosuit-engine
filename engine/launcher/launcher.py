@@ -659,32 +659,44 @@ class Launcher:
                     "protogen/visor/esp/set/hue", hue_cmd
                 )
 
-            # Kill running launcher actions, then start new one
+            # Kill running launcher actions, then start new one (in background
+            # so we don't block the MQTT thread and delay the publishes above)
             if not skip_launcher_action:
                 # Detach exit callbacks before stopping to prevent default preset restore
                 if self.video_launcher:
                     self.video_launcher.on_exit_callback = None
                 if self.exec_launcher:
                     self.exec_launcher.on_exit_callback = None
-                self.handle_stop_video()
-                self.handle_stop_exec()
 
                 action = preset.get("launcher_action")
-                if action:
-                    action_type = action.get("type")
-                    action_file = action.get("file")
-                    if action_type == "video" and action_file:
-                        self.handle_start_video(action_file)
-                    elif action_type == "exec" and action_file:
-                        self.handle_start_exec(action_file)
-                    elif action_type == "audio" and action_file:
-                        self.handle_start_audio(action_file)
-
-            self.active_preset = name
-            self.publish_presets_status()
+                threading.Thread(
+                    target=self._apply_launcher_action,
+                    args=(action,),
+                    daemon=True
+                ).start()
 
         except Exception as e:
             print(f"[Launcher] Error activating preset: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _apply_launcher_action(self, action):
+        """Stop current launcher processes and start a new action (runs in background thread)."""
+        try:
+            self.handle_stop_video()
+            self.handle_stop_exec()
+
+            if action:
+                action_type = action.get("type")
+                action_file = action.get("file")
+                if action_type == "video" and action_file:
+                    self.handle_start_video(action_file)
+                elif action_type == "exec" and action_file:
+                    self.handle_start_exec(action_file)
+                elif action_type == "audio" and action_file:
+                    self.handle_start_audio(action_file)
+        except Exception as e:
+            print(f"[Launcher] Error applying launcher action: {e}")
             import traceback
             traceback.print_exc()
 

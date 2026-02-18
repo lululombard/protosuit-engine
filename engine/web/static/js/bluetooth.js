@@ -11,6 +11,11 @@ let bluetoothConnectedDevices = new Set();
 let discoveredAudioDevices = [];  // Discovered BT audio devices from scanning
 let audioDevices = [];  // Available PipeWire/PulseAudio sinks
 let currentAudioDevice = null;
+let comboConfig = {};  // {left: ["BTN_MODE", "BTN_TL"], ...}
+let comboEditorSlot = null;  // Currently editing slot
+let colorConfig = {};  // {left: [255,255,255], ...}
+let actionComboConfig = {};  // {action_id: [buttons], ...}
+let actionComboEditorAction = null;  // Currently editing action (null for new)
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
@@ -58,6 +63,9 @@ function connectToMQTT() {
         client.subscribe('protogen/fins/controllerbridge/status/assignments');
         client.subscribe('protogen/fins/audiobridge/status/audio_devices');
         client.subscribe('protogen/fins/audiobridge/status/audio_device/current');
+        client.subscribe('protogen/fins/controllerbridge/status/combo_config');
+        client.subscribe('protogen/fins/controllerbridge/status/color_config');
+        client.subscribe('protogen/fins/controllerbridge/status/action_combo_config');
 
         console.log('[Bluetooth] Connected to MQTT');
     });
@@ -126,6 +134,18 @@ function handleMQTTMessage(topic, payload) {
         else if (topic === 'protogen/fins/audiobridge/status/audio_device/current') {
             currentAudioDevice = JSON.parse(payload);
             updateCurrentAudioDevice();
+        }
+        else if (topic === 'protogen/fins/controllerbridge/status/combo_config') {
+            comboConfig = JSON.parse(payload);
+            updateComboDisplay();
+        }
+        else if (topic === 'protogen/fins/controllerbridge/status/color_config') {
+            colorConfig = JSON.parse(payload);
+            updateColorPickers();
+        }
+        else if (topic === 'protogen/fins/controllerbridge/status/action_combo_config') {
+            actionComboConfig = JSON.parse(payload);
+            updateActionComboList();
         }
     } catch (e) {
         console.error('[Bluetooth] Error parsing MQTT message:', e);
@@ -265,6 +285,32 @@ function initBluetooth() {
             selectAudioDevice(deviceName);
         }
     });
+
+    // Combo edit buttons
+    document.querySelectorAll('.combo-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => openComboEditor(btn.dataset.slot));
+    });
+    document.getElementById('combo-editor-cancel').addEventListener('click', closeComboEditor);
+    document.getElementById('combo-editor-save').addEventListener('click', saveComboEditor);
+
+    // Color pickers
+    document.querySelectorAll('.color-picker').forEach(picker => {
+        picker.addEventListener('change', (e) => {
+            const slot = e.target.dataset.slot;
+            const rgb = hexToRgb(e.target.value);
+            if (slot && rgb && bluetoothMqttClient && bluetoothIsConnected) {
+                bluetoothMqttClient.publish('protogen/fins/controllerbridge/color/set',
+                    JSON.stringify({ slot: slot, color: rgb }));
+                console.log('[Bluetooth] Updated color:', slot, rgb);
+            }
+        });
+    });
+
+    // Action combo editor
+    document.getElementById('add-action-combo-btn').addEventListener('click', () => openActionComboEditor());
+    document.getElementById('action-combo-editor-cancel').addEventListener('click', closeActionComboEditor);
+    document.getElementById('action-combo-editor-save').addEventListener('click', saveActionComboEditor);
+    document.getElementById('action-combo-editor-delete').addEventListener('click', deleteActionCombo);
 }
 
 // Start Bluetooth scan
@@ -450,6 +496,13 @@ function createDeviceCard(device, deviceType) {
         connectedBadge.className = 'badge connected';
         connectedBadge.textContent = 'Connected';
         badges.appendChild(connectedBadge);
+    }
+
+    if (device.battery !== undefined && device.battery !== null) {
+        const batteryBadge = document.createElement('span');
+        batteryBadge.className = 'badge battery' + (device.battery <= 20 ? ' battery-low' : '');
+        batteryBadge.textContent = `${device.battery <= 10 ? '🪫' : '🔋'} ${device.battery}%`;
+        badges.appendChild(batteryBadge);
     }
 
     info.appendChild(name);
@@ -667,6 +720,256 @@ function updateAudioDevicesList() {
     if (currentValue && audioDevices.some(d => d.name === currentValue)) {
         audioSelect.value = currentValue;
     }
+}
+
+// ======== Assignment Combo Config ========
+
+// Human-readable button names
+const BUTTON_LABELS = {
+    'BTN_MODE': 'PS',
+    'BTN_TL': 'L1',
+    'BTN_TR': 'R1',
+    'BTN_TL2': 'L2',
+    'BTN_TR2': 'R2',
+    'ABS_Z': 'L2',
+    'ABS_RZ': 'R2',
+    'BTN_SOUTH': 'X / A',
+    'BTN_EAST': 'O / B',
+    'BTN_NORTH': '△ / Y',
+    'BTN_WEST': '□ / X',
+    'BTN_THUMBL': 'L3',
+    'BTN_THUMBR': 'R3',
+    'BTN_SELECT': 'Share',
+    'BTN_START': 'Options',
+    'DPAD_UP': 'D-Up',
+    'DPAD_DOWN': 'D-Down',
+    'DPAD_LEFT': 'D-Left',
+    'DPAD_RIGHT': 'D-Right',
+};
+
+// Available buttons for combo editor
+const AVAILABLE_BUTTONS = [
+    'BTN_MODE', 'BTN_TL', 'BTN_TR', 'BTN_TL2', 'BTN_TR2',
+    'BTN_SOUTH', 'BTN_EAST', 'BTN_NORTH', 'BTN_WEST',
+    'BTN_THUMBL', 'BTN_THUMBR', 'BTN_SELECT', 'BTN_START',
+    'DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT',
+];
+
+// Update combo display for all slots
+function updateComboDisplay() {
+    ['left', 'right', 'presets'].forEach(slot => {
+        const container = document.getElementById(`combo-${slot}`);
+        if (!container) return;
+        const buttons = comboConfig[slot] || [];
+        if (buttons.length === 0) {
+            container.innerHTML = '<span class="combo-none">Not set</span>';
+        } else {
+            container.innerHTML = buttons
+                .map(btn => `<span class="combo-tag">${BUTTON_LABELS[btn] || btn}</span>`)
+                .join(' + ');
+        }
+    });
+}
+
+// Open combo editor for a slot
+function openComboEditor(slot) {
+    comboEditorSlot = slot;
+    const editor = document.getElementById('combo-editor');
+    const slotLabel = document.getElementById('combo-editor-slot');
+    const buttonsContainer = document.getElementById('combo-editor-buttons');
+
+    slotLabel.textContent = slot === 'presets' ? 'Presets' : slot.charAt(0).toUpperCase() + slot.slice(1) + ' Display';
+
+    const currentButtons = new Set(comboConfig[slot] || []);
+    buttonsContainer.innerHTML = '';
+
+    AVAILABLE_BUTTONS.forEach(btn => {
+        const tag = document.createElement('button');
+        tag.className = 'combo-editor-tag' + (currentButtons.has(btn) ? ' selected' : '');
+        tag.textContent = BUTTON_LABELS[btn] || btn;
+        tag.dataset.button = btn;
+        tag.addEventListener('click', () => tag.classList.toggle('selected'));
+        buttonsContainer.appendChild(tag);
+    });
+
+    editor.style.display = 'block';
+}
+
+// Close combo editor
+function closeComboEditor() {
+    document.getElementById('combo-editor').style.display = 'none';
+    comboEditorSlot = null;
+}
+
+// Save combo editor
+function saveComboEditor() {
+    if (!comboEditorSlot || !bluetoothMqttClient || !bluetoothIsConnected) return;
+
+    const selected = [];
+    document.querySelectorAll('#combo-editor-buttons .combo-editor-tag.selected').forEach(tag => {
+        selected.push(tag.dataset.button);
+    });
+
+    const message = JSON.stringify({ slot: comboEditorSlot, buttons: selected });
+    bluetoothMqttClient.publish('protogen/fins/controllerbridge/combo/set', message);
+    console.log('[Bluetooth] Updated combo:', comboEditorSlot, selected);
+    closeComboEditor();
+}
+
+// ======== Assignment Color Config ========
+
+function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : null;
+}
+
+function updateColorPickers() {
+    ['left', 'right', 'presets', 'unassigned'].forEach(slot => {
+        const picker = document.getElementById(`color-${slot}`);
+        if (!picker) return;
+        const rgb = colorConfig[slot];
+        if (rgb && rgb.length === 3) {
+            picker.value = rgbToHex(rgb[0], rgb[1], rgb[2]);
+        }
+    });
+}
+
+// ======== System Action Combos ========
+
+const ACTION_LABELS = {
+    'airplay_toggle': 'AirPlay Toggle',
+    'spotify_toggle': 'Spotify Toggle',
+    'reboot': 'Reboot',
+    'shutdown': 'Shutdown',
+    'ap_toggle': 'AP Toggle',
+    'esp_restart': 'Restart ESP32',
+    'volume_up_1': 'Volume Up 1%',
+    'volume_down_1': 'Volume Down 1%',
+    'volume_up_5': 'Volume Up 5%',
+    'volume_down_5': 'Volume Down 5%',
+    'volume_up_10': 'Volume Up 10%',
+    'volume_down_10': 'Volume Down 10%',
+};
+
+function updateActionComboList() {
+    const list = document.getElementById('action-combo-list');
+    const entries = Object.entries(actionComboConfig);
+
+    if (entries.length === 0) {
+        list.innerHTML = '<div class="empty-state">No action combos configured.</div>';
+        return;
+    }
+
+    list.innerHTML = '';
+    entries.forEach(([actionId, buttons]) => {
+        const row = document.createElement('div');
+        row.className = 'combo-row';
+
+        const label = document.createElement('div');
+        label.className = 'combo-slot-label';
+        label.textContent = ACTION_LABELS[actionId] || actionId;
+
+        const btnDisplay = document.createElement('div');
+        btnDisplay.className = 'combo-buttons';
+        btnDisplay.innerHTML = buttons
+            .map(btn => `<span class="combo-tag">${BUTTON_LABELS[btn] || btn}</span>`)
+            .join(' + ');
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-small combo-edit-btn';
+        editBtn.textContent = 'Edit';
+        editBtn.addEventListener('click', () => openActionComboEditor(actionId));
+
+        row.appendChild(label);
+        row.appendChild(btnDisplay);
+        row.appendChild(editBtn);
+        list.appendChild(row);
+    });
+}
+
+function openActionComboEditor(actionId) {
+    actionComboEditorAction = actionId || null;
+    const editor = document.getElementById('action-combo-editor');
+    const actionSelect = document.getElementById('action-combo-action-select');
+    const buttonsContainer = document.getElementById('action-combo-editor-buttons');
+    const deleteBtn = document.getElementById('action-combo-editor-delete');
+
+    if (actionId && actionComboConfig[actionId]) {
+        const buttons = actionComboConfig[actionId];
+        actionSelect.value = actionId;
+        actionSelect.disabled = true;
+        deleteBtn.style.display = 'inline-flex';
+
+        const currentButtons = new Set(buttons);
+        buttonsContainer.innerHTML = '';
+        AVAILABLE_BUTTONS.forEach(btn => {
+            const tag = document.createElement('button');
+            tag.className = 'combo-editor-tag' + (currentButtons.has(btn) ? ' selected' : '');
+            tag.textContent = BUTTON_LABELS[btn] || btn;
+            tag.dataset.button = btn;
+            tag.addEventListener('click', () => tag.classList.toggle('selected'));
+            buttonsContainer.appendChild(tag);
+        });
+    } else {
+        actionSelect.value = '';
+        actionSelect.disabled = false;
+        deleteBtn.style.display = 'none';
+
+        buttonsContainer.innerHTML = '';
+        AVAILABLE_BUTTONS.forEach(btn => {
+            const tag = document.createElement('button');
+            tag.className = 'combo-editor-tag';
+            tag.textContent = BUTTON_LABELS[btn] || btn;
+            tag.dataset.button = btn;
+            tag.addEventListener('click', () => tag.classList.toggle('selected'));
+            buttonsContainer.appendChild(tag);
+        });
+    }
+
+    editor.style.display = 'block';
+}
+
+function closeActionComboEditor() {
+    document.getElementById('action-combo-editor').style.display = 'none';
+    document.getElementById('action-combo-action-select').disabled = false;
+    actionComboEditorAction = null;
+}
+
+function saveActionComboEditor() {
+    if (!bluetoothMqttClient || !bluetoothIsConnected) return;
+
+    const actionSelect = document.getElementById('action-combo-action-select');
+    const action = actionSelect.value;
+
+    if (!action) return;
+
+    const selected = [];
+    document.querySelectorAll('#action-combo-editor-buttons .combo-editor-tag.selected').forEach(tag => {
+        selected.push(tag.dataset.button);
+    });
+
+    if (selected.length === 0) return;
+
+    const message = JSON.stringify({ action, buttons: selected });
+    bluetoothMqttClient.publish('protogen/fins/controllerbridge/action_combo/set', message);
+    console.log('[Bluetooth] Updated action combo:', action, selected);
+    closeActionComboEditor();
+}
+
+function deleteActionCombo() {
+    if (!actionComboEditorAction || !bluetoothMqttClient || !bluetoothIsConnected) return;
+
+    const label = ACTION_LABELS[actionComboEditorAction] || actionComboEditorAction;
+    if (!confirm(`Delete action combo for "${label}"?`)) return;
+
+    const message = JSON.stringify({ action: actionComboEditorAction, delete: true });
+    bluetoothMqttClient.publish('protogen/fins/controllerbridge/action_combo/set', message);
+    console.log('[Bluetooth] Deleted action combo:', actionComboEditorAction);
+    closeActionComboEditor();
 }
 
 // Update current audio device display

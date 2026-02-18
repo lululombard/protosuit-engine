@@ -25,7 +25,7 @@ from bluetoothbridge.bluez_dbus import (
     BluezManager, BluezDevice, BluezAdapter,
     is_gamepad, is_audio_device,
     dbus_path_to_mac, dbus_path_adapter,
-    BLUEZ_DEVICE_IFACE,
+    BLUEZ_DEVICE_IFACE, BLUEZ_BATTERY_IFACE,
 )
 
 from gi.repository import GLib
@@ -120,12 +120,20 @@ class BluetoothBridge:
         connected = bool(props.get("Connected", False))
         icon = str(props.get("Icon", ""))
 
+        # Check for battery info
+        battery = None
+        if BLUEZ_BATTERY_IFACE in interfaces:
+            batt_props = interfaces[BLUEZ_BATTERY_IFACE]
+            if "Percentage" in batt_props:
+                battery = int(batt_props["Percentage"])
+
         with self._state_lock:
             if is_gamepad(name, icon):
                 if mac not in self.discovered_devices:
                     self.discovered_devices[mac] = {
                         "mac": mac, "name": name,
                         "paired": paired, "connected": connected,
+                        "battery": battery,
                     }
                     print(f"[BluetoothBridge] Discovered gamepad: {name} ({mac})")
                     self.publish_devices_status()
@@ -135,7 +143,7 @@ class BluetoothBridge:
                     self.audio_devices[mac] = {
                         "mac": mac, "name": name,
                         "paired": paired, "connected": connected,
-                        "type": "audio",
+                        "type": "audio", "battery": battery,
                     }
                     print(f"[BluetoothBridge] Discovered audio device: {name} ({mac})")
                     self.publish_audio_devices_status()
@@ -161,15 +169,28 @@ class BluetoothBridge:
                 self.publish_audio_devices_status()
 
     def _on_properties_changed(self, connection, sender, obj, iface, signal_name, params):
-        """Handle PropertiesChanged signal (connection state, name updates)."""
+        """Handle PropertiesChanged signal (connection state, name, battery updates)."""
         iface_name, changed, invalidated = params
 
-        if iface_name != BLUEZ_DEVICE_IFACE:
+        if iface_name not in (BLUEZ_DEVICE_IFACE, BLUEZ_BATTERY_IFACE):
             return
 
         path = obj
         mac = dbus_path_to_mac(path)
         if not mac:
+            return
+
+        # Handle battery level changes
+        if iface_name == BLUEZ_BATTERY_IFACE:
+            if "Percentage" in changed:
+                battery = int(changed["Percentage"])
+                with self._state_lock:
+                    if mac in self.discovered_devices:
+                        self.discovered_devices[mac]["battery"] = battery
+                        self.publish_devices_status()
+                    if mac in self.audio_devices:
+                        self.audio_devices[mac]["battery"] = battery
+                        self.publish_audio_devices_status()
             return
 
         with self._state_lock:
@@ -185,11 +206,13 @@ class BluetoothBridge:
                         name = device.name
                         icon = device.icon
                         paired = device.paired
+                        battery = device.battery
 
                         if is_gamepad(name, icon):
                             self.discovered_devices[mac] = {
                                 "mac": mac, "name": name,
                                 "paired": paired, "connected": True,
+                                "battery": battery,
                             }
                             print(f"[BluetoothBridge] Gamepad connected (new): {name} ({mac})")
                             publish_notification(self.mqtt_client, "bluetooth", "connected",
@@ -198,7 +221,8 @@ class BluetoothBridge:
                         elif is_audio_device(name, icon):
                             self.audio_devices[mac] = {
                                 "mac": mac, "name": name,
-                                "paired": paired, "connected": True, "type": "audio",
+                                "paired": paired, "connected": True,
+                                "type": "audio", "battery": battery,
                             }
                             print(f"[BluetoothBridge] Audio device connected (new): {name} ({mac})")
                             self.publish_last_audio_device(mac)
@@ -462,12 +486,14 @@ class BluetoothBridge:
             # Update state from actual device properties
             name = device.name
             paired = device.paired
+            battery = device.battery
             with self._state_lock:
                 icon = device.icon
                 if is_audio_device(name, icon):
                     self.audio_devices[mac] = {
                         "mac": mac, "name": name,
-                        "paired": paired, "connected": True, "type": "audio",
+                        "paired": paired, "connected": True,
+                        "type": "audio", "battery": battery,
                     }
                     self.publish_audio_devices_status()
                     self.publish_last_audio_device(mac)
@@ -475,6 +501,7 @@ class BluetoothBridge:
                     self.discovered_devices[mac] = {
                         "mac": mac, "name": name,
                         "paired": paired, "connected": True,
+                        "battery": battery,
                     }
                     self.publish_devices_status()
 
@@ -566,16 +593,18 @@ class BluetoothBridge:
                     icon = dev["icon"]
                     connected = dev["connected"]
 
+                    battery = dev.get("battery")
                     if is_gamepad(name, icon):
                         self.discovered_devices[mac] = {
                             "mac": mac, "name": name,
                             "paired": True, "connected": connected,
+                            "battery": battery,
                         }
                     elif is_audio_device(name, icon):
                         self.audio_devices[mac] = {
                             "mac": mac, "name": name,
                             "paired": True, "connected": connected,
-                            "type": "audio",
+                            "type": "audio", "battery": battery,
                         }
             except Exception as e:
                 print(f"[BluetoothBridge] Error loading paired devices from {adapter_name}: {e}")
@@ -763,9 +792,12 @@ class BluetoothBridge:
                     device = self.bluez.get_device(adapter, mac)
                     connected = device.connected
                     paired = device.paired
-                    if connected != info.get("connected") or paired != info.get("paired"):
+                    battery = device.battery
+                    if (connected != info.get("connected") or paired != info.get("paired")
+                            or battery != info.get("battery")):
                         info["connected"] = connected
                         info["paired"] = paired
+                        info["battery"] = battery
                         changed_gamepads = True
                 except Exception:
                     pass
@@ -776,9 +808,12 @@ class BluetoothBridge:
                     device = self.bluez.get_device(adapter, mac)
                     connected = device.connected
                     paired = device.paired
-                    if connected != info.get("connected") or paired != info.get("paired"):
+                    battery = device.battery
+                    if (connected != info.get("connected") or paired != info.get("paired")
+                            or battery != info.get("battery")):
                         info["connected"] = connected
                         info["paired"] = paired
+                        info["battery"] = battery
                         changed_audio = True
                 except Exception:
                     pass

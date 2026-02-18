@@ -4,6 +4,7 @@ Provides Pythonic access to BlueZ Bluetooth management via pydbus.
 Replaces all bluetoothctl subprocess calls with direct D-Bus API.
 """
 
+import glob
 import threading
 import logging
 from typing import Optional, Callable, Dict, List
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 BLUEZ_SERVICE = "org.bluez"
 BLUEZ_ADAPTER_IFACE = "org.bluez.Adapter1"
 BLUEZ_DEVICE_IFACE = "org.bluez.Device1"
+BLUEZ_BATTERY_IFACE = "org.bluez.Battery1"
 OBJECT_MANAGER_IFACE = "org.freedesktop.DBus.ObjectManager"
 AGENT_PATH = "/org/bluez/protosuit_agent"
 
@@ -276,6 +278,29 @@ class BluezDevice:
         except Exception:
             return ""
 
+    @property
+    def battery(self) -> Optional[int]:
+        """Battery percentage (0-100) via power_supply sysfs or BlueZ Battery1."""
+        # Try power_supply sysfs first (used by DS4/DualSense controllers)
+        mac_lower = self.mac.lower().replace(":", ":")
+        matches = glob.glob(f"/sys/class/power_supply/*{mac_lower}*/capacity")
+        if matches:
+            try:
+                with open(matches[0]) as f:
+                    return int(f.read().strip())
+            except Exception:
+                pass
+        # Fall back to BlueZ Battery1 D-Bus interface
+        try:
+            props = self.bus.con.call_sync(
+                BLUEZ_SERVICE, self.path, PROPERTIES_IFACE, "Get",
+                GLib.Variant("(ss)", (BLUEZ_BATTERY_IFACE, "Percentage")),
+                GLib.VariantType("(v)"), Gio.DBusCallFlags.NONE, -1, None,
+            )
+            return int(props[0])
+        except Exception:
+            return None
+
     def trust(self):
         """Mark device as trusted."""
         self._get_proxy().Trusted = True
@@ -386,6 +411,21 @@ class BluezManager:
                 continue
 
             mac = dbus_path_to_mac(path) or props.get("Address", "")
+            battery = None
+            if BLUEZ_BATTERY_IFACE in interfaces:
+                batt_props = interfaces[BLUEZ_BATTERY_IFACE]
+                if "Percentage" in batt_props:
+                    battery = int(batt_props["Percentage"])
+            if battery is None:
+                # Try power_supply sysfs (DS4/DualSense controllers)
+                mac_lower = mac.lower()
+                sysfs_matches = glob.glob(f"/sys/class/power_supply/*{mac_lower}*/capacity")
+                if sysfs_matches:
+                    try:
+                        with open(sysfs_matches[0]) as f:
+                            battery = int(f.read().strip())
+                    except Exception:
+                        pass
             devices.append({
                 "mac": mac,
                 "name": str(props.get("Name", props.get("Alias", mac))),
@@ -394,6 +434,7 @@ class BluezManager:
                 "trusted": bool(props.get("Trusted", False)),
                 "icon": str(props.get("Icon", "")),
                 "path": path,
+                "battery": battery,
             })
 
         return devices

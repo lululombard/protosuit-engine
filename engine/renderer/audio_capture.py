@@ -24,7 +24,7 @@ class AudioCapture:
     PROCESS_HZ = 60  # Match render frame rate
     RETRY_INTERVAL = 10.0  # Seconds between device retry attempts
 
-    def __init__(self):
+    def __init__(self, ref_level=50.0, max_gain=5.0):
         self._lock = threading.Lock()
         self._fft_data = np.zeros(self.TEXTURE_WIDTH, dtype=np.float32)
         self._waveform_data = np.full(self.TEXTURE_WIDTH, 0.5, dtype=np.float32)
@@ -32,6 +32,10 @@ class AudioCapture:
         self._thread = None
         self._available = False
         self._stream = None
+
+        # Gain settings (from config)
+        self._ref_level = ref_level    # Fixed reference for raw FFT normalization
+        self._max_gain = max_gain      # Cap for auto-gain multiplier
 
         # Ring buffer for audio samples from callback
         self._buffer_lock = threading.Lock()
@@ -48,6 +52,11 @@ class AudioCapture:
         # Subtracted from each frame so steady-state noise (fans, hum) is removed
         self._noise_floor = None  # Initialized on first frame
         self._noise_adapt_rate = 0.01  # How fast noise floor adapts (slow = stable)
+
+        # Auto-gain: smoothed peak tracker for adaptive normalization
+        self._peak_smooth = 0.0
+        self._peak_attack = 0.4   # Rise quickly to follow transients
+        self._peak_release = 0.02 # Decay slowly so quiet gaps stay natural
 
         # Windowing function (Hann window reduces spectral leakage)
         self._window = np.hanning(self.FFT_SIZE).astype(np.float32)
@@ -257,21 +266,24 @@ class AudioCapture:
                     )
                 magnitudes = np.maximum(magnitudes - self._noise_floor, 0.0)
 
-                # Logarithmic (dB) scale: convert to decibels, then map to 0-1
-                # This matches how we perceive loudness and makes quieter
-                # frequencies visible alongside loud ones
-                DB_RANGE = 60.0  # Dynamic range in dB (60dB = 1000:1 ratio)
-                peak = magnitudes.max()
-                if peak > 1e-10:
-                    # Convert to dB relative to peak: 0 dB = peak, -60 dB = floor
-                    magnitudes = np.maximum(magnitudes, peak * 1e-6)  # Avoid log(0)
-                    db = 20.0 * np.log10(magnitudes / peak)
-                    # Map [-DB_RANGE, 0] to [0, 1]
-                    magnitudes = np.clip((db + DB_RANGE) / DB_RANGE, 0.0, 1.0).astype(
-                        np.float32
-                    )
+                # Normalize with fixed reference, then apply capped auto-gain
+                magnitudes /= self._ref_level
+
+                # Track smoothed peak for auto-gain (fast attack, slow release)
+                peak = float(magnitudes.max())
+                if peak > self._peak_smooth:
+                    self._peak_smooth += (peak - self._peak_smooth) * self._peak_attack
                 else:
-                    magnitudes[:] = 0.0
+                    self._peak_smooth += (peak - self._peak_smooth) * self._peak_release
+
+                # Auto-gain: boost quiet signals, but cap the multiplier
+                if self._peak_smooth > 1e-6:
+                    auto_gain = min(1.0 / self._peak_smooth, self._max_gain)
+                else:
+                    auto_gain = 1.0
+                magnitudes = np.clip(magnitudes * auto_gain, 0.0, 1.0).astype(
+                    np.float32
+                )
 
                 # Exponential smoothing
                 self._smoothed_fft = (

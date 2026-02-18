@@ -263,6 +263,18 @@
     border: 1px solid #2ecc71;
 }
 
+.badge.battery {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+    border: 1px solid #2ecc71;
+}
+
+.badge.battery.battery-low {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+    border: 1px solid #e74c3c;
+}
+
 .device-actions {
     display: flex;
     gap: 10px;
@@ -511,6 +523,217 @@
     box-shadow: 0 0 10px rgba(243, 156, 18, 0.2);
 }
 
+/* Assignment Shortcuts / Combo Config */
+
+.section-description {
+    color: var(--text-secondary, #666);
+    font-size: 14px;
+    margin: 0 0 16px 0;
+}
+
+.combo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.combo-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--bg-primary, #1a1a2e);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 8px;
+}
+
+.combo-slot-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary, #aaa);
+    min-width: 110px;
+    flex-shrink: 0;
+}
+
+.combo-buttons {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.combo-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    background: var(--accent-primary, #f39c12);
+    color: #000;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.color-picker {
+    -webkit-appearance: none;
+    width: 36px;
+    height: 36px;
+    border: 2px solid var(--border-color, #333);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.color-picker::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+
+.color-picker::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
+}
+
+.color-picker::-moz-color-swatch {
+    border: none;
+    border-radius: 2px;
+}
+
+.color-picker:hover {
+    border-color: var(--accent-primary, #f39c12);
+}
+
+.combo-none {
+    color: var(--text-secondary, #666);
+    font-style: italic;
+    font-size: 13px;
+}
+
+.combo-edit-btn {
+    background: transparent;
+    border: 1px solid var(--border-color, #444);
+    color: var(--text-secondary, #aaa);
+    font-size: 12px;
+    padding: 4px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.combo-edit-btn:hover {
+    border-color: var(--accent-primary, #f39c12);
+    color: var(--accent-primary, #f39c12);
+}
+
+.combo-editor {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--bg-primary, #1a1a2e);
+    border: 1px solid var(--accent-primary, #f39c12);
+    border-radius: 8px;
+}
+
+.combo-editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    color: var(--text-primary, #eee);
+    font-size: 14px;
+}
+
+.combo-editor-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.combo-editor-tag {
+    padding: 6px 14px;
+    border: 1px solid var(--border-color, #444);
+    background: transparent;
+    color: var(--text-primary, #ccc);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+}
+
+.combo-editor-tag:hover {
+    border-color: var(--accent-primary, #f39c12);
+}
+
+.combo-editor-tag.selected {
+    background: var(--accent-primary, #f39c12);
+    color: #000;
+    border-color: var(--accent-primary, #f39c12);
+    font-weight: 600;
+}
+
+/* Action Combo Editor */
+.action-combo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.action-combo-field-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.action-combo-field-row label {
+    font-size: 13px;
+    color: var(--text-secondary, #aaa);
+    min-width: 60px;
+    flex-shrink: 0;
+}
+
+.text-input {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-secondary, #1a1a2e);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 4px;
+    color: var(--text-primary, #eee);
+    font-size: 13px;
+    font-family: 'Share Tech Mono', monospace;
+}
+
+.text-input:focus {
+    outline: none;
+    border-color: var(--accent-primary, #f39c12);
+}
+
+.text-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.action-combo-editor-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.action-combo-delete-btn {
+    border-color: #e74c3c !important;
+    color: #e74c3c !important;
+}
+
+.action-combo-delete-btn:hover {
+    background: #e74c3c !important;
+    color: var(--text-primary, #eee) !important;
+}
+
+#add-action-combo-btn {
+    align-self: flex-start;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .bt-container {
@@ -550,5 +773,14 @@
 
     .audio-device-label {
         min-width: auto;
+    }
+
+    .combo-row {
+        flex-wrap: wrap;
+    }
+
+    .combo-slot-label {
+        min-width: auto;
+        width: 100%;
     }
 }

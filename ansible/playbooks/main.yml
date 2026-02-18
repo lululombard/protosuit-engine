@@ -223,6 +223,13 @@
     mode: '0644'
   notify: reload udev rules
 
+- name: Install DS4 LED udev rules for controller light bar
+  template:
+    src: "{{ playbook_dir }}/../templates/99-ds4-led.rules.j2"
+    dest: /etc/udev/rules.d/99-ds4-led.rules
+    mode: '0644'
+  notify: reload udev rules
+
 # Cast Bridge dependencies (AirPlay + Spotify Connect)
 - name: Install shairport-sync for AirPlay support
   apt:
