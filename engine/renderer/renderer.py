@@ -49,6 +49,7 @@ class Renderer:
         self.left_x = display_config.left_x
         self.right_x = display_config.right_x
         self.display_y = display_config.y
+        self.vsync = display_config.vsync
 
         # Total window size (both displays side by side)
         self.total_width = self.display_width * 2
@@ -792,6 +793,7 @@ class Renderer:
         self.screen = pygame.display.set_mode(
             (self.total_width, self.total_height),
             pygame.OPENGL | pygame.DOUBLEBUF | pygame.NOFRAME,
+            vsync=1 if self.vsync else 0,
         )
         pygame.display.set_caption("Protosuit Renderer")
 
@@ -821,6 +823,7 @@ class Renderer:
 
         print("[Renderer] OpenGL initialized")
         print(f"[Renderer] Window size: {self.total_width}x{self.total_height}")
+        print(f"[Renderer] VSync: {'enabled' if self.vsync else 'disabled'}")
 
     def _recreate_fbos(self, display: str):
         """Recreate framebuffers for a display at current render scale"""
@@ -1293,7 +1296,10 @@ class Renderer:
                     self.ctx.clear(0.0, 0.0, 0.0, 1.0)  # Clear to black
                     pygame.display.flip()
 
-                clock.tick(60)
+                if self.vsync:
+                    clock.tick()  # vsync handles frame pacing
+                else:
+                    clock.tick(60)
 
                 # Track FPS
                 self.fps_counter += 1

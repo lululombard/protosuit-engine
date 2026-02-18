@@ -45,4 +45,12 @@ xhost +local:
 # Hide the mouse cursor
 unclutter -idle 0.01 -root &
 
+# Start picom compositor for vsync (V3D driver needs a compositor for tear-free rendering)
+if command -v picom >/dev/null 2>&1; then
+    picom --backend glx --vsync --no-fading-openclose --no-fading-destroyed-argb -b &
+    echo "picom compositor started"
+else
+    echo "WARNING: picom not installed, vsync will not work"
+fi
+
 echo "Display configuration complete"

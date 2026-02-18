@@ -26,6 +26,7 @@ display:
   left_x: 0    # X position of left display
   right_x: 720 # X position of right display (left_x + width)
   y: 0         # Y position of both displays
+  vsync: true   # Enable vertical sync (locks FPS to display refresh rate)
 
 # Renderer monitoring configuration
 monitoring:

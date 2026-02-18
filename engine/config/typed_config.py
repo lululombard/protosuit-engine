@@ -34,6 +34,7 @@ class DisplayConfig:
     left_x: int = 0
     right_x: int = 720
     y: int = 0
+    vsync: bool = True
 
 
 @dataclass
