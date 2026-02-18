@@ -292,11 +292,10 @@ static void processMessage(const String& topic, const String& payload) {
             }
         }
     }
-    else if (topic == "protogen/fins/renderer/status/preset") {
-        // Future: parse preset name
+    else if (topic == "protogen/fins/launcher/status/presets") {
         JsonDocument doc;
         if (deserializeJson(doc, payload) == DeserializationError::Ok) {
-            const char* name = doc["name"];
+            const char* name = doc["active_preset"];
             currentPreset = name ? name : "";
         }
     }

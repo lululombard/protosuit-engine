@@ -77,7 +77,7 @@ class ESPBridge:
         "protogen/visor/esp/set/hue",
         "protogen/fins/renderer/status/shader",
         "protogen/fins/renderer/status/performance",
-        "protogen/fins/renderer/status/preset",     # future
+        "protogen/fins/launcher/status/presets",
         "protogen/fins/bluetoothbridge/status/devices",
         "protogen/fins/systembridge/status/metrics",
         "protogen/fins/launcher/status/video",
@@ -288,6 +288,15 @@ class ESPBridge:
                 try:
                     data = json.loads(payload)
                     filtered = {"fps": data.get("fps")}
+                    payload = json.dumps(filtered, separators=(",", ":"))
+                except json.JSONDecodeError:
+                    pass
+
+            elif topic == "protogen/fins/launcher/status/presets":
+                try:
+                    data = json.loads(payload)
+                    # Only send active_preset, strip bulky presets array
+                    filtered = {"active_preset": data.get("active_preset")}
                     payload = json.dumps(filtered, separators=(",", ":"))
                 except json.JSONDecodeError:
                     pass
