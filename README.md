@@ -264,13 +264,15 @@ For more help, [open an issue on GitHub](https://github.com/lululombard/protosui
 ## Future Plans
 
 ### Hardware
+New PCB integrating all components:
 - SMD power circuitry instead of off-the-shelf buck converter modules
 - ESP32 module directly on-board instead of a dev board
-- Raspberry Pi Compute Module instead of a full RPi 5
+- Raspberry Pi Compute Module mounted in the visor (fan-cooled area) instead of a full RPi 5 in the fin (soft temp limit currently set to 60°C to avoid PETG warping due to no airflow)
 - Custom display driver circuitry instead of separate HDMI-MIPI boards
+- Custom LED matrix PCB for fins instead of many cut/soldered LED strips
 
 ### Features
-- **PSP Control**: Be able to switch presets with PSP, control launcher, etc.
+- **PS Vita Control**: Migrate from PSP to PS Vita. WPA1 support required by PSP is too much of a hassle. Be able to switch presets, control launcher, etc.
 - **Shader image/video support**: load images and videos as shader inputs (textures)
 - **Single web page**: Ditch the separate controller/bluetooth/networking/cast and integrate it on the single web page with modals
 - **Web UI refactor**: Terminal style, desktop with folders (presets, shaders, visor), needs to be phone compatible

@@ -5,21 +5,21 @@ Monitors Bluetooth gamepad connections via bluetoothbridge, reads evdev input ev
 ## MQTT Topics
 
 ### Subscribes
-- `protogen/fins/bluetoothbridge/status/devices` -gamepad connection/disconnection events
-- `protogen/fins/controllerbridge/assign` -assign a controller to a slot (`{"mac": "...", "display": "left|right|presets"}`)
-- `protogen/fins/controllerbridge/status/assignments` -restore retained assignments on startup
-- `protogen/fins/launcher/status/presets` -load preset gamepad combos for combo detection
+- `protogen/fins/bluetoothbridge/status/devices` gamepad connection/disconnection events
+- `protogen/fins/controllerbridge/assign` assign a controller to a slot (`{"mac": "...", "display": "left|right|presets"}`)
+- `protogen/fins/controllerbridge/status/assignments` restore retained assignments on startup
+- `protogen/fins/launcher/status/presets` load preset gamepad combos for combo detection
 
 ### Publishes
-- `protogen/fins/controllerbridge/status/assignments` -current controller-to-slot assignments (retained)
-- `protogen/fins/launcher/input/exec` -forwarded input events (`{"key", "action", "display"}`, QoS 0)
-- `protogen/fins/launcher/preset/activate` -preset activation triggered by gamepad combo
-- `protogen/global/notifications` -controller connect/disconnect notifications
+- `protogen/fins/controllerbridge/status/assignments` current controller-to-slot assignments (retained)
+- `protogen/fins/launcher/input/exec` forwarded input events (`{"key", "action", "display"}`, QoS 0)
+- `protogen/fins/launcher/preset/activate` preset activation triggered by gamepad combo
+- `protogen/global/notifications` controller connect/disconnect notifications
 
 ## Assignment Slots
 
 - **left** / **right**: forward gamepad input to launcher for executable control
-- **presets**: dedicated combo controller — tracks raw button state and matches against preset gamepad combos. Does NOT forward input to launcher. 1-second cooldown between combo activations.
+- **presets**: dedicated combo controller: tracks raw button state and matches against preset gamepad combos. Does NOT forward input to launcher. 1-second cooldown between combo activations.
 
 ## Configuration
 

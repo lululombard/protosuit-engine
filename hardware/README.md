@@ -2,6 +2,60 @@
 
 This document covers all hardware aspects of the Protosuit Engine project, including the custom PCB, USB connections, GPIO pinout, displays, and Bluetooth adapter management.
 
+## Bill of Materials
+
+Everything you need to buy to build the suit.
+
+| Component | Qty | Notes |
+|-----------|-----|-------|
+| **Computing** | | |
+| Raspberry Pi 5 (4GB+) | 1 | Main processor |
+| ESP32 dev board (Wemos D1 Mini ESP32) | 1 | Visor sensors, fan, OLED, LED strips |
+| Teensy 4.0 | 1 | WS35 LED matrix rendering (ProtoTracer) |
+| **Displays** | | |
+| 4" 720x720 round display + HDMI-MIPI driver board | 2 | Search "wisecoco 4 inch 720 round" on AliExpress |
+| 0.96" SSD1306 128x64 OLED (I2C) | 1 | Visor status dashboard, connected to ESP32 |
+| **Sensors** | | |
+| DHT22 temperature/humidity sensor | 1 | Visor temp monitoring for auto fan curve |
+| APDS-9960 proximity sensor | 1 | Boop sensor, connected to Teensy I2C |
+| MPU6050 6-axis IMU | 1 | Gyroscope + accelerometer, on-board (currently unused) |
+| MAX9814 microphone amplifier | 1 | Teensy audio-reactive features |
+| **LED Matrices & Strips** | | |
+| WS35 LED matrix panels | 4 | [Coela Can't! design](https://coelacant1.gumroad.com/l/ws35), requires trace cut (see [WS35 Panel Modification](#ws35-panel-modification)) |
+| SK6812 LED strip, 300 LEDs | 1 | Upper arch |
+| WS2812B LED strip, 60 LEDs | 2 | Left and right fins |
+| WS2812B LED strip, 40 LEDs | 2 | Left and right ears |
+| **Audio & Connectivity** | | |
+| USB microphone dongle | 1 | Sound-reactive shader audio capture (FFT) |
+| RTL8851BU USB Wi-Fi 6 + Bluetooth dongle | 1 | Wi-Fi client mode + all BT devices |
+| **Cooling** | | |
+| Noctua NF-A4x10 5V PWM fan | 1 | 40x10mm, 4-pin PWM, visor ventilation |
+| **Power** | | |
+| USB-C PD power bank (20V output) | 1 | Powers the entire suit |
+| USB-C PD 20V to XT60 cable | 1 | Connects power bank to PCB |
+| 5V 5A buck converter (TPS54X60) | 1 | Powers RPi + displays (25W) |
+| 5V 8A buck converter (CRDC2580) | 1 | Powers Teensy, ESP32, all LEDs (40W) |
+| **Cables** | | |
+| HDMI FFC cable, 15cm | 1 | Left fin display |
+| HDMI FFC cable, 80cm | 1 | Right fin display |
+| **PCB & On-Board Components** | | |
+| ProtosuitDevBoard PCB | 1 | Order from gerbers in `pcbs/ProtosuitDevBoard/gerber_v1_0/` |
+| 2-pin screw terminal block | 2 | Power in (20V) + RPi power out (5V) |
+| 3-pin screw terminal block | 9 | WS35 matrices (4) + LED strips (5) |
+| JST 4-pin connector (male, PCB) | 4 | I2C headers: OLED, boop sensor, gyro, expansion |
+| JST 3-pin connector (male, PCB) | 2 | MAX9814 mic + DHT22 sensor |
+| Fan connector header | 1 | 4-pin for Noctua fan |
+| Potentiometer (small trim, 200Ω) | 9 | Inline on LED data lines (4 matrices + 5 strips), can be replaced with ~68Ω resistors (50-150Ω range works) |
+| 2N3904 NPN transistor | 1 | Fan PWM control |
+| 4.7kΩ resistor | 1 | |
+| 2.2kΩ resistor | 1 | |
+| 10kΩ resistor | 1 | |
+| 100kΩ resistor | 1 | |
+| **Connectors & Tools** | | |
+| JST connectors (female, 4-pin) + crimping tool | - | I2C cables (OLED, boop sensor, etc.) |
+| JST connectors (female, 3-pin) | - | MAX9814 mic + DHT22 cables |
+| Ferrule crimps + ferrule crimping tool | - | For screw terminal and power connections |
+
 ## PCB Design (pcbs/ProtosuitDevBoard/)
 
 The main PCB is designed in **KiCad 8.0** and serves as the central power distribution and interconnect board for the suit.
