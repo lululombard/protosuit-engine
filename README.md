@@ -2,7 +2,11 @@
 
 **The brain of my Protogen fursuit, featuring GLSL shaders on dual round displays, LED matrix visor control, AirPlay/Spotify streaming, Doom, Super Haxagon, Bluetooth gamepads and speakers, and way more than I originally planned.**
 
-[INSERT YOUTUBE VIDEO SHOT AT NFC]
+## Demo Video
+
+[![Protosuit Engine Demo](https://img.youtube.com/vi/Nd8jgjQ1bwk/0.jpg)](https://www.youtube.com/watch?v=Nd8jgjQ1bwk)
+
+## How It Started
 
 My friend [Miggy](https://github.com/Myggi) and I make our Protogen fursuits together, he handles 3D CAD and I handle the electronics and software. My original suit (v1) from 2023 ran a fork of [b0xcat/protocontrol](https://github.com/b0xcat/protocontrol) ([my fork](https://github.com/lululombard/protocontrol)) with 14 basic MAX7219 matrices and no sensors. I wore it at [NFC](https://nordicfuzzcon.org/) and [FBL](https://fblacklight.org/) 2024. It worked, but I wanted more.
 
