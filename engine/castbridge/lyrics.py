@@ -195,37 +195,88 @@ class LyricsService:
         if found:
             return cached
 
+        headers = {"User-Agent": "protosuit-engine (https://github.com/lululombard/protosuit-engine)"}
+
+        # Try /api/get first (exact match)
+        lyrics_data = self._fetch_get(artist, title, headers)
+
+        # If no synced lyrics, search for alternative entries that might have them
+        if lyrics_data and not lyrics_data["synced"]:
+            synced_data = self._fetch_search_synced(artist, title, headers)
+            if synced_data:
+                # Keep the synced version but preserve plain from original if missing
+                if not synced_data.get("plain") and lyrics_data.get("plain"):
+                    synced_data["plain"] = lyrics_data["plain"]
+                lyrics_data = synced_data
+
+        if lyrics_data:
+            self._cache_put(cache_key, lyrics_data)
+            print(f"[Lyrics] Fetched: {artist} - {title} ({len(lyrics_data['synced'])} synced lines)")
+        elif lyrics_data is None:
+            # 404 or no results at all — cache as not found
+            self._cache_put(cache_key, None)
+            print(f"[Lyrics] Not found: {artist} - {title}")
+
+        return lyrics_data
+
+    def _make_lyrics_data(self, data, artist, title):
+        synced = self._parse_lrc(data.get("syncedLyrics", ""))
+        return {
+            "track_name": data.get("trackName", title),
+            "artist_name": data.get("artistName", artist),
+            "synced": synced,
+            "timestamps": [ts for ts, _ in synced],
+            "plain": data.get("plainLyrics", ""),
+            "instrumental": data.get("instrumental", False),
+            "duration": data.get("duration", 0.0),
+        }
+
+    def _fetch_get(self, artist, title, headers):
+        """Try /api/get with artist + track name. Returns lyrics_data or None."""
         url = f"https://lrclib.net/api/get?artist_name={quote(artist)}&track_name={quote(title)}"
         try:
-            req = Request(url, headers={"User-Agent": "CastBridge/1.0"})
+            req = Request(url, headers=headers)
             with urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                synced = self._parse_lrc(data.get("syncedLyrics", ""))
-                lyrics_data = {
-                    "track_name": data.get("trackName", title),
-                    "artist_name": data.get("artistName", artist),
-                    "synced": synced,
-                    "timestamps": [ts for ts, _ in synced],
-                    "plain": data.get("plainLyrics", ""),
-                    "instrumental": data.get("instrumental", False),
-                    "duration": data.get("duration", 0.0),
-                }
-                self._cache_put(cache_key, lyrics_data)
-                print(f"[Lyrics] Fetched: {artist} - {title} ({len(synced)} synced lines)")
-                return lyrics_data
+                return self._make_lyrics_data(data, artist, title)
         except HTTPError as e:
-            if e.code == 404:
-                # Track not found — cache so we don't retry
-                self._cache_put(cache_key, None)
-                print(f"[Lyrics] Not found: {artist} - {title}")
-            else:
-                # Server error — don't cache, allow retry
+            if e.code != 404:
                 print(f"[Lyrics] HTTP {e.code} for {artist} - {title}")
             return None
         except Exception as e:
-            # Network error — don't cache, allow retry
             print(f"[Lyrics] Fetch error for {artist} - {title}: {e}")
             return None
+
+    def _fetch_search_synced(self, artist, title, headers):
+        """Search for the track and check candidates by ID for synced lyrics."""
+        search_url = f"https://lrclib.net/api/search?track_name={quote(title)}&artist_name={quote(artist)}"
+        try:
+            req = Request(search_url, headers=headers)
+            with urlopen(req, timeout=5) as resp:
+                results = json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            print(f"[Lyrics] Search error for {artist} - {title}: {e}")
+            return None
+
+        if not results:
+            return None
+
+        # Check up to 5 candidates by ID for synced lyrics
+        for entry in results[:5]:
+            entry_id = entry.get("id")
+            if not entry_id:
+                continue
+            try:
+                req = Request(f"https://lrclib.net/api/get/{entry_id}", headers=headers)
+                with urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    if data.get("syncedLyrics"):
+                        print(f"[Lyrics] Found synced via search (id={entry_id})")
+                        return self._make_lyrics_data(data, artist, title)
+            except Exception:
+                continue
+
+        return None
 
     # ======== LRC Parsing ========
 
