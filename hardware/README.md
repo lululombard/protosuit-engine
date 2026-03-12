@@ -171,6 +171,21 @@ The current board (v1.1) is a **validation prototype** using off-the-shelf modul
 - Extended desktop spanning both displays
 - Managed by X11 via xrandr (configured by Ansible)
 
+### 3D Model
+
+3D files are available in the `3D/` folder to help model the display mounting:
+
+- `Screen.stl` — mesh for slicers (PrusaSlicer, Bambu Studio, etc.)
+- `screen.step` — parametric STEP file for CAD software (FreeCAD, Fusion 360, etc.)
+
+They were modeled directly on b0xcat's fursuit head, so their position in space may be off depending on your build.
+
+A few tips when designing around this model:
+
+- **Print tolerance:** use at least 0.2mm tolerance to ensure the display fits and can be removed without forcing on it.
+- **Leave clearance above the screen:** any pressure applied from above (when putting on the head or from a plastic piece resting on top) is transferred directly to the screen, which is quite fragile. Make sure there is a small gap above the display glass so mechanical stress goes to the frame, not the panel.
+- **Connector clearance:** the model includes a small rectangle representing the display's flex connector. Leave enough room around it! do not crush or sharply bend it. While the connector is flexible, it should not be overly stressed.
+
 ## Bluetooth Adapter Management
 
 The RPi's built-in radio shares Wi-Fi and Bluetooth on the same chip. Running AP mode + Bluetooth simultaneously causes issues for both: degraded AP performance and unreliable BT connections. The [RTL8851BU USB dongle](#usb-wi-fi-6--bluetooth-dongle) handles both Wi-Fi client and Bluetooth, and can manage Wi-Fi + 3 BT devices (2 controllers + 1 speaker) simultaneously without issues.
