@@ -73,6 +73,25 @@
                 </div>
             </section>
 
+            <!-- Transition Config -->
+            <section class="panel">
+                <h2>Transition</h2>
+                <div class="input-group">
+                    <div>
+                        <label style="display:block; font-size:0.85em; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Duration (s)</label>
+                        <input type="number" id="transitionDuration" min="0.1" max="10" step="0.1" value="1.0"
+                            onchange="sendTransitionConfig()" style="width:100%;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.85em; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Shader</label>
+                        <select id="transitionShader" onchange="sendTransitionConfig()"
+                            style="width:100%; background:var(--bg-secondary); border:1px solid var(--border-color); color:var(--text-primary); font-family:'Share Tech Mono',monospace; font-size:0.95em; padding:10px; outline:none;">
+                            <option value="">-- waiting --</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
             <!-- Presets -->
             <section class="panel">
                 <h2>Presets</h2>

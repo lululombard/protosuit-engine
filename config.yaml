@@ -703,7 +703,8 @@ audio_capture:
 
 # Transition settings for smooth shader changes
 transitions:
-  duration: 1.0  # Transition duration in seconds (0.5-1.0s recommended)
+  duration: 0.75  # Default Transition duration in seconds (0.5-1.0s recommended) used when MQTT value not set
+  shader: crossfade  # Default transition shader (assets/shaders/transition/<name>.glsl) used when MQTT value not set
   blur:
-    enabled: true  # Enable blur effect during transitions
+    enabled: false  # Enable blur effect during transitions
     strength: 8.0  # Blur intensity (0.0 = no blur, 8.0 = moderate, 16.0 = strong)
