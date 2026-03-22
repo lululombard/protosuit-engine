@@ -512,6 +512,7 @@ class Renderer:
     def reload_config(self):
         """Reload configuration from file"""
         try:
+            from config.loader import ConfigLoader
             self.config_loader = ConfigLoader()
             transition_config = self.config_loader.get_transition_config()
             self.blur_enabled = transition_config.blur.enabled
