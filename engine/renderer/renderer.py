@@ -164,6 +164,7 @@ class Renderer:
         self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/file")
         self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/uniform")
         self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/transition")
+        self.mqtt_client.subscribe("protogen/fins/renderer/status/transition")
         self.mqtt_client.subscribe("protogen/fins/renderer/config/reload")
         self.mqtt_client.subscribe("protogen/fins/config/reload")
         self.mqtt_client.subscribe("protogen/fins/launcher/status/exec")
@@ -219,6 +220,8 @@ class Renderer:
                 self.handle_uniform_command(payload)
             elif topic == "protogen/fins/renderer/set/shader/transition":
                 self.handle_transition_config(payload)
+            elif topic == "protogen/fins/renderer/status/transition":
+                self._apply_transition_config(payload)
             elif topic in ("protogen/fins/renderer/config/reload", "protogen/fins/config/reload"):
                 self.handle_control_command("reload_config")
             elif topic == "protogen/fins/launcher/status/exec":
@@ -282,6 +285,19 @@ class Renderer:
                 )
         except Exception as e:
             print(f"[Renderer] Error handling transition config: {e}")
+
+    def _apply_transition_config(self, payload: str):
+        """Apply retained transition config on startup (no republish to avoid loops)"""
+        try:
+            data = json.loads(payload)
+            if "duration" in data:
+                self.transition_duration = float(data["duration"])
+                print(f"[Renderer] Transition duration restored to {self.transition_duration}s")
+            if "shader" in data:
+                self.default_transition_shader = data["shader"]
+                print(f"[Renderer] Transition shader restored to {self.default_transition_shader}")
+        except Exception as e:
+            print(f"[Renderer] Error applying transition config: {e}")
 
     def handle_shader_command(self, payload: str):
         """Handle shader change command (queues for main thread)
