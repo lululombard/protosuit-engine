@@ -55,6 +55,9 @@ class Renderer:
         self.total_width = self.display_width * 2
         self.total_height = self.display_height
 
+        # Single source of truth for transition duration (overridable via MQTT)
+        self.transition_duration = transition_config.duration
+
         # Shader state for each display
         self.shaders = {
             "left": {
@@ -63,7 +66,7 @@ class Renderer:
                 "target": None,
                 "target_name": None,
                 "transition_start": None,
-                "transition_duration": transition_config.duration,
+                "transition_duration": self.transition_duration,
                 "pending": None,
                 "queued": None,  # Queued shader waiting for current transition to finish
                 "render_scale": 1.0,
@@ -72,7 +75,7 @@ class Renderer:
                 "scale_change_frame_count": 0,
                 "uniforms": {},  # Custom uniforms for this display
                 "uniform_transition_start": None,  # Smooth uniform-only transition
-                "uniform_transition_duration": 0.6,
+                "uniform_transition_duration": self.transition_duration,
                 "uniforms_from": {},  # Snapshot at transition start
             },
             "right": {
@@ -81,7 +84,7 @@ class Renderer:
                 "target": None,
                 "target_name": None,
                 "transition_start": None,
-                "transition_duration": transition_config.duration,
+                "transition_duration": self.transition_duration,
                 "pending": None,
                 "queued": None,  # Queued shader waiting for current transition to finish
                 "render_scale": 1.0,
@@ -90,7 +93,7 @@ class Renderer:
                 "scale_change_frame_count": 0,
                 "uniforms": {},
                 "uniform_transition_start": None,
-                "uniform_transition_duration": 0.6,
+                "uniform_transition_duration": self.transition_duration,
                 "uniforms_from": {},
             },
         }
@@ -98,6 +101,11 @@ class Renderer:
         # Blur configuration
         self.blur_enabled = transition_config.blur.enabled
         self.blur_strength = transition_config.blur.strength
+
+        # Transition shader configuration
+        self.transition_dir = os.path.join(os.getcwd(), "assets", "shaders", "transition")
+        self.default_transition_shader = transition_config.shader
+        self.current_transition_shader = None  # Set after OpenGL init
 
         # FPS monitoring
         self.fps_counter = 0
@@ -141,8 +149,9 @@ class Renderer:
         self.video_running = False
 
         # Shader directory and available shaders
-        self.shader_dir = os.path.join(os.getcwd(), "assets", "shaders")
+        self.shader_dir = os.path.join(os.getcwd(), "assets", "shaders", "animations")
         self.available_shaders = []
+        self.available_transition_shaders = []
         self.shader_metadata = {}  # Store animation configs for each shader
 
         print("Renderer initialized")
@@ -154,10 +163,13 @@ class Renderer:
         """Subscribe to all MQTT topics (called on connect and reconnect)"""
         self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/file")
         self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/uniform")
+        self.mqtt_client.subscribe("protogen/fins/renderer/set/shader/transition")
+        self.mqtt_client.subscribe("protogen/fins/renderer/status/transition")
         self.mqtt_client.subscribe("protogen/fins/renderer/config/reload")
         self.mqtt_client.subscribe("protogen/fins/config/reload")
         self.mqtt_client.subscribe("protogen/fins/launcher/status/exec")
         self.mqtt_client.subscribe("protogen/fins/launcher/status/video")
+
 
     def _on_mqtt_connect(self, client, userdata, flags, reason_code, properties=None):
         """Handle MQTT (re)connection — re-subscribe to all topics"""
@@ -206,6 +218,10 @@ class Renderer:
                 self.handle_shader_command(payload)
             elif topic == "protogen/fins/renderer/set/shader/uniform":
                 self.handle_uniform_command(payload)
+            elif topic == "protogen/fins/renderer/set/shader/transition":
+                self.handle_transition_config(payload)
+            elif topic == "protogen/fins/renderer/status/transition":
+                self._apply_transition_config(payload)
             elif topic in ("protogen/fins/renderer/config/reload", "protogen/fins/config/reload"):
                 self.handle_control_command("reload_config")
             elif topic == "protogen/fins/launcher/status/exec":
@@ -249,10 +265,44 @@ class Renderer:
         except Exception as e:
             print(f"[Renderer] Error handling video status: {e}")
 
+    def handle_transition_config(self, payload: str):
+        """Handle transition config update from MQTT (duration + shader)"""
+        try:
+            data = json.loads(payload)
+            if "duration" in data:
+                self.transition_duration = float(data["duration"])
+                print(f"[Renderer] Transition duration set to {self.transition_duration}s")
+            if "shader" in data:
+                self.default_transition_shader = data["shader"]
+                print(f"[Renderer] Transition shader set to {self.default_transition_shader}")
+            if self.mqtt_client:
+                status = json.dumps({
+                    "duration": self.transition_duration,
+                    "shader": self.default_transition_shader
+                })
+                self.mqtt_client.publish(
+                    "protogen/fins/renderer/status/transition", status, retain=True
+                )
+        except Exception as e:
+            print(f"[Renderer] Error handling transition config: {e}")
+
+    def _apply_transition_config(self, payload: str):
+        """Apply retained transition config on startup (no republish to avoid loops)"""
+        try:
+            data = json.loads(payload)
+            if "duration" in data:
+                self.transition_duration = float(data["duration"])
+                print(f"[Renderer] Transition duration restored to {self.transition_duration}s")
+            if "shader" in data:
+                self.default_transition_shader = data["shader"]
+                print(f"[Renderer] Transition shader restored to {self.default_transition_shader}")
+        except Exception as e:
+            print(f"[Renderer] Error applying transition config: {e}")
+
     def handle_shader_command(self, payload: str):
         """Handle shader change command (queues for main thread)
 
-        Format: JSON {"display": "left"|"right"|"both", "name": "stars", "transition_duration": 0.75}
+        Format: JSON {"display": "left"|"right"|"both", "name": "stars", "transition_duration"}
         """
         try:
             data = json.loads(payload)
@@ -267,12 +317,7 @@ class Renderer:
             metadata = self.shader_metadata[anim_name]
 
             # Get transition duration
-            duration = data.get(
-                "transition_duration",
-                self.shaders[display if display != "both" else "left"][
-                    "transition_duration"
-                ],
-            )
+            duration = self.transition_duration
 
             # Get render scale from config or data
             scale = data.get("scale", metadata.get("render_scale", 1.0))
@@ -303,7 +348,7 @@ class Renderer:
                     # Snapshot current values (resolve any in-progress transition)
                     state["uniforms_from"] = self._resolve_uniform_transition(state)
                     state["uniform_transition_start"] = time.time()
-                    state["uniform_transition_duration"] = 0.6
+                    state["uniform_transition_duration"] = self.transition_duration
                     state["current_name"] = anim_name
 
                 # Apply new default uniforms (these become the transition targets)
@@ -338,6 +383,11 @@ class Renderer:
 
                 with open(shader_path, "r") as f:
                     shader_source = f.read()
+
+                # Queue transition shader change if needed (processed before shader load)
+                t_shader = data.get("transition_shader") or metadata.get("transition_shader") or self.default_transition_shader
+                if t_shader != self.current_transition_shader:
+                    self.command_queue.put(("transition_shader", t_shader))
 
                 # Queue shader load command
                 self.command_queue.put(
@@ -478,10 +528,12 @@ class Renderer:
     def reload_config(self):
         """Reload configuration from file"""
         try:
+            from config.loader import ConfigLoader
             self.config_loader = ConfigLoader()
             transition_config = self.config_loader.get_transition_config()
             self.blur_enabled = transition_config.blur.enabled
             self.blur_strength = transition_config.blur.strength
+            self.default_transition_shader = transition_config.shader
             self.scan_shaders()
             self.publish_shader_status()
             self.publish_uniform_status()
@@ -572,6 +624,7 @@ class Renderer:
                     "right_shader": anim_config.get("right_shader"),
                     "uniforms": anim_config.get("uniforms", {}),
                     "render_scale": anim_config.get("render_scale", 1.0),
+                    "transition_shader": anim_config.get("transition_shader", None),
                 }
                 self.available_shaders.append(anim_name)
 
@@ -579,6 +632,12 @@ class Renderer:
             print(
                 f"[Renderer] Loaded {len(self.available_shaders)} animations from config: {', '.join(self.available_shaders)}"
             )
+
+            # Scan available transition shaders from disk
+            self.available_transition_shaders = sorted([
+                f[:-5] for f in os.listdir(self.transition_dir) if f.endswith(".glsl")
+            ])
+            print(f"[Renderer] Found {len(self.available_transition_shaders)} transition shaders: {', '.join(self.available_transition_shaders)}")
 
         except Exception as e:
             print(f"[Renderer] Error loading animations: {e}")
@@ -644,6 +703,7 @@ class Renderer:
 
             status = {
                 "available": self.available_shaders,
+                "transition_shaders": self.available_transition_shaders,
                 "animations": animations_list,  # Include full metadata
                 "current": {
                     "left": self.shaders["left"]["current_name"],
@@ -813,8 +873,8 @@ class Renderer:
                 self.ctx, render_width, render_height
             )
 
-        # Create blend shader
-        self.blend_program, self.blend_vao = create_blend_shader(self.ctx)
+        # Create blend shader from transition shader file
+        self._load_transition_shader(self.default_transition_shader)
 
         # Create audio FFT texture (512x2, single-channel float32)
         # Row 0 = FFT magnitudes, Row 1 = waveform data
@@ -894,6 +954,35 @@ class Renderer:
                         old_shader["program"].release()
                     except:
                         pass
+
+    def _load_transition_shader(self, name: str):
+        """Load a transition shader from assets/shaders/transition/<name>.glsl"""
+        path = os.path.join(self.transition_dir, f"{name}.glsl")
+        if not os.path.exists(path):
+            print(f"[Renderer] Transition shader not found: {path}")
+            return
+
+        try:
+            with open(path, "r") as f:
+                fragment_source = f.read()
+
+            new_program, new_vao = create_blend_shader(self.ctx, fragment_source)
+
+            # Release previous blend shader resources
+            if self.blend_vao is not None:
+                self.blend_vao.release()
+            if self.blend_program is not None:
+                self.blend_program.release()
+
+            self.blend_program = new_program
+            self.blend_vao = new_vao
+            self.current_transition_shader = name
+            print(f"[Renderer] Transition shader loaded: {name}")
+
+        except Exception as e:
+            print(f"[Renderer] Error loading transition shader '{name}': {e}")
+            import traceback
+            traceback.print_exc()
 
     def _apply_scale_change(self, display: str, new_scale: float):
         """Apply a resolution scale change"""
@@ -1132,8 +1221,12 @@ class Renderer:
                 float(self.display_width),
                 float(self.display_height),
             )
-            self.blend_program["blurEnabled"].value = 1.0 if self.blur_enabled else 0.0
-            self.blend_program["blurStrengthMax"].value = self.blur_strength
+            if "iTime" in self.blend_program:
+                self.blend_program["iTime"].value = float(time.time() - state["transition_start"])
+            if "blurEnabled" in self.blend_program:
+                self.blend_program["blurEnabled"].value = 1.0 if self.blur_enabled else 0.0
+            if "blurStrengthMax" in self.blend_program:
+                self.blend_program["blurStrengthMax"].value = self.blur_strength
 
             self.fbos[display][0].color_attachments[0].use(location=0)
             self.fbos[display][1].color_attachments[0].use(location=1)
@@ -1206,8 +1299,10 @@ class Renderer:
                     float(self.display_width),
                     float(self.display_height),
                 )
-                self.blend_program["blurEnabled"].value = 0.0
-                self.blend_program["blurStrengthMax"].value = 0.0
+                if "blurEnabled" in self.blend_program:
+                    self.blend_program["blurEnabled"].value = 0.0
+                if "blurStrengthMax" in self.blend_program:
+                    self.blend_program["blurStrengthMax"].value = 0.0
                 self.blend_vao.render(moderngl.TRIANGLE_STRIP)
 
     def run(self):
@@ -1237,7 +1332,7 @@ class Renderer:
                     {
                         "display": "both",
                         "name": default_anim,
-                        "transition_duration": 0.0,
+                        "transition_duration": self.transition_duration
                     }
                 )
                 self.handle_shader_command(shader_cmd)
@@ -1260,7 +1355,9 @@ class Renderer:
                 while not self.command_queue.empty():
                     try:
                         cmd = self.command_queue.get_nowait()
-                        if cmd[0] == "shader":
+                        if cmd[0] == "transition_shader":
+                            self._load_transition_shader(cmd[1])
+                        elif cmd[0] == "shader":
                             _, display, shader_source, duration, scale, shader_name = (
                                 cmd
                             )

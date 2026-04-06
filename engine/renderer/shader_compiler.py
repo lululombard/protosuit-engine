@@ -100,12 +100,24 @@ def compile_shader(
         return None
 
 
-def create_blend_shader(ctx: moderngl.Context) -> tuple:
+def create_blend_shader(ctx: moderngl.Context, fragment_source: str) -> tuple:
     """
-    Create a shader program for blending two framebuffers with optional blur
+    Create a shader program for blending two framebuffers during transitions.
+
+    The fragment shader must define these uniforms:
+        uniform sampler2D tex1;       // outgoing shader texture
+        uniform sampler2D tex2;       // incoming shader texture
+        uniform float alpha;          // transition progress (0.0 -> 1.0)
+        uniform vec2 resolution;      // display dimensions
+        uniform float iTime;          // current time (for animated transitions)
+        uniform float blurEnabled;    // 1.0 if blur active (optional)
+        uniform float blurStrengthMax; // max blur strength (optional)
+    And receive:
+        in vec2 uv;                   // normalized UV coordinates (0..1)
 
     Args:
         ctx: ModernGL context
+        fragment_source: GLSL fragment shader source loaded from assets/shaders/transition/
 
     Returns:
         Tuple of (program, vao) for rendering blended output
@@ -122,63 +134,7 @@ def create_blend_shader(ctx: moderngl.Context) -> tuple:
     }
     """
 
-    fragment_shader = """
-    #version 300 es
-    precision highp float;
-    uniform sampler2D tex1;
-    uniform sampler2D tex2;
-    uniform float alpha;
-    uniform vec2 resolution;
-    uniform float blurEnabled;
-    uniform float blurStrengthMax;
-    in vec2 uv;
-    out vec4 fragColor;
-
-    // Gaussian blur function
-    vec4 blur(sampler2D tex, vec2 uv, float strength) {
-        if (strength <= 0.0) {
-            return texture(tex, uv);
-        }
-
-        vec2 texelSize = 1.0 / resolution;
-        vec4 result = vec4(0.0);
-        float total = 0.0;
-
-        // 9-tap gaussian blur kernel
-        float kernel[9];
-        kernel[0] = 1.0; kernel[1] = 2.0; kernel[2] = 1.0;
-        kernel[3] = 2.0; kernel[4] = 4.0; kernel[5] = 2.0;
-        kernel[6] = 1.0; kernel[7] = 2.0; kernel[8] = 1.0;
-
-        int index = 0;
-        for (int y = -1; y <= 1; y++) {
-            for (int x = -1; x <= 1; x++) {
-                vec2 offset = vec2(float(x), float(y)) * texelSize * strength;
-                result += texture(tex, uv + offset) * kernel[index];
-                total += kernel[index];
-                index++;
-            }
-        }
-
-        return result / total;
-    }
-
-    void main() {
-        // Smoothstep easing
-        float t = alpha * alpha * (3.0 - 2.0 * alpha);
-
-        // Blur strength peaks at middle of transition (alpha = 0.5)
-        float blurStrength = blurEnabled * 4.0 * alpha * (1.0 - alpha) * blurStrengthMax;
-
-        // Apply blur to both textures
-        vec4 col1 = blur(tex1, uv, blurStrength);
-        vec4 col2 = blur(tex2, uv, blurStrength);
-
-        fragColor = mix(col1, col2, t);
-    }
-    """
-
-    program = ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
+    program = ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_source)
 
     # Create fullscreen quad
     vertices = np.array(

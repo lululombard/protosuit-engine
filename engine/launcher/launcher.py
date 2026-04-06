@@ -623,7 +623,6 @@ class Launcher:
                 shader_cmd = json.dumps({
                     "display": "both",
                     "name": shader,
-                    "transition_duration": 0.75
                 })
                 self.mqtt_client.publish(
                     "protogen/fins/renderer/set/shader/file", shader_cmd

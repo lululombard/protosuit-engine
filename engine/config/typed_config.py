@@ -65,7 +65,8 @@ class BlurConfig:
 class TransitionConfig:
     """Transition configuration"""
 
-    duration: float = 0.75
+    duration: float
+    shader: str
     blur: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
