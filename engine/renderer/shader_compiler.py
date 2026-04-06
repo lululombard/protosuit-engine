@@ -92,8 +92,8 @@ def compile_shader(
             "vao": vao,
             "start_time": time.time(),
             "frame": 0,
-            "source": shader_source,  # Store source for recompilation
-            "uses_audio_texture": "iChannel0" in program,
+            "source": shader_source,
+            "resources": {},  # Populated by renderer after load via config resources section
         }
     except Exception as e:
         print(f"Shader compilation error: {e}")

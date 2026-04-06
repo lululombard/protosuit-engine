@@ -1,5 +1,5 @@
 #version 300 es
-precision highp float;
+precision mediump float;
 
 // Audio Circle Bars Visualization
 // Created by Miggy
@@ -13,6 +13,7 @@ uniform vec2 iResolution;
 // Row 0 (y=0.25): FFT frequency magnitudes (0.0-1.0)
 // Row 1 (y=0.75): Waveform samples (0.0-1.0, centered at 0.5)
 uniform sampler2D iChannel0;
+uniform sampler2D uCenterImage;
 
 // MQTT-controllable uniforms
 uniform float speed;          // Animation speed multiplier
@@ -21,6 +22,8 @@ uniform float barLength;      // FFT bar amplitude gain
 uniform float barCount;       // Number of unique bars around the ring
 uniform float rainbow;        // 1.0 = rainbow, 0.0 = solid baseColor
 uniform vec3 baseColor;       // Solid color when rainbow is off
+uniform float freqMaxHz;      // Maximum FFT frequency shown (Hz), e.g. 8000.0 to cut above 8kHz
+uniform float minBarLen;      // Base bar length always visible (idle state), e.g. 0.02
 
 // Input from vertex shader
 in vec2 v_fragCoord;
@@ -34,13 +37,6 @@ const float BAR_START_DEG = -90.0;
 const float SYMMETRY_TOGGLE = 1.0;
 const float BAR_ROT_SPEED_DEG = 5.0;
 const float BASS_WOBBLE_GAIN = 0.060;
-const float BASS_BASE_MIN_HZ = 35.0;
-const float BASS_BASE_MAX_HZ = 180.0;
-const float BASS_FUND_CUTOFF_HZ = 95.0;
-const float BASS_FUND_CUTOFF_SOFT_U = 0.006;
-const float BASS_WOBBLE_THRESHOLD = 0.10;
-const float BASS_WOBBLE_SOFT = 0.22;
-const float BASS_WOBBLE_RESPONSE = 1.00;
 const float GLOBAL_WOBBLE_GAIN = 0.0035;
 const float GLOBAL_WOBBLE_HZ = 0.55;
 const float BAR_WOBBLE_HZ_MIN = 0.35;
@@ -56,7 +52,6 @@ const float BAR_CURVE_EXP_MAX = 2.40;
 
 const float FREQ_BIAS = 0.85;
 const float BAR_WIDTH = 0.72;
-const float MIN_BAR_LEN = 0.015;
 const float AUDIO_EXP = 0.90;
 const float AGC_TARGET = 0.68;
 const float AGC_FLOOR = 0.04;
@@ -102,78 +97,34 @@ float barLevel(float u) {
 
 float rawEnergyLevel() {
     float e = 0.0;
-    e += fftSmooth(0.010);
-    e += fftSmooth(0.018);
-    e += fftSmooth(0.028);
-    e += fftSmooth(0.045);
-    e += fftSmooth(0.070);
-    e += fftSmooth(0.110);
-    e += fftSmooth(0.160);
-    e += fftSmooth(0.230);
-    e += fftSmooth(0.300);
-    e += fftSmooth(0.420);
-    e += fftSmooth(0.560);
-    e += fftSmooth(0.740);
+    e += fftTap(0.010);
+    e += fftTap(0.018);
+    e += fftTap(0.028);
+    e += fftTap(0.045);
+    e += fftTap(0.070);
+    e += fftTap(0.110);
+    e += fftTap(0.160);
+    e += fftTap(0.230);
+    e += fftTap(0.300);
+    e += fftTap(0.420);
+    e += fftTap(0.560);
+    e += fftTap(0.740);
     return e / 12.0;
 }
 
 float bassLevel() {
     float b = 0.0;
-    b += fftSmooth(0.010);
-    b += fftSmooth(0.020);
-    b += fftSmooth(0.035);
-    b += fftSmooth(0.055);
-    b += fftSmooth(0.080);
+    b += fftTap(0.010);
+    b += fftTap(0.020);
+    b += fftTap(0.035);
+    b += fftTap(0.055);
+    b += fftTap(0.080);
     b *= 0.2;
 
     b = pow(clamp(b * 2.2, 0.0, 1.0), 0.85);
     return b;
 }
 
-vec2 bassFundamentalInfo() {
-    float u0 = 0.010, u1 = 0.020, u2 = 0.032, u3 = 0.045, u4 = 0.060, u5 = 0.078, u6 = 0.095;
-    float m0 = fftSmooth(u0);
-    float m1 = fftSmooth(u1);
-    float m2 = fftSmooth(u2);
-    float m3 = fftSmooth(u3);
-    float m4 = fftSmooth(u4);
-    float m5 = fftSmooth(u5);
-    float m6 = fftSmooth(u6);
-
-    float cutT = clamp((BASS_FUND_CUTOFF_HZ - BASS_BASE_MIN_HZ) / (BASS_BASE_MAX_HZ - BASS_BASE_MIN_HZ), 0.0, 1.0);
-    float maxU = mix(u0, u6, cutT);
-    float g0 = 1.0 - smoothstep(maxU - BASS_FUND_CUTOFF_SOFT_U, maxU + BASS_FUND_CUTOFF_SOFT_U, u0);
-    float g1 = 1.0 - smoothstep(maxU - BASS_FUND_CUTOFF_SOFT_U, maxU + BASS_FUND_CUTOFF_SOFT_U, u1);
-    float g2 = 1.0 - smoothstep(maxU - BASS_FUND_CUTOFF_SOFT_U, maxU + BASS_FUND_CUTOFF_SOFT_U, u2);
-    float g3 = 1.0 - smoothstep(maxU - BASS_FUND_CUTOFF_SOFT_U, maxU + BASS_FUND_CUTOFF_SOFT_U, u3);
-    float g4 = 1.0 - smoothstep(maxU - BASS_FUND_CUTOFF_SOFT_U, maxU + BASS_FUND_CUTOFF_SOFT_U, u4);
-    float g5 = 1.0 - smoothstep(maxU - BASS_FUND_CUTOFF_SOFT_U, maxU + BASS_FUND_CUTOFF_SOFT_U, u5);
-    float g6 = 1.0 - smoothstep(maxU - BASS_FUND_CUTOFF_SOFT_U, maxU + BASS_FUND_CUTOFF_SOFT_U, u6);
-    m0 *= g0; m1 *= g1; m2 *= g2; m3 *= g3; m4 *= g4; m5 *= g5; m6 *= g6;
-
-    float mSum = m0 + m1 + m2 + m3 + m4 + m5 + m6;
-    float bassCentroid = (u0 * m0 + u1 * m1 + u2 * m2 + u3 * m3 + u4 * m4 + u5 * m5 + u6 * m6) / max(mSum, 1e-5);
-
-    float peakU = u0;
-    float peakM = m0;
-    if (m1 > peakM) { peakM = m1; peakU = u1; }
-    if (m2 > peakM) { peakM = m2; peakU = u2; }
-    if (m3 > peakM) { peakM = m3; peakU = u3; }
-    if (m4 > peakM) { peakM = m4; peakU = u4; }
-    if (m5 > peakM) { peakM = m5; peakU = u5; }
-    if (m6 > peakM) { peakM = m6; peakU = u6; }
-
-    float baseU = mix(bassCentroid, peakU, 0.65);
-    float t = clamp((baseU - u0) / (u6 - u0), 0.0, 1.0);
-    float baseHz = mix(BASS_BASE_MIN_HZ, BASS_BASE_MAX_HZ, pow(t, 1.15));
-    baseHz = clamp(baseHz, BASS_BASE_MIN_HZ, BASS_FUND_CUTOFF_HZ);
-
-    float meanM = mSum / 7.0;
-    float fundRaw = max(peakM - 0.30 * meanM, 0.0);
-    float fundAmp = smoothstep(FUND_AMP_THRESHOLD, FUND_AMP_THRESHOLD + FUND_AMP_SOFT, fundRaw * FUND_AMP_GAIN);
-
-    return vec2(baseHz, clamp(fundAmp, 0.0, 1.0));
-}
 
 vec3 hsv2rgb(vec3 c) {
     vec3 rgb = clamp(abs(mod(c.x * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
@@ -213,15 +164,17 @@ void mainImage(out vec4 fragColor_out, in vec2 fragCoord) {
     float barPhaseData = pos01 * barCount;
     float barIdx = floor(barPhaseData);
 
-    float u = (barIdx + 0.5) / barCount;
-    u = pow(clamp(u, 0.0, 1.0), FREQ_BIAS);
-    float d = 1.0 / barCount;
+    // Map bar index to FFT texture UV, capped at freqMaxHz
+    // Audio texture is log-spaced 20Hz..22050Hz, so UV = log(hz/20) / log(22050/20)
+    float freqMaxU = log(clamp(freqMaxHz, 21.0, 22050.0) / 20.0) / log(22050.0 / 20.0);
+    float u = pow(clamp((barIdx + 0.5) / barCount, 0.0, 1.0), FREQ_BIAS) * freqMaxU;
+    float d = freqMaxU / barCount;
     float amp = 0.25 * barLevel(u - d) + 0.5 * barLevel(u) + 0.25 * barLevel(u + d);
     amp = pow(max(amp * agc, 0.0), AUDIO_EXP);
     float barGate = smoothstep(BAR_NOISE_GATE, BAR_NOISE_GATE + BAR_NOISE_SOFT, amp);
     amp *= barGate * liveGate;
 
-    float barLen = mix(0.0, MIN_BAR_LEN, liveGate) + barLength * amp;
+    float barLen = minBarLen + barLength * amp;
     float outerRadius = ringRadius + max(0.0, barLen);
 
     float barPhaseMask = barPhaseData;
@@ -244,7 +197,10 @@ void mainImage(out vec4 fragColor_out, in vec2 fragCoord) {
     vec3 color = bars * barsColor;
 
     float centerMask = 1.0 - smoothstep(CENTER_RADIUS - aaRad, CENTER_RADIUS + aaRad, r);
-    color = mix(color, vec3(CENTER_FALLBACK), centerMask);
+    // color = mix(color, vec3(CENTER_FALLBACK), centerMask);
+    vec2 imgUV = uv / (CENTER_RADIUS * 2.0) + 0.5;
+    vec4 imgSample = texture(uCenterImage, imgUV);
+    color = mix(color, imgSample.rgb, centerMask * imgSample.a);
 
     fragColor_out = vec4(color, 1.0);
 }

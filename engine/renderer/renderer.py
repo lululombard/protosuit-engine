@@ -124,6 +124,14 @@ class Renderer:
         self.blend_vao = None
         self.audio_texture = None
 
+        # Image resources directory and GPU texture cache (filename -> moderngl.Texture)
+        self.image_dir = os.path.join(os.getcwd(), "assets", "images")
+        self.image_cache = {}
+
+        # Video resources directory and shared decoder cache (path -> resource dict with refcount)
+        self.video_dir = os.path.join(os.getcwd(), "assets", "video")
+        self.video_cache = {}
+
         # Audio capture for FFT shaders
         audio_config = self.config_loader.config.get("audio_capture", {})
         self.audio_capture = AudioCapture(
@@ -390,8 +398,9 @@ class Renderer:
                     self.command_queue.put(("transition_shader", t_shader))
 
                 # Queue shader load command
+                resources = metadata.get("resources", {})
                 self.command_queue.put(
-                    ("shader", disp, shader_source, duration, scale, anim_name)
+                    ("shader", disp, shader_source, duration, scale, anim_name, resources)
                 )
                 print(f"[Renderer] Loaded shader '{shader_file}' for {disp}")
 
@@ -420,6 +429,101 @@ class Renderer:
             import traceback
 
             traceback.print_exc()
+
+    def _load_resources(self, resources_config: dict) -> dict:
+        """Load GPU resources declared in a shader's resources config.
+
+        Allocates texture units starting at 2 (0 and 1 are reserved for transition FBOs).
+        Returns {uniform_name: {"type": str, "unit": int, "texture": moderngl.Texture|None}}
+        Image textures are cached by filename — loading the same file twice reuses the GPU texture.
+        Video resources are not cached — each load gets its own VideoCapture at frame 0.
+        Supported types: "audio", "image", "video"
+        """
+        from PIL import Image
+        import numpy as np
+
+        loaded = {}
+        unit = 2
+        for uniform_name, res in resources_config.items():
+            res_type = res.get("type")
+            if res_type == "audio":
+                loaded[uniform_name] = {"type": "audio", "unit": unit, "texture": None}
+                unit += 1
+            elif res_type == "image":
+                file = res.get("file")
+                if not file:
+                    print(f"[Renderer] Resource '{uniform_name}' missing 'file' field")
+                    continue
+                if file in self.image_cache:
+                    loaded[uniform_name] = {"type": "image", "unit": unit, "texture": self.image_cache[file]}
+                    unit += 1
+                    continue
+                path = os.path.join(self.image_dir, file)
+                if not os.path.exists(path):
+                    print(f"[Renderer] Image not found: {path}")
+                    continue
+                try:
+                    img = Image.open(path).convert("RGBA")
+                    img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                    data = np.frombuffer(img.tobytes(), dtype=np.uint8)
+                    tex = self.ctx.texture(img.size, 4, data)
+                    tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+                    self.image_cache[file] = tex
+                    loaded[uniform_name] = {"type": "image", "unit": unit, "texture": tex}
+                    print(f"[Renderer] Loaded image '{file}' -> uniform '{uniform_name}' at unit {unit}")
+                    unit += 1
+                except Exception as e:
+                    print(f"[Renderer] Failed to load image '{file}' for '{uniform_name}': {e}")
+            elif res_type == "video":
+                file = res.get("file")
+                if not file:
+                    print(f"[Renderer] Resource '{uniform_name}' missing 'file' field")
+                    continue
+                path = os.path.join(self.video_dir, file)
+                if not os.path.exists(path):
+                    print(f"[Renderer] Video not found: {path}")
+                    continue
+                try:
+                    if path in self.video_cache:
+                        cached = self.video_cache[path]
+                        cached["refcount"] += 1
+                        loaded[uniform_name] = {"type": "video", "unit": unit, "cache_key": path, **{k: cached[k] for k in ("texture", "frames", "container", "spf", "last_decode", "size")}}
+                        print(f"[Renderer] Reused cached video '{file}' -> uniform '{uniform_name}' at unit {unit}")
+                    else:
+                        import av
+                        container = av.open(path)
+                        stream = next(s for s in container.streams if s.type == "video")
+                        w, h = stream.width, stream.height
+                        fps = float(stream.average_rate) if stream.average_rate else 30.0
+                        tex = self.ctx.texture((w, h), 4)
+                        tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+                        frames = container.decode(video=0)
+                        entry = {
+                            "refcount": 1, "texture": tex, "container": container,
+                            "frames": frames, "spf": 1.0 / fps, "last_decode": 0.0, "size": (w, h)
+                        }
+                        self.video_cache[path] = entry
+                        loaded[uniform_name] = {"type": "video", "unit": unit, "cache_key": path, **{k: entry[k] for k in ("texture", "frames", "container", "spf", "last_decode", "size")}}
+                        print(f"[Renderer] Loaded video '{file}' ({w}x{h}) @ {fps:.1f}fps -> uniform '{uniform_name}' at unit {unit}")
+                    unit += 1
+                except Exception as e:
+                    print(f"[Renderer] Failed to load video '{file}' for '{uniform_name}': {e}")
+            else:
+                print(f"[Renderer] Unknown resource type '{res_type}' for '{uniform_name}'")
+        return loaded
+
+    def _release_shader_resources(self, shader_obj):
+        """Release video captures owned by this shader. Image textures are owned by the cache."""
+        if not shader_obj:
+            return
+        for res in shader_obj.get("resources", {}).values():
+            if res.get("type") == "video":
+                key = res.get("cache_key")
+                if key and key in self.video_cache:
+                    self.video_cache[key]["refcount"] -= 1
+                    if self.video_cache[key]["refcount"] <= 0:
+                        self.video_cache[key]["container"].close()
+                        del self.video_cache[key]
 
     def _apply_uniform(self, display: str, uniform_name: str, uniform_config: dict):
         """Apply a uniform value to a display"""
@@ -623,6 +727,7 @@ class Renderer:
                     "left_shader": anim_config.get("left_shader"),
                     "right_shader": anim_config.get("right_shader"),
                     "uniforms": anim_config.get("uniforms", {}),
+                    "resources": anim_config.get("resources", {}),
                     "render_scale": anim_config.get("render_scale", 1.0),
                     "transition_shader": anim_config.get("transition_shader", None),
                 }
@@ -1016,9 +1121,11 @@ class Renderer:
         transition_duration: float,
         target_scale: float = None,
         shader_name: str = None,
+        resources: dict = None,
     ):
         """Set a new shader for a display with transition"""
         state = self.shaders[display]
+        resources = resources or {}
 
         # If already transitioning, queue this shader
         if state["transition_start"] is not None and state["target"] is not None:
@@ -1030,6 +1137,7 @@ class Renderer:
                 transition_duration,
                 target_scale,
                 shader_name,
+                resources,
             )
             return
 
@@ -1043,6 +1151,7 @@ class Renderer:
                 transition_duration,
                 target_scale,
                 shader_name,
+                resources,
             )
             return
 
@@ -1072,9 +1181,13 @@ class Renderer:
             print(f"[Renderer] Failed to compile shader for {display}")
             return
 
-        # If this shader needs audio and mic isn't available, trigger a retry
-        if new_shader.get("uses_audio_texture") and not self.audio_capture.available:
-            print("[Renderer] FFT shader loaded but no mic - requesting audio retry")
+        # Load declared resources (images, audio bindings, etc.)
+        new_shader["resources"] = self._load_resources(resources)
+
+        # If this shader uses audio and mic isn't available, trigger a retry
+        uses_audio = any(r["type"] == "audio" for r in new_shader["resources"].values())
+        if uses_audio and not self.audio_capture.available:
+            print("[Renderer] Audio shader loaded but no mic - requesting audio retry")
             self.audio_capture.request_retry()
 
         if state["current"] is None:
@@ -1120,6 +1233,7 @@ class Renderer:
         if target_fbo:
             target_fbo.use()
             self.ctx.viewport = (0, 0, render_width, render_height)
+            self.ctx.clear(0.0, 0.0, 0.0)
 
         # Update uniforms
         program = shader_obj["program"]
@@ -1162,14 +1276,35 @@ class Renderer:
                     except Exception as e:
                         print(f"[Renderer] Could not set uniform '{uniform_name}': {e}")
 
-        # Bind audio texture for shaders that use it
-        if shader_obj.get("uses_audio_texture") and self.audio_texture:
-            if "iChannel0" in program:
-                self.audio_texture.use(location=2)
-                program["iChannel0"].value = 2
+        # Bind declared resources (audio, images, ...)
+        for uniform_name, res in shader_obj.get("resources", {}).items():
+            if uniform_name not in program:
+                continue
+            res_type = res["type"]
+            unit = res["unit"]
+            if res_type == "audio" and self.audio_texture:
+                self.audio_texture.use(location=unit)
+                program[uniform_name].value = unit
+            elif res_type == "image" and res.get("texture"):
+                res["texture"].use(location=unit)
+                program[uniform_name].value = unit
+            elif res_type == "video" and res.get("texture"):
+                cached = self.video_cache.get(res["cache_key"])
+                if cached:
+                    now = time.monotonic()
+                    if now - cached["last_decode"] >= cached["spf"]:
+                        try:
+                            frame = next(cached["frames"])
+                        except StopIteration:
+                            cached["container"].seek(0)
+                            cached["frames"] = cached["container"].decode(video=0)
+                            frame = next(cached["frames"])
+                        cached["texture"].write(frame.to_ndarray(format="rgba")[::-1].tobytes())
+                        cached["last_decode"] = now
+                cached["texture"].use(location=unit)
+                program[uniform_name].value = unit
 
-        # Render
-        self.ctx.clear(0.0, 0.0, 0.0)
+        # Render (fullscreen quad covers every pixel; clear already done for FBO path above)
         shader_obj["vao"].render(moderngl.TRIANGLE_STRIP)
         shader_obj["frame"] += 1
 
@@ -1185,20 +1320,10 @@ class Renderer:
                 print(f"[Renderer] Scale change complete for {display}")
                 # Load pending shader if any
                 if state["pending"]:
-                    if len(state["pending"]) == 4:
-                        shader_source, duration, target_scale, shader_name = state[
-                            "pending"
-                        ]
-                    elif len(state["pending"]) == 3:
-                        shader_source, duration, target_scale = state["pending"]
-                        shader_name = None
-                    else:
-                        shader_source, duration = state["pending"]
-                        target_scale = None
-                        shader_name = None
+                    shader_source, duration, target_scale, shader_name, resources = state["pending"]
                     state["pending"] = None
                     self.set_shader(
-                        display, shader_source, duration, target_scale, shader_name
+                        display, shader_source, duration, target_scale, shader_name, resources
                     )
 
         # Render
@@ -1236,6 +1361,7 @@ class Renderer:
             if alpha >= 1.0:
                 # Transition complete
                 if state["current"]:
+                    self._release_shader_resources(state["current"])
                     state["current"]["vao"].release()
                     state["current"]["program"].release()
                 state["current"] = state["target"]
@@ -1258,13 +1384,7 @@ class Renderer:
 
                 # Start queued transition if one exists
                 if state["queued"] is not None:
-                    if len(state["queued"]) == 4:
-                        queued_shader, queued_duration, queued_scale, queued_name = (
-                            state["queued"]
-                        )
-                    else:
-                        queued_shader, queued_duration, queued_scale = state["queued"]
-                        queued_name = None
+                    queued_shader, queued_duration, queued_scale, queued_name, queued_resources = state["queued"]
                     state["queued"] = None
                     print(f"[Renderer] Starting queued transition for {display}")
                     self.set_shader(
@@ -1273,37 +1393,47 @@ class Renderer:
                         queued_duration,
                         queued_scale,
                         queued_name,
+                        queued_resources,
                     )
 
                 # Publish updated shader status
                 self.publish_shader_status()
         else:
-            # No transition - render current shader
+            # No transition
             if state["current"]:
-                self.render_shader(display, state["current"], self.fbos[display][0])
-
-                # Blit to screen
-                self.ctx.screen.use()
-                self.ctx.viewport = (
-                    viewport_x,
-                    0,
-                    self.display_width,
-                    self.display_height,
-                )
-
-                self.fbos[display][0].color_attachments[0].use(location=0)
-                self.blend_program["tex1"].value = 0
-                self.blend_program["tex2"].value = 0
-                self.blend_program["alpha"].value = 0.0
-                self.blend_program["resolution"].value = (
-                    float(self.display_width),
-                    float(self.display_height),
-                )
-                if "blurEnabled" in self.blend_program:
-                    self.blend_program["blurEnabled"].value = 0.0
-                if "blurStrengthMax" in self.blend_program:
-                    self.blend_program["blurStrengthMax"].value = 0.0
-                self.blend_vao.render(moderngl.TRIANGLE_STRIP)
+                if state["render_scale"] == 1.0:
+                    # Render directly to screen — skip FBO + blit shader entirely
+                    self.ctx.screen.use()
+                    self.ctx.viewport = (
+                        viewport_x,
+                        0,
+                        self.display_width,
+                        self.display_height,
+                    )
+                    self.render_shader(display, state["current"])
+                else:
+                    # render_scale < 1.0: render to smaller FBO, then blit to upscale
+                    self.render_shader(display, state["current"], self.fbos[display][0])
+                    self.ctx.screen.use()
+                    self.ctx.viewport = (
+                        viewport_x,
+                        0,
+                        self.display_width,
+                        self.display_height,
+                    )
+                    self.fbos[display][0].color_attachments[0].use(location=0)
+                    self.blend_program["tex1"].value = 0
+                    self.blend_program["tex2"].value = 0
+                    self.blend_program["alpha"].value = 0.0
+                    self.blend_program["resolution"].value = (
+                        float(self.display_width),
+                        float(self.display_height),
+                    )
+                    if "blurEnabled" in self.blend_program:
+                        self.blend_program["blurEnabled"].value = 0.0
+                    if "blurStrengthMax" in self.blend_program:
+                        self.blend_program["blurStrengthMax"].value = 0.0
+                    self.blend_vao.render(moderngl.TRIANGLE_STRIP)
 
     def run(self):
         """Main render loop"""
@@ -1358,19 +1488,17 @@ class Renderer:
                         if cmd[0] == "transition_shader":
                             self._load_transition_shader(cmd[1])
                         elif cmd[0] == "shader":
-                            _, display, shader_source, duration, scale, shader_name = (
-                                cmd
-                            )
+                            _, display, shader_source, duration, scale, shader_name, resources = cmd
                             if display in ["left", "right"]:
                                 self.set_shader(
-                                    display, shader_source, duration, scale, shader_name
+                                    display, shader_source, duration, scale, shader_name, resources
                                 )
                             elif display == "both":
                                 self.set_shader(
-                                    "left", shader_source, duration, scale, shader_name
+                                    "left", shader_source, duration, scale, shader_name, resources
                                 )
                                 self.set_shader(
-                                    "right", shader_source, duration, scale, shader_name
+                                    "right", shader_source, duration, scale, shader_name, resources
                                 )
                     except Exception as cmd_error:
                         print(f"[Renderer] Error processing command: {cmd_error}")
